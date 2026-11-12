@@ -1,0 +1,48 @@
+{
+  "name": "@ratmath/analytic",
+  "version": "0.1.0",
+  "description": "Taylor models with exact rational coefficients and certified remainders: exp, sin, cos, log, atan, sqrt, composition, division and integration, built on @ratmath/core",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "bun test tests/"
+  },
+  "dependencies": {
+    "@ratmath/core": "^0.7.0"
+  },
+  "keywords": [
+    "ratmath",
+    "taylor-model",
+    "interval",
+    "validated-numerics",
+    "certified",
+    "rational"
+  ],
+  "author": "James Taylor",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jostylr/ratmath-analytic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jostylr/ratmath-analytic/issues"
+  },
+  "homepage": "https://github.com/jostylr/ratmath-analytic#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
