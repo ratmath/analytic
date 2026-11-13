@@ -103,6 +103,14 @@ A.range(x => x.multiply(A.cos(x)), R`0:3`);
 A.pi; A.e;                     // RationalIntervals at the scope's precision
 ```
 
+## Used by
+
+- RatCalc (terminal and web): `A` is `createScope({ digits: 30 })`, e.g.
+  ``A.exp(R`1/3`)``; `analytic({ digits })` for other precisions;
+  `help("analytic")` lists everything with examples.
+- RatTree (the Stern-Brocot explorer): function code has these names in scope
+  (and `analytic.range`); Predefined… → Certified has worked examples.
+
 ## Performance
 
 Order 12 `exp(sin(x))·x` with its range takes about 60 ms in Bun; order 20
@@ -113,7 +121,6 @@ worker.
 
 - Expression front end and symbolic `d/dx` (rebuild models of derivatives).
 - Validated ODE steps (Picard iteration with Taylor models).
-- RatTree "Model" functions panel and RatCalc help entries.
 
 ## Tests
 
