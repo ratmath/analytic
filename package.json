@@ -19,7 +19,7 @@
     "test": "bun test tests/"
   },
   "dependencies": {
-    "@ratmath/core": "^0.7.0"
+    "@ratmath/core": "^0.8.0"
   },
   "keywords": [
     "ratmath",
