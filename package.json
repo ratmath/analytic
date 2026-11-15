@@ -36,12 +36,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jostylr/ratmath-analytic.git"
+    "url": "git+https://github.com/ratmath/analytic.git"
   },
   "bugs": {
-    "url": "https://github.com/jostylr/ratmath-analytic/issues"
+    "url": "https://github.com/ratmath/analytic/issues"
   },
-  "homepage": "https://github.com/jostylr/ratmath-analytic#readme",
+  "homepage": "https://github.com/ratmath/analytic#readme",
   "publishConfig": {
     "access": "public"
   }
