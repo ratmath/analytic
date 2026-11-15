@@ -1,7 +1,7 @@
 # @ratmath/analytic
 
 Taylor models with exact rational coefficients and certified remainders, built
-on [`@ratmath/core`](https://github.com/jostylr/ratmath-core). A model on a domain `D = [a, b]` with centre `c`
+on [`@ratmath/core`](https://github.com/ratmath/core). A model on a domain `D = [a, b]` with centre `c`
 is a pair `(P, I)` with
 
     f(x) − P(x − c) ∈ I    for every x in D,
@@ -13,7 +13,7 @@ reaches 0, a divisor whose range contains 0, a point outside the domain) the
 library throws an `AnalyticError` with a reason instead of returning a bound it
 cannot prove.
 
-Design notes: `docs/design/analytic-functions.md` in the [ratmath umbrella](https://github.com/jostylr/ratmath).
+Design notes: `docs/design/analytic-functions.md` in the [ratmath umbrella](https://github.com/ratmath/ratmath).
 This package depends only on Core (not on `packages/reals`).
 
 ## Quick start
