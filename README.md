@@ -232,7 +232,7 @@ a RationalInterval):
 
 | function | kinds | extra fields |
 | --- | --- | --- |
-| `zeros` | `exact`, `sign-change` (a zero is proven inside), `possible`, `undefined` (f could not be evaluated there; no claim) | `unique`, `multiplicity`, `atMost` |
+| `zeros` | `exact`, `sign-change` (a zero is proven inside), `possible`, `undefined` (f could not be evaluated there; no claim) | `unique`, `multiplicity`, `atMost`, `bound` |
 | `poles` | `pole`, `hole` (removable: f undefined, limit exists), `undefined` | `order`, `value` (the hole's limit) |
 | `extrema` | `max`, `min`, `flat` (f′ = 0 without a sign change), `possible` | `value`, `unique` |
 | `inflections` | `inflection`, `possible` | `value`, `unique` |
@@ -253,7 +253,17 @@ Brackets with no record certainly contain none. Two engines:
   are absorbed when Rolle leaves no room for another zero. Extrema and
   inflections are classified by the next derivative's sign (or by a proven
   sign change). Poles are zeros of denominators (including `tan`'s `cos`)
-  with the numerator proven nonzero.
+  with the numerator proven nonzero, and only where the blow-up provably
+  reaches f (through sums with bounded terms and products with factors
+  bounded away from 0). A division inside `exp`, `sin`, ... gives
+  `undefined`, not `pole`: `e^(-1/x²)` tends to 0 at 0.
+
+**Flat functions.** Where every derivative vanishes, as for `e^(-1/x²)` at 0,
+no finite test can separate "tiny" from "zero". Brackets on which
+`|f| ≤ 2^-flatBits` (default 4 × the working bits, about 10⁻¹⁰⁰) with no
+proof of a single crossing come back as `possible` with `bound` (the proven
+maximum of |f| there) and no `atMost`, since every derivative is also flat. They are
+never reported as zeros. Outside them, f is proven nonzero.
 
 ## Not yet done
 

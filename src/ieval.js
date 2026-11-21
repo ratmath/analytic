@@ -9,7 +9,9 @@ import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv } from "./p
 import { refuse } from "./errors.js";
 import { constantRational } from "./expr.js";
 
-const R = (iv, bits) => iv.roundOut(bits);
+// relative rounding, with an absolute floor far below 2^-bits so tiny
+// positive values (e^-100) stay provably positive
+const R = (iv, bits) => iv.roundOut(bits, 6000);
 
 function monotone(pointFn, v, bits, up = true) {
   if (v.isPoint) return pointFn(v.lo, bits);

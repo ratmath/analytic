@@ -75,7 +75,8 @@ function setup(f, interval, opts) {
   const bits = Math.max(64, bitLen(tol.denominator) - bitLen(tol.numerator) + 40);
   const env = {};
   for (const [k, v] of Object.entries(params)) env[k] = Iv.from(v);
-  return { F, a, b, tol, rf, bits, env, opts };
+  const flat = new Rational(1n, 1n << BigInt(opts.flatBits ?? 4 * bits));
+  return { F, a, b, tol, rf, bits, env, opts, flat };
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +310,7 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       const fm = safe(f, Iv.point(m));
       const dX = df ? safe(df, X) : null;
       if (!fm || !dX || dX.containsZero()) return unique ? X : null;
-      if (fm.isPoint && isZero(fm.lo)) return { exact: m };
+      if (fm.isPoint && isZero(fm.lo)) return { exact: m, X }; // every zero of the input lies in X
       const Y = roundDyadic(ONE.divide(dX.mid), s.bits);
       const K = Iv.point(m).sub(fm.scale(Y)).add(Iv.point(ONE).sub(dX.scale(Y)).mul(X.sub(m))).roundOut(s.bits + 16);
       const N = K.intersect(X);
@@ -338,8 +339,8 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
     if (k === "none") return;
     if (k && k.exact) {
       addExact(k.exact);
-      work(lo, k.exact, depth + 1);
-      work(k.exact, hi, depth + 1);
+      if (lt(k.X.lo, k.exact)) work(k.X.lo, k.exact, depth + 1);
+      if (lt(k.exact, k.X.hi)) work(k.exact, k.X.hi, depth + 1);
       return;
     }
     if (k) {
@@ -349,6 +350,11 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       else if (sh === 0) addExact(k.hi);
       else out.push({ kind: "sign-change", lo: k.lo, hi: k.hi, unique: true, atMost: 1, sLo: sl, sHi: sh });
       return;
+    }
+    if (le(y.mag, s.flat) && !(df && safe(df, X) && !safe(df, X).containsZero())) {
+      // |f| ≤ 2^-flatBits on all of X and no proof of a single crossing:
+      // f is numerically 0 here (a flat function such as e^(-1/x²) near 0).
+      return out.push({ kind: "possible", lo, hi, bound: y.mag, sLo: pointSign(lo), sHi: pointSign(hi) });
     }
     if (le(width, s.tol) || depth >= maxDepth) return finish(X, pointSign(lo), pointSign(hi));
     split(lo, hi, depth);
@@ -416,6 +422,8 @@ function mergeAdjacent(list, atMost) {
       last.hi = r.hi;
       last.sHi = r.sHi;
       if (r.kind === "possible") {
+        if (last.bound || r.bound) last.bound = last.bound && r.bound ? max(last.bound, r.bound) : undefined;
+        if (!last.bound) delete last.bound;
         const m = atMost(new Iv(last.lo, last.hi));
         if (m === undefined) delete last.atMost;
         else last.atMost = m;
@@ -466,38 +474,104 @@ function* generalCritical(s, kind) {
   return { value: out, via: `zeros of f${kind === "extrema" ? "′" : "″"} by Krawczyk, classified by f${kind === "extrema" ? "″" : "‴"} or sign changes` };
 }
 
-/** Denominator subtrees (where f can blow up), paired with their numerators. */
-function denominators(ast, out = []) {
-  if (ast.type === "op" && ast.op === "/") out.push({ num: ast.args[0], den: ast.args[1] });
-  if (ast.type === "op" && ast.op === "^") {
-    const e = ast.args[1];
-    if (e.type === "op" && e.op === "neg") out.push({ num: { type: "num", value: ONE }, den: ast.args[0] });
+/**
+ * Places where f can blow up: { num, den, guards } where den → 0 with num
+ * bounded away from 0 makes num/den unbounded, and the blow-up reaches the
+ * root of f only if every guard holds near the point ("bounded": the other
+ * term of a sum stays finite; "nonzero": the other factor stays finite and
+ * away from 0). A division hidden inside exp, sin, ... is not a pole of f
+ * (e^(-1/x²) → 0), so such places are reported as "undefined" only.
+ */
+function poleCandidates(ast, guards = [], out = []) {
+  const ONE_AST = { type: "num", value: ONE };
+  if (ast.type === "op") {
+    const [x, y] = ast.args;
+    switch (ast.op) {
+      case "/":
+        out.push({ num: x, den: y, guards });
+        poleCandidates(x, [...guards, { ast: y, need: "nonzero" }], out);
+        return out;
+      case "+":
+      case "-":
+        poleCandidates(x, [...guards, { ast: y, need: "bounded" }], out);
+        poleCandidates(y, [...guards, { ast: x, need: "bounded" }], out);
+        return out;
+      case "*":
+        poleCandidates(x, [...guards, { ast: y, need: "nonzero" }], out);
+        poleCandidates(y, [...guards, { ast: x, need: "nonzero" }], out);
+        return out;
+      case "neg":
+        return poleCandidates(x, guards, out);
+      case "^": {
+        const neg = y.type === "op" && y.op === "neg" && y.args[0].type === "num" && y.args[0].value.denominator === 1n;
+        const pos = y.type === "num" && y.value.denominator === 1n && y.value.numerator > 0n;
+        if (neg) out.push({ num: ONE_AST, den: x, guards });
+        else if (pos) poleCandidates(x, guards, out);
+        return out;
+      }
+    }
   }
   if (ast.type === "call" && ast.name === "tan") {
-    out.push({ num: { type: "call", name: "sin", args: ast.args }, den: { type: "call", name: "cos", args: ast.args } });
+    out.push({ num: { type: "call", name: "sin", args: ast.args }, den: { type: "call", name: "cos", args: ast.args }, guards });
   }
-  for (const a of ast.args ?? []) denominators(a, out);
+  return out;
+}
+
+/** Every division-like subtree, for reporting where f is undefined. */
+function allDenominators(ast, out = []) {
+  if (ast.type === "op" && ast.op === "/") out.push(ast.args[1]);
+  if (ast.type === "op" && ast.op === "^" && ast.args[1].type === "op" && ast.args[1].op === "neg") out.push(ast.args[0]);
+  if (ast.type === "call" && ast.name === "tan") out.push({ type: "call", name: "cos", args: ast.args });
+  for (const a of ast.args ?? []) allDenominators(a, out);
   return out;
 }
 
 function* generalPoles(s) {
   const out = [];
-  const pairs = denominators(s.F.ast);
+  const cands = poleCandidates(s.F.ast);
+  const dens = allDenominators(s.F.ast);
+  const near = (r) => {
+    const pad = s.tol;
+    return new Iv(r.lo.subtract(pad), r.hi.add(pad));
+  };
+  const guardsHold = (guards, X) =>
+    guards.every((g) => {
+      const y = safe(makeEval(g.ast, s), X);
+      return y && (g.need === "bounded" || !y.containsZero());
+    });
+  const key = (r) => `${r.lo}|${r.hi}`;
+  const poleKeys = new Set();
   let i = 0;
-  for (const { num, den } of pairs) {
+  for (const { num, den, guards } of cands) {
     const list = yield* generalZeros(den, s, { ...s.opts, maxMultiplicity: 2 });
     const numEval = makeEval(num, s);
     for (const r of list) {
       if (r.kind !== "exact" && r.kind !== "sign-change") continue;
-      const nv = safe(numEval, new Iv(r.lo, r.hi));
-      const where = r.at ? { at: r.at, lo: r.at, hi: r.at } : { lo: r.lo, hi: r.hi };
-      if (nv && !nv.containsZero()) out.push(record({ kind: "pole", ...where, unique: !!r.unique }));
-      else out.push(record({ kind: "undefined", ...where }));
+      const X = near(r);
+      const nv = safe(numEval, X);
+      if (nv && !nv.containsZero() && guardsHold(guards, X)) {
+        const where = r.at ? { at: r.at, lo: r.at, hi: r.at } : { lo: r.lo, hi: r.hi };
+        if (!poleKeys.has(key(where))) {
+          poleKeys.add(key(where));
+          out.push(record({ kind: "pole", ...where, unique: !!r.unique }));
+        }
+      }
     }
-    yield { done: ++i, of: pairs.length, step: "denominator" };
+    yield { done: ++i, of: cands.length + dens.length, step: "denominator" };
+  }
+  // other zeros of denominators: f is undefined there, behaviour unknown
+  for (const den of dens) {
+    const list = yield* generalZeros(den, s, { ...s.opts, maxMultiplicity: 2 });
+    for (const r of list) {
+      if (r.kind !== "exact" && r.kind !== "sign-change") continue;
+      const where = r.at ? { at: r.at, lo: r.at, hi: r.at } : { lo: r.lo, hi: r.hi };
+      const hit = out.some((p) => le(p.lo, where.hi) && le(where.lo, p.hi));
+      if (!hit) out.push(record({ kind: "undefined", ...where }));
+    }
+    yield { done: ++i, of: cands.length + dens.length, step: "denominator" };
   }
   out.sort((x, y) => x.lo.compareTo(y.lo));
-  return { value: out, via: "zeros of denominators with numerators proven nonzero" };
+  return { value: out, via: "zeros of denominators; poles where the blow-up provably reaches f" };
 }
 
 // ---------------------------------------------------------------------------

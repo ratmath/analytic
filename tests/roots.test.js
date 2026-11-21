@@ -107,4 +107,22 @@ describe("general functions: Krawczyk engine", () => {
     const e = extrema("x^3 - 3x", [-3, 3]).quick.value.map((g) => Math.round(g.at));
     expect(e).toEqual([-1, 1]);
   });
+
+  test("flat functions: e^(-1/x²) near 0 is 'possible' with a size bound, never a proven zero", () => {
+    const z = zeros("exp(-1/x^2)", [-1, 1]).exact();
+    expect(z.map((r) => r.kind)).toEqual(["possible", "undefined", "possible"]);
+    expect(z.every((r) => r.kind !== "exact" && r.kind !== "sign-change")).toBe(true);
+    expect(z[0].bound.toNumber()).toBeLessThan(1e-90);
+    expect(z[0].atMost).toBeUndefined(); // every derivative is flat there too
+    expect(z[0].lo.toNumber()).toBeGreaterThan(-0.1); // away from 0 it is proven positive
+    const shifted = zeros("exp(-1/x^2) - 1/1000000", ["1/1000", 1]).exact();
+    expect(shifted.length).toBe(1);
+    expect(holds(shifted[0], 1 / Math.sqrt(Math.log(1e6)))).toBe(true);
+  });
+  test("a division inside exp is not a pole of f", () => {
+    expect(poles("exp(-1/x^2)", [-1, 1]).exact().map((r) => r.kind)).toEqual(["undefined"]);
+    expect(poles("exp(1/x)", [-1, 1]).exact().map((r) => r.kind)).toEqual(["undefined"]);
+    expect(poles("x/(x-1) + exp(x)", [-1, 2]).exact().map((r) => r.kind)).toEqual(["pole"]);
+    expect(poles("2*tan(x)^2", [0, 2]).exact().map((r) => r.kind)).toEqual(["pole"]);
+  });
 });
