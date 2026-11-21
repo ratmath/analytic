@@ -30,7 +30,7 @@ import { Rational, RationalInterval } from "@ratmath/core";
 import { Refinement } from "./refine.js";
 import { Iv } from "./interval.js";
 import { AnalyticError } from "./errors.js";
-import { ZERO, ONE, TWO, lt, le, gt, ge, isZero, sign, min, max, roundDyadic, bitLen } from "./rat.js";
+import { ZERO, ONE, TWO, lt, le, gt, ge, isZero, sign, min, max, roundDyadic, bitLen, toQ } from "./rat.js";
 import { fn, evalParams } from "./fn.js";
 import { derivative as dAst, compileFloat, floatEnv, toRational } from "./expr.js";
 import { encloseAst } from "./ieval.js";
@@ -42,6 +42,8 @@ const FOUR = new Rational(4n);
 
 /** The rational with the smallest denominator in [lo, hi] (Stern–Brocot descent). */
 export function simplestBetween(lo, hi) {
+  lo = toQ(lo);
+  hi = toQ(hi);
   if (gt(lo, hi)) [lo, hi] = [hi, lo];
   if (lo.numerator <= 0n && hi.numerator >= 0n) return ZERO;
   if (hi.numerator < 0n) return simplestBetween(hi.negate(), lo.negate()).negate();
