@@ -1,0 +1,524 @@
+// Expressions: the same plain AST and calculator grammar as @ratmath/graphics
+// (src/expr.js there), so one parse tree can be plotted, modelled and
+// differentiated. The parser below follows graphics' grammar; keep the two in
+// sync until it moves to a shared package. Analytic adds atan, log1p, sinh,
+// cosh and tanh to the function names.
+//
+//   { type: "num", value: Rational }
+//   { type: "var", name }
+//   { type: "const", name: "pi" | "e" }
+//   { type: "op", op: "+" | "-" | "*" | "/" | "neg" | "^", args }
+//   { type: "call", name, args }
+//
+// Three things are built from a tree here:
+//   compileFloat(ast)      (env) => number          fast previews
+//   modelOf(ast, env, base)  Taylor model             certified
+//   derivative(ast, name)  a new tree                symbolic d/d(name)
+
+import { Rational } from "@ratmath/core";
+import { refuse } from "./errors.js";
+import { TaylorModel } from "./model.js";
+import * as E from "./elementary.js";
+import { constants } from "./enclose.js";
+import { Iv } from "./interval.js";
+import { ZERO, ONE, le, ge, isZero } from "./rat.js";
+
+// ---- AST builders ------------------------------------------------------------
+
+export const num = (value) => ({ type: "num", value: toRational(value) });
+export const v = (name) => ({ type: "var", name });
+export const op = (o, ...args) => ({ type: "op", op: o, args });
+export const call = (name, ...args) => ({ type: "call", name, args });
+
+export function toRational(value) {
+  if (value instanceof Rational) return value;
+  if (typeof value === "bigint") return new Rational(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new RangeError(`not a finite number: ${value}`);
+    return parseDecimalString(String(value)); // shortest spelling: 0.1 is 1/10
+  }
+  if (typeof value === "string") return parseDecimalString(value.trim());
+  if (value && typeof value.numerator === "bigint") return new Rational(value.numerator, value.denominator);
+  throw new TypeError(`cannot read ${value} as a rational`);
+}
+
+function parseDecimalString(s) {
+  const frac = /^([+-]?\d+)\s*\/\s*(\d+)$/.exec(s);
+  if (frac) return new Rational(BigInt(frac[1]), BigInt(frac[2]));
+  const m = /^([+-]?)(\d*)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(s);
+  if (!m || (m[2] === "" && (m[3] ?? "") === "")) throw new SyntaxError(`not a number: ${s}`);
+  const digits = (m[2] || "0") + (m[3] ?? "");
+  let n = BigInt(digits) * (m[1] === "-" ? -1n : 1n);
+  let d = 10n ** BigInt((m[3] ?? "").length);
+  const e = m[4] ? Number(m[4]) : 0;
+  if (e > 0) n *= 10n ** BigInt(e);
+  else if (e < 0) d *= 10n ** BigInt(-e);
+  return new Rational(n, d);
+}
+
+// ---- parser (graphics' grammar) -------------------------------------------------
+
+export const FUNCTIONS = new Set([
+  "sin", "cos", "tan", "exp", "ln", "log", "sqrt", "abs", "min", "max",
+  "atan", "log1p", "sinh", "cosh", "tanh",
+]);
+export const CONSTANTS = new Set(["pi", "e"]);
+
+/**
+ * Parse calculator notation: + - * / ^ (or **), parentheses, unary minus,
+ * implicit multiplication after a number or factor (`2x`, `3(x+1)`,
+ * `2sin(x)`), decimals as exact rationals. `^` is right-associative and binds
+ * tighter than unary minus: `-x^2` is `-(x^2)`. `log` is the natural log.
+ */
+export function parse(text) {
+  const toks = tokenize(text);
+  let i = 0;
+  const peek = () => toks[i];
+  const next = () => toks[i++];
+  const expect = (t) => {
+    const k = next();
+    if (!k || k.t !== t) throw new SyntaxError(`expected ${t} at ${k ? k.pos : text.length} in ${text}`);
+    return k;
+  };
+  function expr() {
+    let left = term();
+    while (peek() && (peek().t === "+" || peek().t === "-")) {
+      const o = next().t;
+      left = op(o, left, term());
+    }
+    return left;
+  }
+  const startsFactor = (k) => k && (k.t === "num" || k.t === "name" || k.t === "(");
+  function term() {
+    let left = unary();
+    for (;;) {
+      const k = peek();
+      if (k && (k.t === "*" || k.t === "/")) {
+        next();
+        left = op(k.t, left, unary());
+      } else if (startsFactor(k)) {
+        left = op("*", left, power());
+      } else return left;
+    }
+  }
+  function unary() {
+    if (peek() && peek().t === "-") {
+      next();
+      return op("neg", unary());
+    }
+    if (peek() && peek().t === "+") {
+      next();
+      return unary();
+    }
+    return power();
+  }
+  function power() {
+    const base = primary();
+    if (peek() && peek().t === "^") {
+      next();
+      return op("^", base, unary());
+    }
+    return base;
+  }
+  function primary() {
+    const k = next();
+    if (!k) throw new SyntaxError(`unexpected end of ${text}`);
+    if (k.t === "num") return { type: "num", value: parseDecimalString(k.v) };
+    if (k.t === "(") {
+      const e = expr();
+      expect(")");
+      return e;
+    }
+    if (k.t === "name") {
+      if (FUNCTIONS.has(k.v)) {
+        if (peek() && peek().t === "(") {
+          next();
+          const args = [expr()];
+          while (peek() && peek().t === ",") {
+            next();
+            args.push(expr());
+          }
+          expect(")");
+          return call(k.v, ...args);
+        }
+        return call(k.v, power());
+      }
+      if (CONSTANTS.has(k.v)) return { type: "const", name: k.v };
+      return v(k.v);
+    }
+    throw new SyntaxError(`unexpected ${k.t} at ${k.pos} in ${text}`);
+  }
+  const result = expr();
+  if (i < toks.length) throw new SyntaxError(`unexpected ${toks[i].t} at ${toks[i].pos} in ${text}`);
+  return result;
+}
+
+function tokenize(text) {
+  const out = [];
+  const re = /\s*(?:(\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)|([A-Za-z][A-Za-z0-9_]*)|(\*\*|[-+*/^(),]))/y;
+  let pos = 0;
+  while (pos < text.length) {
+    if (/^\s*$/.test(text.slice(pos))) break;
+    re.lastIndex = pos;
+    const m = re.exec(text);
+    if (!m) throw new SyntaxError(`cannot read ${JSON.stringify(text.slice(pos))}`);
+    const at = m.index + (m[0].length - (m[1] ?? m[2] ?? m[3]).length);
+    if (m[1]) out.push({ t: "num", v: m[1], pos: at });
+    else if (m[2]) out.push({ t: "name", v: m[2], pos: at });
+    else out.push({ t: m[3] === "**" ? "^" : m[3], pos: at });
+    pos = re.lastIndex;
+  }
+  return out;
+}
+
+/** A tree from a string or a tree (checked lightly). */
+export function toAst(x) {
+  if (typeof x === "string") return parse(x);
+  if (x && typeof x === "object" && typeof x.type === "string") return x;
+  throw new TypeError("expected an expression string or AST");
+}
+
+/** Names used as variables (excluding functions and constants). */
+export function freeVariables(ast, out = new Set()) {
+  if (ast.type === "var") out.add(ast.name);
+  else if (ast.args) for (const a of ast.args) freeVariables(a, out);
+  return out;
+}
+
+/** The value of a tree with no variables and no pi/e or functions, else null. */
+export function constantRational(ast) {
+  switch (ast.type) {
+    case "num":
+      return ast.value;
+    case "op": {
+      const a = ast.args.map(constantRational);
+      if (a.some((q) => q === null)) return null;
+      switch (ast.op) {
+        case "+": return a[0].add(a[1]);
+        case "-": return a[0].subtract(a[1]);
+        case "*": return a[0].multiply(a[1]);
+        case "/": return isZero(a[1]) ? null : a[0].divide(a[1]);
+        case "neg": return a[0].negate();
+        case "^": {
+          if (a[1].denominator !== 1n) return null;
+          const k = Number(a[1].numerator);
+          if (Math.abs(k) > 4096 || (k <= 0 && isZero(a[0]))) return null;
+          return a[0].pow(k);
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ---- printing ------------------------------------------------------------------
+
+const PREC = { "+": 1, "-": 1, "*": 2, "/": 2, neg: 3, "^": 4 };
+
+/** Calculator notation that parses back to the same tree. */
+export function format(ast) {
+  const go = (n, outer = 0, rightSide = false) => {
+    let s;
+    let p;
+    switch (n.type) {
+      case "num": {
+        const q = n.value;
+        s = q.denominator === 1n ? q.numerator.toString() : `${q.numerator}/${q.denominator}`;
+        // a negative number prints like a negation; a fraction like a quotient
+        p = q.denominator !== 1n ? 2 : q.numerator < 0n ? 3 : 5;
+        break;
+      }
+      case "var":
+      case "const":
+        s = n.name;
+        p = 5;
+        break;
+      case "call":
+        s = `${n.name}(${n.args.map((a) => go(a)).join(", ")})`;
+        p = 5;
+        break;
+      case "op": {
+        p = PREC[n.op];
+        if (n.op === "neg") s = `-${go(n.args[0], 3)}`;
+        else if (n.op === "^") s = `${go(n.args[0], 5)}^${go(n.args[1], 3)}`;
+        else {
+          const sym = n.op === "*" ? "*" : ` ${n.op} `;
+          const l = go(n.args[0], p);
+          const r = go(n.args[1], p, true);
+          s = n.op === "*" || n.op === "/" ? `${l}${n.op === "*" ? "*" : "/"}${r}` : `${l}${sym}${r}`;
+        }
+        break;
+      }
+    }
+    const needs = p < outer || (rightSide && p === outer && (outer === 1 || outer === 2));
+    return needs ? `(${s})` : s;
+  };
+  return go(ast);
+}
+
+// ---- float compiler ------------------------------------------------------------
+
+const FLOAT_FNS = {
+  sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, ln: Math.log, log: Math.log,
+  sqrt: Math.sqrt, abs: Math.abs, atan: Math.atan, log1p: Math.log1p,
+  sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+};
+
+/** Compile to a closure over doubles: (env) => number, env maps names to numbers. */
+export function compileFloat(ast) {
+  const go = (n) => {
+    switch (n.type) {
+      case "num": {
+        const c = n.value.toNumber();
+        return () => c;
+      }
+      case "const": {
+        const c = n.name === "pi" ? Math.PI : Math.E;
+        return () => c;
+      }
+      case "var": {
+        const name = n.name;
+        return (env) => {
+          const x = env[name];
+          if (x === undefined) throw new ReferenceError(`no value for ${name}`);
+          return x;
+        };
+      }
+      case "op": {
+        const [a, b] = n.args.map(go);
+        switch (n.op) {
+          case "+": return (e) => a(e) + b(e);
+          case "-": return (e) => a(e) - b(e);
+          case "*": return (e) => a(e) * b(e);
+          case "/": return (e) => a(e) / b(e);
+          case "neg": return (e) => -a(e);
+          case "^": return (e) => Math.pow(a(e), b(e));
+        }
+        break;
+      }
+      case "call": {
+        const [a, b] = n.args.map(go);
+        const f = FLOAT_FNS[n.name];
+        if (f) return (e) => f(a(e));
+        if (n.name === "min") return (e) => Math.min(a(e), b(e));
+        if (n.name === "max") return (e) => Math.max(a(e), b(e));
+        break;
+      }
+    }
+    throw new Error(`cannot compile ${n.type} ${n.op ?? n.name ?? ""}`);
+  };
+  return go(ast);
+}
+
+/** Plain-number copy of a parameter map (Rationals, strings, intervals → midpoints). */
+export function floatEnv(params = {}) {
+  const out = {};
+  for (const [k, val] of Object.entries(params)) {
+    if (typeof val === "number") out[k] = val;
+    else {
+      const iv = Iv.from(typeof val === "string" ? toRational(val) : val);
+      out[k] = iv.mid.toNumber();
+    }
+  }
+  return out;
+}
+
+// ---- Taylor-model compiler -----------------------------------------------------
+
+/**
+ * Taylor model of the tree. env maps names to Taylor models, Rationals or
+ * intervals; `base` is any model on the target domain (its domain, order and
+ * bits are used for constants).
+ */
+export function modelOf(ast, env, base) {
+  const settings = { order: base.order, bits: base.bits };
+  const lift = (val) => (val instanceof TaylorModel ? val : TaylorModel.constant(base.domain, val, settings));
+  const go = (n) => {
+    switch (n.type) {
+      case "num":
+        return lift(n.value);
+      case "const":
+        return lift(n.name === "pi" ? constants.pi(base.bits + 8) : constants.e(base.bits + 8));
+      case "var": {
+        const val = env[n.name];
+        if (val === undefined) refuse("unbound", `no value for ${n.name}`);
+        return lift(typeof val === "string" ? toRational(val) : val);
+      }
+      case "op": {
+        if (n.op === "^") return powerOf(n);
+        const [a, b] = n.args.map(go);
+        switch (n.op) {
+          case "+": return a.add(b);
+          case "-": return a.subtract(b);
+          case "*": return a.multiply(b);
+          case "/": return a.divide(b);
+          case "neg": return a.negate();
+        }
+        break;
+      }
+      case "call": {
+        const args = n.args.map(go);
+        const [a, b] = args;
+        switch (n.name) {
+          case "ln":
+          case "log": return E.log(a);
+          case "abs": {
+            const r = a.bound(4);
+            if (ge(r.lo, ZERO)) return a;
+            if (le(r.hi, ZERO)) return a.negate();
+            return refuse("not-smooth", `abs is not smooth here: its argument's range ${r} contains 0; split the domain at the zero`);
+          }
+          case "min":
+          case "max": {
+            const r = a.subtract(b).bound(4);
+            const aBig = ge(r.lo, ZERO);
+            const bBig = le(r.hi, ZERO);
+            if (!aBig && !bBig) return refuse("not-smooth", `${n.name} is not smooth here: its arguments cross; split the domain where they meet`);
+            return (n.name === "max") === aBig ? a : b;
+          }
+          default:
+            if (E[n.name]) return E[n.name](a);
+        }
+        break;
+      }
+    }
+    return refuse("bad-expression", `cannot model ${n.type} ${n.op ?? n.name ?? ""}`);
+  };
+  const powerOf = (n) => {
+    const q = constantRational(n.args[1]);
+    const a = go(n.args[0]);
+    if (q !== null) {
+      if (isZero(q)) {
+        const r = a.bound(4);
+        if (r.containsZero()) refuse("zero-power", "0^0 is undefined: the base of ^0 can be 0 on this domain");
+        return lift(ONE);
+      }
+      return E.power(a, q);
+    }
+    return E.exp(go(n.args[1]).multiply(E.log(a)));
+  };
+  return go(ast);
+}
+
+// ---- symbolic derivative -------------------------------------------------------
+
+const ZN = () => num(0n);
+const ON = () => num(1n);
+const isNum = (n, q) => n.type === "num" && (q === undefined || n.value.compareTo(toRational(q)) === 0);
+
+// Builders that fold constants and drop identities, so derivatives stay readable.
+export const S = {
+  add(a, b) {
+    if (isNum(a, 0)) return b;
+    if (isNum(b, 0)) return a;
+    if (a.type === "num" && b.type === "num") return num(a.value.add(b.value));
+    if (b.type === "op" && b.op === "neg") return S.sub(a, b.args[0]);
+    if (b.type === "num" && b.value.numerator < 0n) return S.sub(a, num(b.value.negate()));
+    return op("+", a, b);
+  },
+  sub(a, b) {
+    if (isNum(b, 0)) return a;
+    if (isNum(a, 0)) return S.neg(b);
+    if (a.type === "num" && b.type === "num") return num(a.value.subtract(b.value));
+    if (b.type === "op" && b.op === "neg") return S.add(a, b.args[0]);
+    if (b.type === "num" && b.value.numerator < 0n) return S.add(a, num(b.value.negate()));
+    return op("-", a, b);
+  },
+  neg(a) {
+    if (a.type === "num") return num(a.value.negate());
+    if (a.type === "op" && a.op === "neg") return a.args[0];
+    return op("neg", a);
+  },
+  mul(a, b) {
+    if (isNum(a, 0) || isNum(b, 0)) return ZN();
+    if (isNum(a, 1)) return b;
+    if (isNum(b, 1)) return a;
+    if (isNum(a, -1)) return S.neg(b);
+    if (isNum(b, -1)) return S.neg(a);
+    if (a.type === "num" && b.type === "num") return num(a.value.multiply(b.value));
+    if (b.type === "num") return S.mul(b, a);
+    if (a.type === "op" && a.op === "neg") return S.neg(S.mul(a.args[0], b));
+    if (b.type === "op" && b.op === "neg") return S.neg(S.mul(a, b.args[0]));
+    return op("*", a, b);
+  },
+  div(a, b) {
+    if (isNum(a, 0)) return ZN();
+    if (isNum(b, 1)) return a;
+    if (a.type === "num" && b.type === "num" && !isZero(b.value)) return num(a.value.divide(b.value));
+    if (a.type === "op" && a.op === "neg") return S.neg(S.div(a.args[0], b));
+    if (a.type === "num" && a.value.numerator < 0n) return S.neg(S.div(num(a.value.negate()), b));
+    return op("/", a, b);
+  },
+  pow(a, b) {
+    if (isNum(b, 1)) return a;
+    // (a^m)^n = a^(mn) for integers m, n
+    if (a.type === "op" && a.op === "^" && a.args[1].type === "num" && b.type === "num" &&
+        a.args[1].value.denominator === 1n && b.value.denominator === 1n) {
+      return S.pow(a.args[0], num(a.args[1].value.multiply(b.value)));
+    }
+    return op("^", a, b);
+  },
+};
+
+const depends = (n, name) => freeVariables(n).has(name);
+
+/** d/d(name) of the tree, as a new tree. */
+export function derivative(ast, name = "x") {
+  const d = (n) => {
+    if (!depends(n, name)) return ZN();
+    switch (n.type) {
+      case "var":
+        return ON();
+      case "op": {
+        const [a, b] = n.args;
+        switch (n.op) {
+          case "+": return S.add(d(a), d(b));
+          case "-": return S.sub(d(a), d(b));
+          case "neg": return S.neg(d(a));
+          case "*": return S.add(S.mul(d(a), b), S.mul(a, d(b)));
+          case "/":
+            if (!depends(b, name)) return S.div(d(a), b);
+            return S.div(S.sub(S.mul(d(a), b), S.mul(a, d(b))), S.pow(b, num(2n)));
+          case "^": {
+            if (!depends(b, name)) {
+              const q = constantRational(b);
+              const bm1 = q !== null ? num(q.subtract(ONE)) : S.sub(b, ON());
+              if (q !== null && isZero(q.subtract(ONE))) return d(a);
+              return S.mul(S.mul(b, S.pow(a, bm1)), d(a));
+            }
+            if (!depends(a, name)) return S.mul(S.mul(n, call("log", a)), d(b));
+            // a^b · (b' log a + b a'/a)
+            return S.mul(n, S.add(S.mul(d(b), call("log", a)), S.div(S.mul(b, d(a)), a)));
+          }
+        }
+        break;
+      }
+      case "call": {
+        const [a] = n.args;
+        const da = d(a);
+        const two = () => num(2n);
+        switch (n.name) {
+          case "sin": return S.mul(call("cos", a), da);
+          case "cos": return S.neg(S.mul(call("sin", a), da));
+          case "tan": return S.div(da, S.pow(call("cos", a), two()));
+          case "exp": return S.mul(n, da);
+          case "ln":
+          case "log": return S.div(da, a);
+          case "log1p": return S.div(da, S.add(ON(), a));
+          case "sqrt": return S.div(da, S.mul(two(), n));
+          case "atan": return S.div(da, S.add(ON(), S.pow(a, two())));
+          case "sinh": return S.mul(call("cosh", a), da);
+          case "cosh": return S.mul(call("sinh", a), da);
+          case "tanh": return S.div(da, S.pow(call("cosh", a), two()));
+          case "abs": return S.mul(S.div(a, n), da); // valid where a ≠ 0
+          case "min":
+          case "max":
+            return refuse("not-smooth", `${n.name} has no derivative formula; split the domain where its arguments meet`);
+        }
+        break;
+      }
+    }
+    return refuse("bad-expression", `cannot differentiate ${n.type} ${n.op ?? n.name ?? ""}`);
+  };
+  return d(ast);
+}

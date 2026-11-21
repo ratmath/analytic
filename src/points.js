@@ -40,10 +40,19 @@ function sumSeries(t0, next, tailBound, wp, maxTerms = 100000) {
 
 // ---------------------------------------------------------------- exp
 
+const EXP_BIG = new Rational(1n << 12n);
+
 export function expPoint(q, bits = 96) {
   if (isZero(q)) return Iv.point(ONE);
   const neg = sign(q) < 0;
   const a = q.abs();
+  if (gt(a, EXP_BIG)) {
+    // e^a would need more than 5900 bits: refuse growth; for decay, e^-a lies
+    // in (0, e^-4096] ⊂ [0, 2^-5900] (e > 2^1.44). The lower end 0 is all we can
+    // represent cheaply, so such values are indistinguishable from 0.
+    if (!neg) refuse("overflow", `exp(${a.toNumber()}) is too large to enclose`);
+    return new Iv(ZERO, new Rational(1n, 1n << 5900n));
+  }
   const e = log2Approx(a);
   const s = Math.max(0, e + 3);
   const wp = bits + s + 16;
@@ -57,7 +66,7 @@ export function expPoint(q, bits = 96) {
   );
   for (let i = 0; i < s; i++) iv = iv.mul(iv).roundOut(wp);
   if (neg) iv = iv.recip();
-  return iv.roundOut(bits + 4);
+  return iv.roundOut(bits + 4, 6000); // keep tiny values (e^-1000) positive
 }
 
 // ---------------------------------------------------------------- atan, pi
