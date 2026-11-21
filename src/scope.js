@@ -9,6 +9,8 @@ import * as E from "./elementary.js";
 import { enclose, constants } from "./enclose.js";
 import { series } from "./series.js";
 import { AnalyticError, refuse } from "./errors.js";
+import { fn } from "./fn.js";
+import { ode } from "./ode.js";
 
 const NAMES = ["exp", "log", "log1p", "sqrt", "sin", "cos", "tan", "atan", "sinh", "cosh", "tanh"];
 
@@ -75,6 +77,9 @@ export function createScope(opts = {}) {
   scope.TM = TaylorModel;
   scope.Domain = Domain;
   scope.series = (domain, spec) => series(domain, { order, bits, ...spec });
+  scope.fn = (expression, o) => fn(expression, o);
+  scope.d = (expression, o) => fn(expression, o).derivative();
+  scope.ode = { solve: (spec) => ode.solve({ order, bits, ...spec }), step: (spec) => ode.step({ order, bits, ...spec }) };
   scope.AnalyticError = AnalyticError;
   scope.bits = bits;
   return scope;

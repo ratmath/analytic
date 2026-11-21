@@ -80,11 +80,14 @@ const ivFact = (iv, n) => iv.scale(new Rational(1n, factorial(n)));
 
 // ------------------------------------------------------------------ exp
 
+const EXP_LIMIT = new Rational(1n << 16n);
 function expSpec(c0, n, X, bits) {
+  if (gt(X.hi, EXP_LIMIT)) refuse("overflow", `exp argument range reaches ${X.hi.toNumber()}, beyond the supported 2^16`);
   const E = expPoint(c0, bits + 8);
   const coeffs = [];
   for (let k = 0; k <= n; k++) coeffs.push(ivFact(E, k));
-  const M = new Iv(expPoint(X.lo, 32).lo, expPoint(X.hi, 32).hi);
+  const Xr = X.roundOut(40); // a slightly wider argument range keeps the bound cheap
+  const M = new Iv(expPoint(Xr.lo, 32).lo, expPoint(Xr.hi, 32).hi);
   return { coeffs, lagrange: ivFact(M, n + 1), rule: "Lagrange, |exp^(n+1)| ≤ e^max" };
 }
 

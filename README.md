@@ -47,7 +47,10 @@ f.describe();       // domain, order, remainder width, rules used
 | Calculus | `.integrate()`, `.integral(a, b)`, `.derivative()` (exact models only; see below) |
 | User series | `series(D, { coefficient: k => a_k, order, rule, … })` |
 | Point values | `enclose.exp(x, bits)` etc., `constants.pi(bits)`, `constants.e(bits)` |
-| Evaluator scope | `createScope({ digits })` |
+| Formulas | `fn(text, { params })`: `.value`, `.range`, `.integral` (Refinements), `.derivative()`, `.model(D)` |
+| ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
+| Fast-then-certified | `Refinement`, `live` |
+| Evaluator scope | `createScope({ digits })` (adds `fn`, `d`, `ode`) |
 
 Options: `order` (maximum degree kept, default 12) and `bits` (precision of the
 irrational constants, default 96 ≈ 28 digits).
@@ -117,10 +120,104 @@ Order 12 `exp(sin(x))·x` with its range takes about 60 ms in Bun; order 20
 about 170 ms; a 4-piece certified integral about 250 ms. Keep UI actions in a
 worker.
 
-## Not yet done (phases 4–6 of the design note)
+## Fast first, certified last
 
-- Expression front end and symbolic `d/dx` (rebuild models of derivatives).
-- Validated ODE steps (Picard iteration with Taylor models).
+Every question about a function given as a formula returns a `Refinement`,
+the same class `@ratmath/linalg` and `@ratmath/graphics` use (`src/refine.js`,
+copied verbatim in each; keep them in sync), so one `live()` loop drives all
+three libraries:
+
+| member | what it gives |
+| --- | --- |
+| `quick` | float preview `{ stage: "float", value, trust }`, computed on first read |
+| `exact()` / `exactStage()` | the certified answer, synchronously (fine in a Worker) |
+| `settle({ signal, sliceMs, onStage, onProgress })` | the same in time slices; rejects with `AbortError` when aborted |
+| `stages()` | float stage, then `{ stage: "progress", done, of, step, partial }` ticks, then `{ stage: "exact", exact: true, value, via }` |
+
+Here the last stage is a certified enclosure at the requested precision
+(transcendental values cannot be exact). Progress ticks carry `partial`, the
+enclosure so far, so a display can sharpen as it goes. `via` says how the
+answer was proven and whether a budget was hit.
+
+```js
+import { fn, live } from "@ratmath/analytic";
+
+const f = fn("exp(sin(x))*x");            // same grammar and AST as @ratmath/graphics
+f.value("1/3", { digits: 30 }).quick;     // { value: 0.46235716975704894, trust: "good" }
+f.value("1/3", { digits: 30 }).exact();   // RationalInterval, 30 digits, proven
+f.range(R`0:3`, { digits: 6 }).exact();   // adaptive bisection of Taylor models
+f.integral(0, 1, { digits: 20 }).exact(); // Gauss–Legendre preview, certified enclosure
+f.derivative().toString();                // "exp(sin(x))*cos(x)*x + exp(sin(x))"
+f.derivative().model(Domain(R`0:1`));     // certified model of f′, rebuilt from its formula
+
+const g = fn("a*sin(x)", { params: { a: 1 } });
+const update = live((a) => g.with({ a }).value("1/2"), (s) => show(s.value, s.exact));
+slider.oninput = () => update(`${slider.value}/8`);
+```
+
+| question | preview | certified value |
+| --- | --- | --- |
+| `f.value(x, { digits = 20 })` | float `f(x)` | `RationalInterval`; a point for rational-only formulas |
+| `f.range(I, { digits = 6, order = 8, maxPieces = 256 })` | `[min, max]` of 256 samples, trust `rough` | outer enclosure; pieces holding the extremes are bisected until outer and inner bounds agree to `digits` |
+| `f.integral(a, b, { digits = 12, order = 12, maxPieces = 256 })` | 8-panel Gauss–Legendre | enclosure; pieces split until each meets its share of the width budget |
+
+### Expressions and d/dx
+
+`fn(text or AST, { variable = "x", params })` reads calculator notation with
+the parser from `@ratmath/graphics` (`2x`, `-x^2 = -(x^2)`, `^` right
+associative, decimals exact) plus `atan`, `log1p`, `sinh`, `cosh`, `tanh`.
+`log` and `ln` are the natural log. The AST is the same plain objects
+(`num`, `var`, `const`, `op`, `call`), so a parse tree can be passed between
+the libraries. Exports: `parse`, `format`, `differentiate(ast, name)`,
+`compileFloat(ast)`, `modelOf(ast, env, base)`.
+
+Parameters may be numbers, strings, Rationals or intervals (an interval
+parameter gives a result valid for every value in it). `abs`, `min` and `max`
+are modelled where they are smooth on the domain and refused where they are
+not. Derivatives are symbolic and simplified, so the model of `f′` is built
+from `f′`'s formula with its own certified remainder, as the design note asks.
+
+## ODEs: validated Picard steps
+
+```js
+import { ode } from "@ratmath/analytic";
+
+const r = ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2" });
+r.quick.value;          // RK4 samples { t: Float64Array, y: Float64Array }
+const sol = r.exact();  // ODESolution
+sol.final;              // RationalInterval enclosing y(1/2)
+sol.at("1/4");          // enclosure at any t in the span
+sol.steps;              // [{ t0, t1, models }], one Taylor model per component per step
+
+ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });       // systems
+ode.solve({ f: (t, y) => exp(y.negate()), float: (t, y) => Math.exp(-y), y0: 0, until: 1 });
+ode.step({ f: "y", y0: 1, step: "1/4" }).model;                               // one step
+```
+
+Each step on `[t0, t0 + h]` Picard-iterates a polynomial `P`, then looks for an
+interval `I` with `Φ(P + I) ⊂ P + I` for the Picard operator
+`Φ(y) = y0 + ∫ F(s, y(s)) ds` in Taylor-model arithmetic. That inclusion
+proves the solution stays in `P + I` on the whole step. Steps chain through
+the enclosure at `t0 + h`. `h` halves when no enclosure is found and while
+halving still shrinks the width the step adds (target `tol`, default 2⁻⁴⁰);
+it doubles again after a success. Interval initial values are carried. Blow-up
+ends with `complete: false` and a `reason` instead of a wrong enclosure.
+Options: `order` (10), `step`, `tol`, `maxSteps` (400), `minStep`,
+`previewSteps` (200), `time` ("t"), `vars`, `params`.
+
+Systems are enclosed componentwise without preconditioning, so rotating
+systems widen over long spans (the wrapping effect): the oscillator above ends
+with widths near 4·10⁻¹².
+
+## Not yet done
+
+- Certified zeros, extrema and inflection points (Krawczyk / Kantorovich
+  uniqueness, multiplicity via derivatives) as the interface graphics asks
+  about.
+- Preconditioned (QR) ODE steps for long spans of systems.
+- Speed: each elementary composition costs about 10 ms at order 8, so a
+  certified range over 26 pieces takes about 0.8 s. Keep certified work in a
+  Worker; previews are instant.
 
 ## Tests
 
