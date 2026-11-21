@@ -9,3 +9,5 @@ export { Refinement, live } from "./src/refine.js";
 export { fn, AnalyticFunction } from "./src/fn.js";
 export { parse, format, derivative as differentiate, compileFloat, modelOf, freeVariables, num, v, op, call } from "./src/expr.js";
 export { ode } from "./src/ode.js";
+export { zeros, poles, extrema, inflections, simplestBetween } from "./src/roots.js";
+export { encloseAst } from "./src/ieval.js";

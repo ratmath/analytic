@@ -49,6 +49,7 @@ f.describe();       // domain, order, remainder width, rules used
 | Point values | `enclose.exp(x, bits)` etc., `constants.pi(bits)`, `constants.e(bits)` |
 | Formulas | `fn(text, { params })`: `.value`, `.range`, `.integral` (Refinements), `.derivative()`, `.model(D)` |
 | ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
+| Features | `zeros`, `poles`, `extrema`, `inflections` (Refinements) |
 | Fast-then-certified | `Refinement`, `live` |
 | Evaluator scope | `createScope({ digits })` (adds `fn`, `d`, `ode`) |
 
@@ -209,11 +210,56 @@ Systems are enclosed componentwise without preconditioning, so rotating
 systems widen over long spans (the wrapping effect): the oscillator above ends
 with widths near 4·10⁻¹².
 
+## Zeros, poles, extrema, inflections
+
+The interface graphics asks about. Each returns a `Refinement`: float guesses
+first (`{ kind: "guess", at }`, trust `rough`), then certified records.
+
+```js
+import { zeros, poles, extrema, inflections } from "@ratmath/analytic";
+
+zeros("x^2 - 4", [-3, 3]).exact();
+// [{ kind: "exact", at: -2, unique: true, multiplicity: 1 }, { kind: "exact", at: 2, ... }]
+zeros("(x-1)^2*(x^2-2)", [0, 3]).exact();      // 1 exactly (multiplicity 2), √2 in a bracket
+poles("(x^2-1)/((x-1)*x^2)", [-3, 3]).exact();  // pole at 0 (order 2), hole at 1 with value 2
+extrema("x^3 - 3x", [-3, 3]).exact();           // max at -1 (value 2), min at 1 (value -2)
+zeros("sin(x)^2", [-1, 4]).exact();             // 0 exactly with multiplicity 2; near π: possible, atMost 2
+```
+
+All take `(f, [a, b], { variable, params, tolerance = 1e-6 })` where `f` is
+text, an AST or an `fn`. Records (`lo`, `hi`, `at` are Rationals; `value` is
+a RationalInterval):
+
+| function | kinds | extra fields |
+| --- | --- | --- |
+| `zeros` | `exact`, `sign-change` (a zero is proven inside), `possible`, `undefined` (f could not be evaluated there; no claim) | `unique`, `multiplicity`, `atMost` |
+| `poles` | `pole`, `hole` (removable: f undefined, limit exists), `undefined` | `order`, `value` (the hole's limit) |
+| `extrema` | `max`, `min`, `flat` (f′ = 0 without a sign change), `possible` | `value`, `unique` |
+| `inflections` | `inflection`, `possible` | `value`, `unique` |
+
+Brackets with no record certainly contain none. Two engines:
+
+- **Rational functions with rational coefficients** are read into `N/D`
+  exactly. `gcd(N, D)` gives the holes, Yun's square-free decomposition gives
+  multiplicities and pole orders, and one Sturm sequence isolates every root.
+  Brackets narrow by exact sign tests at the simplest rational in the middle
+  half, so rational roots come out exactly. Everything is proven and unique.
+- **Everything else** uses interval bisection with the Krawczyk test
+  `K = m − Y·f(m) + (1 − Y·F′(X))(X − m)`: `K ∩ X = ∅` excludes a zero,
+  `K ⊂ int X` proves exactly one, and iterating narrows it quadratically.
+  Where f′ may vanish, a bracket is `possible` with `atMost: m` when the m-th
+  derivative is proven nonzero (Rolle). At an exact zero, derivatives that
+  are exactly 0 there give its multiplicity, and nearby `possible` brackets
+  are absorbed when Rolle leaves no room for another zero. Extrema and
+  inflections are classified by the next derivative's sign (or by a proven
+  sign change). Poles are zeros of denominators (including `tan`'s `cos`)
+  with the numerator proven nonzero.
+
 ## Not yet done
 
-- Certified zeros, extrema and inflection points (Krawczyk / Kantorovich
-  uniqueness, multiplicity via derivatives) as the interface graphics asks
-  about.
+- Proving the existence of multiple roots of non-polynomial functions (they
+  are reported as `possible` with `atMost`), and endpoints of the domain as
+  features (open or closed dots are left to the caller).
 - Preconditioned (QR) ODE steps for long spans of systems.
 - Speed: each elementary composition costs about 10 ms at order 8, so a
   certified range over 26 pieces takes about 0.8 s. Keep certified work in a

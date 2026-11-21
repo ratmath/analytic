@@ -20,8 +20,7 @@ function targetWidth(iv, digits) {
   return scale.multiply(tenTo(digits));
 }
 
-const params = (o) => ({ ...(o.params ?? {}) });
-function evalParams(p) {
+export function evalParams(p) {
   const out = {};
   for (const [k, val] of Object.entries(p)) out[k] = typeof val === "string" || typeof val === "number" ? q(val) : val;
   return out;
