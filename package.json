@@ -16,7 +16,8 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "test": "bun test tests/"
+    "test": "bun test tests/",
+    "docs:build": "bun scripts/build-docs.js"
   },
   "dependencies": {
     "@ratmath/core": "^0.8.0"
