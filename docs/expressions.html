@@ -49,16 +49,60 @@
 <section class="page" data-page="expressions">
 <div class="eyebrow">Topic</div>
   <h1>Formulas and derivatives</h1>
-  <p><code>fn(text)</code> parses calculator notation into a plain tree of <code>num</code>, <code>var</code>, <code>const</code>, <code>op</code> and <code>call</code> nodes. The same tree can then be evaluated three ways: with floats for previews, as a Taylor model for certified answers, or with plain intervals for quick exclusion tests.</p>
+  <p>Everything in the library that works with "a function" starts from a formula in calculator notation. <code>fn(text)</code> parses it into a small tree, and every question (a value, a range, an integral, zeros, a derivative) is answered by walking that tree in one of three ways.</p>
+
+  <h2>The notation</h2>
+  <table class="ref">
+    <tr><th>Write</th><th>Means</th></tr>
+    <tr><td><code>+ − * /</code></td><td>the usual operations, left to right at equal precedence: <code>x/2y</code> is (x/2)·y</td></tr>
+    <tr><td><code>^</code> or <code>**</code></td><td>powers; <code>-x^2</code> is −(x²)</td></tr>
+    <tr><td><code>2x</code>, <code>2(x+1)</code>, <code>x sin(x)</code></td><td>implicit multiplication</td></tr>
+    <tr><td><code>sin x</code></td><td>a function applied to the next factor, the same as <code>sin(x)</code></td></tr>
+    <tr><td><code>sin cos tan exp log ln sqrt atan log1p sinh cosh tanh</code></td><td>the elementary functions (<code>log</code> and <code>ln</code> are both natural log)</td></tr>
+    <tr><td><code>abs min max</code></td><td>non-smooth functions, modelled where they are smooth (see below)</td></tr>
+    <tr><td><code>pi e</code></td><td>constants, certified to the working precision</td></tr>
+    <tr><td><code>1/3</code>, <code>0.25</code>, <code>2.5E-3</code></td><td>exact rationals: 0.25 is 1/4, not a double</td></tr>
+  </table>
+  <div data-demo="tree"></div>
+
+  <h2>Three ways to walk the tree</h2>
+  <ol>
+    <li><strong>Floats.</strong> <code>compileFloat</code> turns the tree into a JavaScript closure on doubles. This drives every preview, plot and slider: thousands of evaluations a frame.</li>
+    <li><strong>Taylor models.</strong> <code>modelOf</code> evaluates the tree with Taylor models in place of numbers, which gives polynomial-plus-remainder enclosures on a whole interval. Ranges, integrals and many-digit values use this.</li>
+    <li><strong>Plain intervals.</strong> <code>encloseAst</code> evaluates with intervals. It is cruder but cheap, and the zero finder uses it thousands of times to throw away pieces where f cannot vanish.</li>
+  </ol>
+  <p>The tree is shared with <code>@ratmath/graphics</code>, so the formula a plot draws is literally the formula the proofs are about.</p>
+
   <h2>Symbolic d/dx</h2>
-  <p>Derivatives follow the rules you know (sum, product, quotient, chain; d/dx aᵇ in general form), and simplify as they build: constants fold, 0·u and 1·u disappear, (uᵐ)ⁿ becomes uᵐⁿ. Because the derivative is a formula, its model has its own proven remainder.</p>
+  <p>Derivatives are taken on the tree with the rules from a first calculus course, and the result is a new formula:</p>
+  <table class="ref">
+    <tr><th>Rule</th><th>d/dx</th></tr>
+    <tr><td>sum, product</td><td>u′ + v′, u′v + uv′</td></tr>
+    <tr><td>quotient</td><td>(u′v − uv′)/v²</td></tr>
+    <tr><td>constant power</td><td>n·uⁿ⁻¹·u′</td></tr>
+    <tr><td>general power</td><td>uᵛ·(v′·ln u + v·u′/u)</td></tr>
+    <tr><td>chain</td><td>sin u → cos u·u′, exp u → exp u·u′, log u → u′/u, atan u → u′/(1 + u²), sqrt u → u′/(2·sqrt u), …</td></tr>
+  </table>
+  <p>The builders simplify as they go: constants fold, 0·u and 1·u disappear, u − (−v) becomes u + v, and (uᵐ)ⁿ becomes uᵐⁿ. That keeps derivative trees small enough to evaluate quickly, which matters because the zero finder needs f′, f″ and sometimes f‴. Shared subtrees (sin(u) → cos(u)·u′ keeps the same u) are evaluated once.</p>
   <div data-demo="deriv"></div>
 <pre><code>fn("x^3 + 2x - 1/x").derivative().toString();   // "3*x^2 + 2 + 1/x^2"
-differentiate(parse("atan(x^2)"), "x");         // an AST: 2*x/(1 + x^4)</code></pre>
-  <h2>Parameters and intervals</h2>
-  <p>Names other than the variable are parameters: <code>fn("a*x^2", { params: { a: "3/8" } })</code>. A parameter may be an interval, <code>{ a: R`1:2` }</code>; then every answer holds for every a in that range.</p>
+format(differentiate(parse("atan(x^2)"), "x"));  // "2*x/(1 + x^4)"
+format(differentiate(parse("sin(x)/x"), "x"));   // "(cos(x)*x - sin(x))/x^2"</code></pre>
+  <p>Why not differentiate a Taylor model instead? Because the remainder only bounds f − P, not f′ − P′: f could wiggle inside the remainder band with any slope. The derivative is a new formula, modelled afresh with its own proven remainder.</p>
+
+  <h2>Parameters, sliders and intervals</h2>
+  <p>Names other than the variable are parameters. They must be given values, and <code>with</code> makes a copy with new values, which is what a slider does:</p>
+<pre><code>const f = fn("a*x^2 + b", { params: { a: "3/8", b: 1 } });
+f.with({ a: 2 }).value(3).exact();      // 19, exactly
+fn("y*t", { variable: "t", params: { y: 2 } });   // a different variable name</code></pre>
+  <p>A parameter can also be an interval. Then every answer holds for every value of the parameter in that interval at once: the range below is a range over both x and a. This is how uncertainty in a measured constant carries through to a proven conclusion. The answer cannot be sharper than the parameter allows: here the range search stops at its piece budget, and the outer bound it reports is still a valid range for all a at once.</p>
+  <div data-demo="intervalParam"></div>
+
   <h2>Non-smooth pieces</h2>
-  <p><code>abs</code>, <code>min</code> and <code>max</code> are modelled where they are smooth on the domain (the argument keeps one sign, or one argument stays on top) and refused where they are not. Split the domain there, or write the function <a href="piecewise.html">piecewise</a>.</p>
+  <p><code>abs</code>, <code>min</code> and <code>max</code> have no Taylor series at their corners. They are modelled exactly where they are smooth on the domain (the argument of abs keeps one sign, or one argument of min stays below the other) and refused where they are not, with a reason. Split the domain at the corner, or write the function <a href="piecewise.html">piecewise</a>, where each piece is smooth by construction.</p>
+
+  <h2>Refusals</h2>
+  <p>A formula that cannot be bounded on the domain is refused with an <code>AnalyticError</code> that has a <code>code</code> and a reason: <code>log</code> of a range that reaches 0, a divisor whose range contains 0, <code>sqrt</code> of something that may be negative, <code>exp</code> of something above 2¹⁶. The library never returns a bound it has not proven.</p>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="values.html">← Values to many digits</a><a class="next" href="ranges.html">Ranges and integrals →</a></nav>
 </section>
 </main>

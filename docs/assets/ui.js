@@ -141,12 +141,14 @@ export function plot(canvas, { x: [xa, xb], y, curves = [], bands = [], points =
   }
   for (const b of bands) {
     g.fillStyle = b.color ?? css("--exact-soft");
+    g.globalAlpha = b.color ? 0.35 : 1; // explicit colours are solid tokens: let the curve show through
     const x0 = px(b.x0);
     const x1 = px(b.x1);
     const y0 = py(Math.max(b.y1, ya - (yb - ya)));
     const y1 = py(Math.min(b.y0, yb + (yb - ya)));
     g.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
   }
+  g.globalAlpha = 1;
   for (const { xs, ys, keys, c } of data) {
     g.strokeStyle = c.color ?? css("--accent");
     g.lineWidth = c.width ?? 2;

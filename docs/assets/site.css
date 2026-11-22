@@ -242,3 +242,6 @@ code.plain { background: none; padding: 0; }
 a.mark { color: inherit; text-decoration: none; }
 nav.pager { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 nav.pager a { text-decoration: none; font-weight: 500; }
+.mono { font-family: var(--font-mono); font-size: .85rem; }
+.wrap { overflow-wrap: anywhere; }
+pre.tree { margin: 0; font-size: .8rem; }

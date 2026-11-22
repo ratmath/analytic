@@ -1,13 +1,44 @@
 <!-- wide: no -->
 <div class="eyebrow">Topic</div>
   <h1>Values to many digits</h1>
-  <p>At a single rational point, the library sums each function's series with an explicit bound on the tail, after reducing the argument to where the series converges fast:</p>
-  <ul>
-    <li><strong>exp</strong>: halve the argument until it is below 1/4, sum Σ rᵏ/k! (the tail after k terms is at most twice the next term), then square back.</li>
-    <li><strong>log</strong>: <code>2·atanh((q − 1)/(q + 1))</code> after scaling by powers of 2, with log 2 from the same series.</li>
-    <li><strong>sin, cos</strong>: reduce modulo 2π with a certified π, then the alternating series; the uncertainty in π becomes a little more width.</li>
-    <li><strong>atan, π</strong>: an alternating series for small arguments, argument halving otherwise; π from Machin's formula.</li>
-    <li><strong>sqrt</strong>: an integer square root on scaled numerator and denominator, exact when the square is perfect.</li>
-  </ul>
+  <p>Ask for f(x) at a rational x and you get two answers. The first is a double-precision float, computed at once. The second is a rational interval that provably contains the true value, narrowed until it is good to the number of significant digits you asked for. This page is about the second one: how a finite computation can promise something about e^(1/3), which no finite decimal equals.</p>
   <div data-demo="points"></div>
-  <p>The display uses RatMath's interval notation: <code>0.46235716975[69:70]</code> means the value lies between 0.4623571697569 and 0.4623571697570.</p>
+
+  <h2>Reading the answer</h2>
+  <p>Results are shown in RatMath's interval notation. <code>0.46235716975[69:70]</code> means the value lies between 0.4623571697569 and 0.4623571697570: the digits outside the brackets are shared by both ends, and the bracket gives the last digits of each end. When the two ends are equal the value is exact, and only one number is shown.</p>
+  <p>"Digits" means significant digits relative to max(1, |value|). So 20 digits of e^30 ≈ 1.07·10¹³ is an interval about 10⁻⁷ wide, while 20 digits of sin(10⁻⁵) is an interval about 10⁻²⁰ wide. Values near 0 are measured against 1, because "20 significant digits of a number that might be 0" has no finite answer.</p>
+<pre><code>import { fn } from "@ratmath/analytic";
+
+const v = fn("exp(x)").value("1/3", { digits: 50 });
+v.quick.value;     // 1.3956124250860895 (a double, right away)
+v.exact();         // RationalInterval, width ≤ 10^-50 · 1.39…
+v.exactStage().via // "certified enclosure at 191 bits"
+
+fn("x^2 + 1/x").value("3/7").exact();   // 370/147 exactly: no irrational step</code></pre>
+
+  <h2>Series with a tail you can bound</h2>
+  <p>Every elementary function is computed at a point by summing a power series and adding an explicit bound for the part that was not summed. A series alone is not enough: e^x = Σ xᵏ/k! converges for every x, but at x = 100 its largest term is about 10⁴², so the sum would need hundreds of digits of cancellation. The trick in each case is to move the argument to where the series converges fast, sum there, and move back with an operation whose effect on the error is known.</p>
+  <table class="ref">
+    <tr><th>Function</th><th>Reduction</th><th>Series and tail bound</th></tr>
+    <tr><td>exp</td><td>r = x / 2ˢ with s chosen so |r| &lt; 1/4; then e^x = (e^r)^(2ˢ), squaring s times</td><td>Σ rᵏ/k!; for |r| ≤ 1/2 the tail after k terms is at most 2·|r|ᵏ/k!</td></tr>
+    <tr><td>log</td><td>q = 2ᵏ·m with 2/3 ≤ m &lt; 4/3; log q = k·log 2 + log m</td><td>log m = 2·atanh(z), z = (m − 1)/(m + 1), so |z| ≤ 1/5: 2·Σ z²ʲ⁺¹/(2j+1), each term at most z² times the last, so the tail is at most the last term over 1 − z². log 2 = 2·atanh(1/3) the same way</td></tr>
+    <tr><td>sin, cos</td><td>for |x| &gt; 4, subtract 2πk with π certified to extra bits; π's uncertainty times k becomes extra width (both are 1-Lipschitz)</td><td>alternating series; once the terms shrink, the tail is at most the last term. Summed in fixed-point integers with outward rounding</td></tr>
+    <tr><td>atan</td><td>for x &gt; 2, atan x = π/2 − atan(1/x); for 1/2 &lt; x ≤ 2, atan x = π/4 + atan((x − 1)/(x + 1)); odd symmetry for x &lt; 0. The series argument is then at most 1/2 in size</td><td>alternating Σ (−1)ʲ x²ʲ⁺¹/(2j+1); the tail is at most the last term</td></tr>
+    <tr><td>π</td><td>Machin: π = 16·atan(1/5) − 4·atan(1/239)</td><td>the atan series at 1/5 and 1/239</td></tr>
+    <tr><td>sqrt</td><td>√(n/d) = √(n·d)/d, with n·d scaled by 4ˢ</td><td>an integer square root S, so the value lies in [S, S + 1]/(d·2ˢ); exact when n·d is a perfect square</td></tr>
+  </table>
+  <div data-demo="reduction"></div>
+
+  <h2>Precision bookkeeping</h2>
+  <p>Each step that can lose accuracy is paid for in advance with extra bits. Squaring doubles a relative error, so s squarings in the exp reduction cost s bits; the series is summed with that many more. Terms are rounded to dyadic rationals (a whole number over a power of 2) so their denominators stay small, and every rounding adds one unit in the last place to a running error term that becomes part of the interval. Nothing is estimated: the width of the answer is an upper bound built from the tail bound, the rounding count and the reduction error.</p>
+  <p>If the first precision is not enough (a value close to a large cancellation, or a composite like exp(sin(x)) whose inner error grows through the outer function), the certified stage doubles the working bits and tries again, up to <code>maxBits</code> (default 8192). Each try is a progress tick with a partial interval, so a page can show the answer sharpening.</p>
+  <div data-demo="ladder"></div>
+
+  <h2>Composite formulas</h2>
+  <p>A formula like <code>exp(sin(x))·x</code> is evaluated as a Taylor model of order 0 on the point domain {x}: each function receives an interval and returns an interval. At a point that is ordinary interval arithmetic with the certified point values above. The answer is good to the digits asked for when the final width says so, not because each step was given a fixed number of digits.</p>
+<pre><code>import { enclose, constants } from "@ratmath/analytic";
+import { R } from "@ratmath/core";
+
+enclose.exp(R`1/3`, 200);   // an Iv with relative width about 2^-200
+constants.pi(256);          // π to 256 bits
+constants.e(128);</code></pre>

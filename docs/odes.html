@@ -49,18 +49,46 @@
 <section class="page" data-page="odes">
 <div class="eyebrow">Topic</div>
   <h1>Differential equations</h1>
-  <p>For y′ = F(t, y) with y(t₀) given, a step over [t₀, t₀ + h] works like this:</p>
+  <p>An ordinary differential equation y′ = F(t, y) with a starting value y(t₀) = y₀ usually has no formula for its solution. A numerical method such as Runge–Kutta gives good approximations, but with no statement of how good. A validated solver gives an enclosure: a tube of functions that provably contains the true solution on the whole time span.</p>
+
+  <h2>The fixed-point idea</h2>
+  <p>Integrating both sides turns the equation into a fixed-point problem. The solution is the function y with</p>
+  <span class="math">y = Φ(y),   Φ(y)(t) = y₀ + ∫ from t₀ to t of F(s, y(s)) ds.</span>
+  <p>Picard iteration applies Φ repeatedly, starting from the constant y₀. Each application adds one correct Taylor coefficient. That gives the polynomial part of the enclosure. The proof comes from looking for a set that Φ maps into itself.</p>
+
+  <h2>One validated step</h2>
+  <p>On a step [t₀, t₀ + h]:</p>
   <ol>
-    <li>Iterate Picard's map on polynomials to get P ≈ y on the step.</li>
-    <li>Look for an interval I with Φ(P + I) ⊂ P + I, where Φ(y)(t) = y₀ + ∫ F(s, y(s)) ds is evaluated in Taylor-model arithmetic. Φ then maps the set of functions within I of P into itself. By Schauder's fixed-point theorem, and uniqueness for these smooth right-hand sides, the solution stays within I of P on the whole step.</li>
-    <li>Shrink I by applying Φ again, or halve h and retry if no such I exists.</li>
+    <li>Iterate Φ on polynomials, n times for order n, to get P ≈ y on the step.</li>
+    <li>Guess a remainder interval I and evaluate Φ(P + I) in Taylor-model arithmetic. If the result lies inside P + I, Φ maps the set of functions within I of P into itself. That set is convex and Φ is compact there, so by Schauder's fixed-point theorem it holds a fixed point, which is a solution; for the smooth right-hand sides here the solution is unique, so the true solution stays within I of P on the whole step.</li>
+    <li>If the inclusion fails, widen I a few times; if it still fails, halve h and start the step again.</li>
+    <li>Once it holds, apply Φ again: the image is a tighter enclosure, often by a lot.</li>
   </ol>
-  <p>Steps chain through the enclosure at the end of each step. Step sizes adapt: h halves when validation fails, or while halving still shrinks the width a step adds, and doubles after a success. A solution that blows up ends with <code>complete: false</code> and a reason, never with a wrong enclosure.</p>
+  <p>The step ends with an enclosure of y(t₀ + h), which is the starting set for the next step.</p>
   <div data-demo="ode"></div>
-<pre><code>ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });   // a system
-ode.solve({ f: "y", y0: R`1:101/100`, until: 1 });                        // an uncertain start</code></pre>
-  <h2>The wrapping effect</h2>
-  <p>Systems are enclosed component by component, as boxes. A rotating flow turns each box, and the box around the turned box is larger. Over long spans the enclosure grows for that reason alone. Shorter spans, higher order, or (not built yet) preconditioned steps keep it tight.</p>
+<pre><code>import { ode } from "@ratmath/analytic";
+
+const sol = ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2", order: 10 });
+sol.quick.value;       // { t, y }: an RK4 preview on 200 steps
+const S = sol.exact(); // an ODESolution
+S.final;               // RationalInterval enclosing y(1/2)
+S.at("1/4");           // enclosure at any t in the span
+S.steps;               // [{ t0, t1, models }]: one Taylor model per step
+S.describe();</code></pre>
+
+  <h2>Step sizes</h2>
+  <p>A long step needs fewer steps but a larger remainder; a short one is tighter but costs more. The solver measures how much width each step adds beyond the width it inherited. It halves h while halving still reduces that excess, doubles h after a success (up to the first step size), and gives up on a span only when h falls below <code>minStep</code>. A solution that blows up, such as y′ = y² from y(0) = 1 near t = 1, ends with <code>complete: false</code> and a reason, never with a wrong enclosure.</p>
+
+  <h2>Uncertain starting values</h2>
+  <p>The starting value can be an interval. Then the enclosure contains every solution that starts in it. For y′ = y the solutions are y₀·eᵗ, so the true set of solutions grows in width by exactly eᵗ. The enclosure grows faster than that, because each step treats its starting interval as a fresh interval and loses the fact that all its points move together. The answer is still a proof; it is just looser than it could be. Keeping the dependence on y₀ as an extra variable of the Taylor models would fix this, and is on the list of things not built yet.</p>
+  <div data-demo="uncertainStart"></div>
+
+  <h2>Systems and the wrapping effect</h2>
+  <p>A system has one equation per component, and the enclosure is a box: one interval per component. Give the right-hand sides as a list and name the variables:</p>
+<pre><code>ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });     // x″ = −x
+ode.solve({ f: ["y2", "-y1 + mu*(1 - y1^2)*y2"], y0: [2, 0], until: 1, params: { mu: 1 } });</code></pre>
+  <p>Boxes have a weakness. A rotating flow turns each box, and the smallest box around a turned box is larger than the box was. Each step inherits that larger box, so over long spans the enclosure grows even when the true set of solutions does not. This is the wrapping effect, first described by Moore. Shorter spans, higher orders, or preconditioned steps (which track the box in rotated coordinates; not built yet) keep it in check.</p>
+  <div data-demo="oscillator"></div>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="piecewise.html">← Piecewise functions</a><a class="next" href="series.html">Your own series →</a></nav>
 </section>
 </main>

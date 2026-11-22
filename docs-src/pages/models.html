@@ -3,18 +3,51 @@
   <h1>Taylor models</h1>
   <p>A Taylor model on a domain D = [a, b] with centre c is a pair (P, I): a polynomial P with exact rational coefficients and a rational interval I, such that</p>
   <span class="math">f(x) − P(x − c) ∈ I   for every x in D.</span>
-  <p>This is the basic object of validated numerics (Berz and Makino; Moore's interval analysis). It is stronger than a value: it describes f on the whole domain, so ranges, integrals and compositions come from it with the error already counted.</p>
+  <p>This is the basic object of validated numerics (Berz and Makino's Taylor models, building on Moore's interval analysis). It says more than a value does: it describes f on the whole domain, so ranges, integrals and compositions all come from it with the error already counted. Everything certified in this library is built from it.</p>
   <div data-demo="model"></div>
-  <h2>Arithmetic</h2>
-  <p>Sums add polynomials and remainders. A product multiplies the polynomials exactly, keeps degrees up to the order, and bounds the rest: the dropped high-degree part over D, plus P·J + Q·I + I·J. Each bound is a range of an exact polynomial, so nothing is lost but what is deliberately moved into the remainder.</p>
-  <h2>Elementary functions</h2>
-  <p>For exp, sin, log and the others, the library composes the function's own Taylor series about g(c) with the model g. The Lagrange remainder f⁽ⁿ⁺¹⁾(ξ)/(n+1)!·hⁿ⁺¹ is bounded over the whole range of the argument: e^max for exp, 1 for sin and cos, and for log, 1/x and sqrt the argument's range must stay away from 0, or the library refuses. Coefficients that are irrational, like e^c, are certified intervals; their midpoints go into P and their radii into I.</p>
-<pre><code>const D = Domain(R`0:1/2`);
-const x = TM.x(D, { order: 12 });
+
+  <h2>A small example by hand</h2>
+  <p>Take f(x) = eˣ on D = [0, 1/2] with centre c = 1/4 and order 2. Taylor's theorem with the Lagrange remainder says</p>
+  <span class="math">eˣ = e^c · (1 + t + t²/2) + e^ξ · t³/6,   t = x − c, ξ between c and x.</span>
+  <p>Here |t| ≤ 1/4, and e^ξ ≤ e^(1/2) &lt; 1.65, so the last term lies in [−0.0043, 0.0043]. The coefficient e^c is irrational, so the library encloses it, puts the midpoint of each coefficient into P, and adds the leftover radius times the range of its power of t to I. The result is a polynomial with exact rational coefficients and a remainder interval that together contain eˣ for every x in D.</p>
+
+  <h2>Arithmetic on models</h2>
+  <ul>
+    <li><strong>Sums</strong> add the polynomials and add the remainders.</li>
+    <li><strong>Products</strong> multiply the polynomials exactly, keep the terms up to the order, and move the rest into the remainder: the dropped high-degree part (bounded over D), plus P·J + Q·I + I·J for (P, I)·(Q, J).</li>
+    <li><strong>Division</strong> is multiplication by the reciprocal model, which needs the divisor's range to exclude 0.</li>
+    <li><strong>Constants</strong> may be intervals, so a parameter known only to lie in [1, 2] is a model with P = 3/2 and I = [−1/2, 1/2].</li>
+  </ul>
+  <p>Each bound in these steps is a range of an exact polynomial, so nothing is lost except what is deliberately moved into the remainder.</p>
+
+  <h2>Elementary functions of a model</h2>
+  <p>To apply exp, sin, log and the others to a model g, the library uses the outer function's own Taylor series about c₀ = g(c), the value at the centre, and substitutes the model of g − c₀. The Lagrange remainder f⁽ⁿ⁺¹⁾(ξ)/(n+1)!·(g − c₀)ⁿ⁺¹ needs a bound on f⁽ⁿ⁺¹⁾ over the whole range of g:</p>
+  <table class="ref">
+    <tr><th>f</th><th>bound on f⁽ⁿ⁺¹⁾ used</th><th>condition</th></tr>
+    <tr><td>exp</td><td>e^(max of g)</td><td>max of g below 2¹⁶</td></tr>
+    <tr><td>sin, cos</td><td>1</td><td>none</td></tr>
+    <tr><td>log, 1/x</td><td>n!/|g|ⁿ⁺¹ at the end nearest 0</td><td>range of g excludes 0 (log: above 0)</td></tr>
+    <tr><td>sqrt</td><td>from the binomial series</td><td>range of g above 0</td></tr>
+    <tr><td>atan</td><td>(k − 1)!/(1 + g²)^(k/2)</td><td>none</td></tr>
+  </table>
+  <p>When the condition fails, the library refuses with a reason. Coefficients that are irrational, like e^c, are certified intervals; their midpoints go into P and their radii into I.</p>
+<pre><code>import { TM, Domain, exp, sin } from "@ratmath/analytic";
+import { R } from "@ratmath/core";
+
+const D = Domain(R`0:1/2`);          // centre defaults to the midpoint, 1/4
+const x = TM.x(D, { order: 12 });    // the identity model
 const g = exp(sin(x)).multiply(x);
 g.coefficients;   // exact Rationals, in powers of (x − 1/4)
-g.remainder;      // a tiny interval
+g.remainder;      // a tiny RationalInterval
+g.at(R`1/5`);     // enclosure of g(1/5)
 g.range();        // Bernstein bounds with bisection
-g.integral();     // certified ∫ over D</code></pre>
+g.integral();     // certified ∫ over D
+g.describe();     // domain, order, remainder width, rules used</code></pre>
+
+  <h2>How fast the remainder shrinks</h2>
+  <p>For a function that is analytic on a neighbourhood of D, the remainder of an order-n model behaves like (h/2)ⁿ⁺¹/(n+1)!·max|f⁽ⁿ⁺¹⁾|, where h is the width of D. Two levers make it small: a higher order, or a narrower domain. Higher orders pay off until n passes the size of f's derivatives; after that each extra order buys a roughly fixed number of digits. Narrower domains pay off for any function, which is why ranges and integrals split into pieces.</p>
+  <div data-demo="orders"></div>
+  <p>Order costs time too: a product of two order-n models is an O(n²) polynomial product with exact rationals, and each elementary function needs n + 1 of them. The defaults (order 12, 96 bits for irrational constants) are a balance for interactive use.</p>
+
   <h2>Derivatives</h2>
-  <p>The remainder of a model says nothing about the derivative's error: f could wiggle inside I. So <code>model.derivative()</code> only works for exact polynomials, and derivatives are taken from the formula instead (<a href="#expressions">symbolic d/dx</a>), then modelled afresh with their own remainder.</p>
+  <p>The remainder of a model says nothing about the derivative's error: f could wiggle inside the band P ± I with any slope. So <code>model.derivative()</code> only works for exact polynomials, and derivatives are taken from the formula instead (<a href="#expressions">symbolic d/dx</a>), then modelled afresh with their own remainder.</p>

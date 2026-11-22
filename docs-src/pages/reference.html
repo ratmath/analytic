@@ -7,11 +7,12 @@
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th><th>notes</th></tr>
     <tr><td>fn(text, { variable, params })</td><td>AnalyticFunction or PiecewiseFunction</td><td>Text, an AST, or the piecewise form <code>"rule if region; …; rule otherwise"</code></td></tr>
-    <tr><td>f.value(x, { digits = 20 })</td><td><em>R</em> RationalInterval</td><td>a point interval for rational-only formulas</td></tr>
+    <tr><td>f.value(x, { digits = 20, maxBits = 8192 })</td><td><em>R</em> RationalInterval</td><td>a point interval for rational-only formulas; bits double until the digits are met or maxBits is reached</td></tr>
     <tr><td>f.range(I, { digits = 6, order = 8, maxPieces = 256 })</td><td><em>R</em> RationalInterval</td><td>preview: 256 samples (trust rough)</td></tr>
     <tr><td>f.integral(a, b, { digits = 12, order = 12, maxPieces })</td><td><em>R</em> RationalInterval</td><td>preview: Gauss–Legendre</td></tr>
     <tr><td>f.derivative()</td><td>a new function</td><td>symbolic and simplified</td></tr>
     <tr><td>f.model(D, { order, bits, centre })</td><td>TaylorModel</td><td>certified on the domain D</td></tr>
+    <tr><td>f.regular()</td><td>a function</td><td>the same function with holes of its rational summands cancelled; used by range and integral</td></tr>
     <tr><td>f.float(x)</td><td>number</td><td>no guarantee</td></tr>
     <tr><td>f.with({ a: "3/8" })</td><td>a new function</td><td>other parameter values (sliders)</td></tr>
     <tr><td>f.toString()</td><td>string</td><td>calculator notation that parses back</td></tr>
@@ -21,13 +22,24 @@
   <h2>Features of a function</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>record kinds</th><th>fields</th></tr>
-    <tr><td>zeros(f, [a, b], opts)</td><td>exact, sign-change, possible, undefined</td><td>at, lo, hi, unique, multiplicity, atMost, bound</td></tr>
-    <tr><td>poles(f, [a, b], opts)</td><td>pole, hole, undefined</td><td>order (poles), value (a hole's limit)</td></tr>
-    <tr><td>extrema(f, [a, b], opts)</td><td>max, min, flat, possible</td><td>value, unique</td></tr>
-    <tr><td>inflections(f, [a, b], opts)</td><td>inflection, possible</td><td>value, unique</td></tr>
+    <tr><td>zeros(f, [a, b], opts)</td><td>exact, sign-change, isolated, possible, undefined</td><td>at, lo, hi, unique, multiplicity, atMost, bound, budget</td></tr>
+    <tr><td>poles(f, [a, b], opts)</td><td>pole, hole, undefined</td><td>order (rational poles), source: "log" (asymptotes of ln), value (a hole's limit)</td></tr>
+    <tr><td>extrema(f, [a, b], opts)</td><td>max, min, flat, possible</td><td>value, unique, touching</td></tr>
+    <tr><td>inflections(f, [a, b], opts)</td><td>inflection, possible</td><td>value, unique, touching</td></tr>
     <tr><td>simplestBetween(a, b)</td><td>Rational</td><td>smallest denominator in [a, b]</td></tr>
   </table></div>
-  <p>All four are <em>R</em>. Options: <code>variable</code>, <code>params</code>, <code>tolerance</code> (bracket width, default 10⁻⁶), <code>pieces</code>, <code>maxDepth</code>, <code>flatBits</code>. Previews are <code>{ kind: "guess", at }</code>. A bracket with no record certainly holds none.</p>
+  <p>All four are <em>R</em>. Options: <code>variable</code>, <code>params</code>, <code>tolerance</code> (bracket width, default 10⁻⁶), <code>pieces</code> (starting pieces, 16), <code>maxDepth</code> (48), <code>maxMultiplicity</code>, <code>flatBits</code>, <code>maxBoxes</code> (2000 per piece), <code>maxMs</code> (8000 in all), <code>sliceMs</code> (15). Previews are <code>{ kind: "guess", at }</code>. A stretch of the interval with no record certainly holds none.</p>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>kind or field</th><th>meaning</th></tr>
+    <tr><td>exact</td><td>f(at) = 0 exactly, at a rational point</td></tr>
+    <tr><td>sign-change</td><td>f has opposite proven signs at lo and hi; with unique, exactly one zero inside</td></tr>
+    <tr><td>isolated</td><td>exactly one zero inside, but f keeps its sign (found through sqrt, abs or an even power)</td></tr>
+    <tr><td>possible</td><td>undecided: maybe no zero, maybe several; atMost: m bounds the count with multiplicity</td></tr>
+    <tr><td>undefined</td><td>f is not defined somewhere on the bracket</td></tr>
+    <tr><td>bound</td><td>proven max |f| on a possible bracket of a flat function</td></tr>
+    <tr><td>budget</td><td>the bracket was left when the work budget ran out</td></tr>
+    <tr><td>touching</td><td>f′ (or f″) has the same proven sign at both ends: no feature, or a pair of them inside</td></tr>
+  </table></div>
 
   <h2>Piecewise</h2>
   <div class="tablewrap"><table class="ref">
@@ -58,7 +70,33 @@
     <tr><td>exp sin cos tan log log1p atan sqrt sinh cosh tanh reciprocal power(g, a)</td><td>elementary functions of models</td></tr>
     <tr><td>.at(x) .range() .integral(a, b) .integrate() .derivative()</td><td>derivative only for exact polynomials</td></tr>
     <tr><td>.coefficients .remainder .centre .order .describe() .toJSON()</td><td></td></tr>
-    <tr><td>series(D, { coefficient, rule, M, q, error, lookahead })</td><td>user series; rules lagrange, ratio, alternating, explicit</td></tr>
+    <tr><td>series(D, { coefficient or coefficients, degree, order, centre, rule, M, q, error, lookahead })</td><td>user series; rules lagrange, ratio, alternating, explicit</td></tr>
+  </table></div>
+
+  <h2>Fast, then certified</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>notes</th></tr>
+    <tr><td>job.quick</td><td><code>{ value, trust }</code>, trust is good, rough or unsure; computed on first read</td></tr>
+    <tr><td>job.stages()</td><td>generator: the preview, progress ticks <code>{ done, of, step, partial }</code>, then the exact stage <code>{ value, via }</code></td></tr>
+    <tr><td>job.exact(), job.exactStage()</td><td>run to the end synchronously; the value, or the whole stage with its <code>via</code> line</td></tr>
+    <tr><td>await job.settle({ signal, sliceMs = 8, onStage, onProgress })</td><td>run in time slices without blocking a page; abort with an AbortController</td></tr>
+    <tr><td>job.settled</td><td>true once the exact answer is cached</td></tr>
+    <tr><td>live(compute, onStage, { idleMs = 30, sliceMs, onProgress, onError })</td><td>returns update(...args): each call cancels the last job, shows its preview at once and its exact answer after idleMs of quiet</td></tr>
+  </table></div>
+
+  <h2>Errors</h2>
+  <p>Every refusal is an <code>AnalyticError</code> with a <code>code</code>. The common ones:</p>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>code</th><th>when</th></tr>
+    <tr><td>domain</td><td>log, sqrt or a power is applied outside its domain (log of a range that reaches 0)</td></tr>
+    <tr><td>division-by-zero</td><td>a divisor's range contains 0</td></tr>
+    <tr><td>not-smooth</td><td>abs, min or max at a corner inside the domain</td></tr>
+    <tr><td>overflow</td><td>exp of an argument above 2¹⁶, or a value too large to enclose</td></tr>
+    <tr><td>hypothesis</td><td>a series rule fails on the checked terms</td></tr>
+    <tr><td>outside-domain</td><td>a model or ODE solution asked about a point outside where it is valid</td></tr>
+    <tr><td>unbound</td><td>a name in a formula has no value</td></tr>
+    <tr><td>bad-expression, bad-region, bad-piecewise, bad-ode, bad-series</td><td>input that does not parse or does not make sense</td></tr>
+    <tr><td>budget</td><td>a series or search ran past its limit</td></tr>
   </table></div>
 
   <h2>Points, constants, plumbing</h2>
@@ -68,5 +106,7 @@
     <tr><td>constants.pi(bits), constants.e(bits)</td><td></td></tr>
     <tr><td>createScope({ digits, bits, order })</td><td>callable set for evaluators: exp, sin, …, model, integral, range, fn, d, ode, zeros, …</td></tr>
     <tr><td>Refinement, live(compute, onStage, { idleMs })</td><td>the shared fast-then-exact shape</td></tr>
-    <tr><td>parse, format, differentiate(ast, name), compileFloat(ast), modelOf(ast, env, base), encloseAst(ast, env, bits)</td><td>expression tools</td></tr>
+    <tr><td>parse, format, differentiate(ast, name), compileFloat(ast), modelOf(ast, env, base), encloseAst(ast, env, bits), freeVariables(ast)</td><td>expression tools</td></tr>
+    <tr><td>num(v), v(name), op(o, ...args), call(name, ...args)</td><td>build an AST by hand</td></tr>
+    <tr><td>parsePiecewiseText(text)</td><td>[[region, rule], …] or null when the text is not piecewise</td></tr>
   </table></div>
