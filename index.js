@@ -11,3 +11,4 @@ export { parse, format, derivative as differentiate, compileFloat, modelOf, free
 export { ode } from "./src/ode.js";
 export { zeros, poles, extrema, inflections, simplestBetween } from "./src/roots.js";
 export { encloseAst } from "./src/ieval.js";
+export { piecewise, PiecewiseFunction, Region, where } from "./src/piecewise.js";

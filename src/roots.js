@@ -577,6 +577,11 @@ function* generalPoles(s) {
 // ---------------------------------------------------------------------------
 // Public API: each returns a Refinement
 
+function isPiecewise(f, opts) {
+  if (f && typeof f === "object" && typeof f.segments === "function") return true;
+  return (typeof f === "string" || Array.isArray(f)) && fn(f, { variable: opts.variable, params: opts.params }).segments !== undefined;
+}
+
 function quickZeros(F, a, b, n = 512) {
   const g = compileFloat(F.ast);
   const env = floatEnv(F.params);
@@ -627,12 +632,14 @@ function quickCritical(F, a, b, k) {
 
 /** zeros(f, [a, b], { variable, params, tolerance = 1e-6, pieces, maxDepth }) */
 export function zeros(f, interval, opts = {}) {
+  if (isPiecewise(f, opts)) return fn(f, opts).zeros(interval, opts);
   const s = setup(f, interval, opts);
   return new Refinement(() => quickZeros(s.F, s.a, s.b), () => (s.rf ? rationalZeros(s) : generalZerosStage(s)));
 }
 
 /** poles(f, [a, b], opts): poles, holes (removable points) and undefined points. */
 export function poles(f, interval, opts = {}) {
+  if (isPiecewise(f, opts)) return fn(f, opts).poles(interval, opts);
   const s = setup(f, interval, opts);
   return new Refinement(
     () => ({ value: [], trust: "unsure" }),
@@ -642,12 +649,14 @@ export function poles(f, interval, opts = {}) {
 
 /** extrema(f, [a, b], opts): interior critical points of f, classified. */
 export function extrema(f, interval, opts = {}) {
+  if (isPiecewise(f, opts)) return fn(f, opts).extrema(interval, opts);
   const s = setup(f, interval, opts);
   return new Refinement(() => quickCritical(s.F, s.a, s.b, 1), () => (s.rf ? rationalCritical(s, "extrema") : generalCritical(s, "extrema")));
 }
 
 /** inflections(f, [a, b], opts): points where f″ changes sign. */
 export function inflections(f, interval, opts = {}) {
+  if (isPiecewise(f, opts)) return fn(f, opts).inflections(interval, opts);
   const s = setup(f, interval, opts);
   return new Refinement(() => quickCritical(s.F, s.a, s.b, 2), () => (s.rf ? rationalCritical(s, "inflections") : generalCritical(s, "inflections")));
 }

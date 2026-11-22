@@ -10,6 +10,7 @@ import { AnalyticError, refuse } from "./errors.js";
 import { ONE, TWO, ZERO, toQ, lt, le, max, min } from "./rat.js";
 import { toAst, format, compileFloat, floatEnv, modelOf, derivative, freeVariables, toRational } from "./expr.js";
 import { bitsForDigits } from "./scope.js";
+import { PiecewiseFunction, parsePiecewiseText } from "./piecewise.js";
 
 const q = (v) => (typeof v === "string" ? toRational(v) : typeof v === "number" && !Number.isInteger(v) ? toRational(v) : toQ(v));
 const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
@@ -125,7 +126,12 @@ export class AnalyticFunction {
 
 /** fn("exp(sin(x))*x", { variable, params }) */
 export function fn(expression, opts) {
-  return expression instanceof AnalyticFunction ? expression : new AnalyticFunction(expression, opts);
+  if (expression instanceof AnalyticFunction || expression instanceof PiecewiseFunction) return expression;
+  if (typeof expression === "string" || Array.isArray(expression)) {
+    const pieces = Array.isArray(expression) ? expression : parsePiecewiseText(expression);
+    if (pieces) return new PiecewiseFunction(pieces, opts);
+  }
+  return new AnalyticFunction(expression, opts);
 }
 
 // ---- certified stages --------------------------------------------------------
