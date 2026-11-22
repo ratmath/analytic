@@ -1,0 +1,15 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Differential equations</h1>
+  <p>For y′ = F(t, y) with y(t₀) given, a step over [t₀, t₀ + h] works like this:</p>
+  <ol>
+    <li>Iterate Picard's map on polynomials to get P ≈ y on the step.</li>
+    <li>Look for an interval I with Φ(P + I) ⊂ P + I, where Φ(y)(t) = y₀ + ∫ F(s, y(s)) ds is evaluated in Taylor-model arithmetic. Φ then maps the set of functions within I of P into itself. By Schauder's fixed-point theorem, and uniqueness for these smooth right-hand sides, the solution stays within I of P on the whole step.</li>
+    <li>Shrink I by applying Φ again, or halve h and retry if no such I exists.</li>
+  </ol>
+  <p>Steps chain through the enclosure at the end of each step. Step sizes adapt: h halves when validation fails, or while halving still shrinks the width a step adds, and doubles after a success. A solution that blows up ends with <code>complete: false</code> and a reason, never with a wrong enclosure.</p>
+  <div data-demo="ode"></div>
+<pre><code>ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });   // a system
+ode.solve({ f: "y", y0: R`1:101/100`, until: 1 });                        // an uncertain start</code></pre>
+  <h2>The wrapping effect</h2>
+  <p>Systems are enclosed component by component, as boxes. A rotating flow turns each box, and the box around the turned box is larger. Over long spans the enclosure grows for that reason alone. Shorter spans, higher order, or (not built yet) preconditioned steps keep it tight.</p>

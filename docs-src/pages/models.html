@@ -1,0 +1,20 @@
+<!-- wide: no -->
+<div class="eyebrow">Idea</div>
+  <h1>Taylor models</h1>
+  <p>A Taylor model on a domain D = [a, b] with centre c is a pair (P, I): a polynomial P with exact rational coefficients and a rational interval I, such that</p>
+  <span class="math">f(x) − P(x − c) ∈ I   for every x in D.</span>
+  <p>This is the basic object of validated numerics (Berz and Makino; Moore's interval analysis). It is stronger than a value: it describes f on the whole domain, so ranges, integrals and compositions come from it with the error already counted.</p>
+  <div data-demo="model"></div>
+  <h2>Arithmetic</h2>
+  <p>Sums add polynomials and remainders. A product multiplies the polynomials exactly, keeps degrees up to the order, and bounds the rest: the dropped high-degree part over D, plus P·J + Q·I + I·J. Each bound is a range of an exact polynomial, so nothing is lost but what is deliberately moved into the remainder.</p>
+  <h2>Elementary functions</h2>
+  <p>For exp, sin, log and the others, the library composes the function's own Taylor series about g(c) with the model g. The Lagrange remainder f⁽ⁿ⁺¹⁾(ξ)/(n+1)!·hⁿ⁺¹ is bounded over the whole range of the argument: e^max for exp, 1 for sin and cos, and for log, 1/x and sqrt the argument's range must stay away from 0, or the library refuses. Coefficients that are irrational, like e^c, are certified intervals; their midpoints go into P and their radii into I.</p>
+<pre><code>const D = Domain(R`0:1/2`);
+const x = TM.x(D, { order: 12 });
+const g = exp(sin(x)).multiply(x);
+g.coefficients;   // exact Rationals, in powers of (x − 1/4)
+g.remainder;      // a tiny interval
+g.range();        // Bernstein bounds with bisection
+g.integral();     // certified ∫ over D</code></pre>
+  <h2>Derivatives</h2>
+  <p>The remainder of a model says nothing about the derivative's error: f could wiggle inside I. So <code>model.derivative()</code> only works for exact polynomials, and derivatives are taken from the formula instead (<a href="#expressions">symbolic d/dx</a>), then modelled afresh with their own remainder.</p>

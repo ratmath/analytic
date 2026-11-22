@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Differential equations · RatMath Analytic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+    <option value="index.html">Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html">Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html">Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html" selected>Differential equations</option>
+    <option value="series.html">Your own series</option>
+  </select>
+  <nav class="toc" aria-label="Contents">
+    <a href="index.html">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
+    <div class="group">Ideas</div>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html">Taylor models</a>
+    <div class="group">Topics</div>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html" class="on" aria-current="page">Differential equations</a>
+    <a href="series.html">Your own series</a>
+  </nav>
+</aside>
+<main>
+<section class="page" data-page="odes">
+<div class="eyebrow">Topic</div>
+  <h1>Differential equations</h1>
+  <p>For y′ = F(t, y) with y(t₀) given, a step over [t₀, t₀ + h] works like this:</p>
+  <ol>
+    <li>Iterate Picard's map on polynomials to get P ≈ y on the step.</li>
+    <li>Look for an interval I with Φ(P + I) ⊂ P + I, where Φ(y)(t) = y₀ + ∫ F(s, y(s)) ds is evaluated in Taylor-model arithmetic. Φ then maps the set of functions within I of P into itself. By Schauder's fixed-point theorem, and uniqueness for these smooth right-hand sides, the solution stays within I of P on the whole step.</li>
+    <li>Shrink I by applying Φ again, or halve h and retry if no such I exists.</li>
+  </ol>
+  <p>Steps chain through the enclosure at the end of each step. Step sizes adapt: h halves when validation fails, or while halving still shrinks the width a step adds, and doubles after a success. A solution that blows up ends with <code>complete: false</code> and a reason, never with a wrong enclosure.</p>
+  <div data-demo="ode"></div>
+<pre><code>ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });   // a system
+ode.solve({ f: "y", y0: R`1:101/100`, until: 1 });                        // an uncertain start</code></pre>
+  <h2>The wrapping effect</h2>
+  <p>Systems are enclosed component by component, as boxes. A rotating flow turns each box, and the box around the turned box is larger. Over long spans the enclosure grows for that reason alone. Shorter spans, higher order, or (not built yet) preconditioned steps keep it tight.</p>
+<nav class="pager" aria-label="Previous and next page"><a class="prev" href="piecewise.html">← Piecewise functions</a><a class="next" href="series.html">Your own series →</a></nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zeros, poles and extrema · RatMath Analytic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+    <option value="index.html">Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html">Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html" selected>Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html">Differential equations</option>
+    <option value="series.html">Your own series</option>
+  </select>
+  <nav class="toc" aria-label="Contents">
+    <a href="index.html">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
+    <div class="group">Ideas</div>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html">Taylor models</a>
+    <div class="group">Topics</div>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html" class="on" aria-current="page">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html">Differential equations</a>
+    <a href="series.html">Your own series</a>
+  </nav>
+</aside>
+<main>
+<section class="page" data-page="zeros">
+<div class="eyebrow">Topic</div>
+  <h1>Zeros, poles and extrema</h1>
+  <p>Finding where f = 0 numerically is easy. Proving it is harder: that there is a zero in a bracket, that there is only one, and that there are none elsewhere. The library uses two engines.</p>
+  <div data-demo="zeros"></div>
+  <h2>Rational functions: exact</h2>
+  <p>When f is built from + − × ÷ and integer powers with rational numbers, it is read exactly as N/D. Then:</p>
+  <ul>
+    <li><strong>Holes.</strong> G = gcd(N, D) cancels. Points where G = 0 are holes: f is undefined there, but the limit exists, and the library reports it.</li>
+    <li><strong>Multiplicity.</strong> Yun's square-free decomposition writes N/G = a₁·a₂²·a₃³⋯ with each aᵢ free of repeated roots, so every root comes with its multiplicity, and every pole with its order.</li>
+    <li><strong>Isolation.</strong> A Sturm sequence counts the distinct roots in any interval exactly. Bisection splits at the simplest rational in the middle half of each bracket, so roots like 1 or −2/3 are hit exactly, and irrational roots end in brackets like [1393/985, 1970/1393] around √2.</li>
+  </ul>
+  <h2>Everything else: Krawczyk</h2>
+  <p>For a bracket X with midpoint m, Y ≈ 1/f′(m), and an interval bound F′(X) on the derivative,</p>
+  <span class="math">K = m − Y·f(m) + (1 − Y·F′(X))·(X − m)</span>
+  <p>contains every zero of f in X. If K misses X, there is no zero. If K lies inside X, there is exactly one, and replacing X by K ∩ X narrows it quadratically, like Newton's method but with proof. Where F′(X) contains 0 (a double root, two close roots), the test cannot decide, so the bracket is reported as <code>possible</code>, with <code>atMost: m</code> when the m-th derivative is proven nonzero there: by Rolle's theorem, f then has at most m zeros there, counted with multiplicity.</p>
+  <p>At an exact zero, the derivatives that are exactly 0 there give a lower bound on the multiplicity. When Rolle's bound matches it nearby, the multiplicity is proven. So sin(x)² has a zero of multiplicity exactly 2 at 0, while near π it can only say "at most 2": no finite computation can tell a double root from two very close roots, or from a near miss.</p>
+  <h2>Functions flat to every order</h2>
+  <p>e^(−1/x²) and all its derivatives tend to 0 at x = 0. Near 0 it is smaller than any number the library can represent, so it cannot be told apart from 0 there. Those brackets come back as <code>possible</code> with <code>bound</code>, the proven maximum of |f| on them, and with no <code>atMost</code>, because every derivative is just as flat. Outside them f is proven positive.</p>
+  <div data-demo="flat"></div>
+  <h2>Poles, extrema, inflections</h2>
+  <p>Poles are zeros of denominators (and of cos inside tan) where the numerator is proven nonzero, and only where the blow-up reaches f. A division inside exp is not a pole of f: e^(−1/x²) tends to 0. Extrema are zeros of f′, classified by the sign of f″ or by the sign change of f′. Inflection points are zeros of f″ where f″ changes sign.</p>
+<nav class="pager" aria-label="Previous and next page"><a class="prev" href="ranges.html">← Ranges and integrals</a><a class="next" href="piecewise.html">Piecewise functions →</a></nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js"></script>
+</body>
+</html>

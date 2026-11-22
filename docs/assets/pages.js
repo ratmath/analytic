@@ -395,17 +395,9 @@ function mountDemos(page) {
   }
 }
 
-function showPage() {
-  const id = location.hash.slice(1) || "intro";
-  const page = document.querySelector(`section.page[data-page="${id}"]`) ?? document.querySelector('section.page[data-page="intro"]');
-  document.querySelectorAll("section.page").forEach((s) => (s.hidden = s !== page));
-  document.querySelectorAll("nav.toc a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${page.dataset.page}`));
-  const sel = document.getElementById("toc-select");
-  if (sel) sel.value = page.dataset.page;
-  mountDemos(page);
-  window.scrollTo(0, 0);
-}
-
-window.addEventListener("hashchange", showPage);
-document.getElementById("toc-select")?.addEventListener("change", (e) => (location.hash = e.target.value));
-showPage();
+// Old single-page links (index.html#zeros) go to the page's own file.
+const OLD = { intro: "index.html", reference: "reference.html", explore: "explore.html", fast: "fast.html", models: "models.html", points: "values.html", expressions: "expressions.html", ranges: "ranges.html", zeros: "zeros.html", piecewise: "piecewise.html", odes: "odes.html", series: "series.html" };
+const old = OLD[location.hash.slice(1)];
+if (old && !location.pathname.endsWith(old)) location.replace(old);
+document.getElementById("toc-select")?.addEventListener("change", (e) => (location.href = e.target.value));
+mountDemos(document);

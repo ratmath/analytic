@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your own series · RatMath Analytic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+    <option value="index.html">Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html">Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html">Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html">Differential equations</option>
+    <option value="series.html" selected>Your own series</option>
+  </select>
+  <nav class="toc" aria-label="Contents">
+    <a href="index.html">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
+    <div class="group">Ideas</div>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html">Taylor models</a>
+    <div class="group">Topics</div>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html">Differential equations</a>
+    <a href="series.html" class="on" aria-current="page">Your own series</a>
+  </nav>
+</aside>
+<main>
+<section class="page" data-page="series">
+<div class="eyebrow">Topic</div>
+  <h1>Your own series</h1>
+  <p>For a function given by its power series coefficients aₖ, the remainder after degree p needs an argument. <code>series</code> makes you name one and checks what it can:</p>
+  <ul>
+    <li><strong>alternating</strong>: the terms alternate in sign and shrink, so the tail lies between 0 and the first omitted term. Checked on the next 32 terms for every x in the domain.</li>
+    <li><strong>ratio</strong>: |aₖ₊₁|·r ≤ q·|aₖ| with q &lt; 1 beyond p, so the tail is at most the first omitted term divided by 1 − q. Checked on the next 32 terms.</li>
+    <li><strong>lagrange</strong>: you supply M ≥ max |f⁽ᵖ⁺¹⁾| on the domain.</li>
+    <li><strong>explicit</strong>: you supply the error.</li>
+  </ul>
+  <p>What the library cannot check (the terms beyond the lookahead, your M, your error) is your claim, so the model is marked <code>assumed</code>, and <code>describe()</code> says so.</p>
+  <div data-demo="series"></div>
+<nav class="pager" aria-label="Previous and next page"><a class="prev" href="odes.html">← Differential equations</a><span></span></nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js"></script>
+</body>
+</html>

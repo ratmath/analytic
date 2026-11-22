@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Taylor models · RatMath Analytic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+    <option value="index.html">Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html" selected>Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html">Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html">Differential equations</option>
+    <option value="series.html">Your own series</option>
+  </select>
+  <nav class="toc" aria-label="Contents">
+    <a href="index.html">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
+    <div class="group">Ideas</div>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html" class="on" aria-current="page">Taylor models</a>
+    <div class="group">Topics</div>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html">Differential equations</a>
+    <a href="series.html">Your own series</a>
+  </nav>
+</aside>
+<main>
+<section class="page" data-page="models">
+<div class="eyebrow">Idea</div>
+  <h1>Taylor models</h1>
+  <p>A Taylor model on a domain D = [a, b] with centre c is a pair (P, I): a polynomial P with exact rational coefficients and a rational interval I, such that</p>
+  <span class="math">f(x) − P(x − c) ∈ I   for every x in D.</span>
+  <p>This is the basic object of validated numerics (Berz and Makino; Moore's interval analysis). It is stronger than a value: it describes f on the whole domain, so ranges, integrals and compositions come from it with the error already counted.</p>
+  <div data-demo="model"></div>
+  <h2>Arithmetic</h2>
+  <p>Sums add polynomials and remainders. A product multiplies the polynomials exactly, keeps degrees up to the order, and bounds the rest: the dropped high-degree part over D, plus P·J + Q·I + I·J. Each bound is a range of an exact polynomial, so nothing is lost but what is deliberately moved into the remainder.</p>
+  <h2>Elementary functions</h2>
+  <p>For exp, sin, log and the others, the library composes the function's own Taylor series about g(c) with the model g. The Lagrange remainder f⁽ⁿ⁺¹⁾(ξ)/(n+1)!·hⁿ⁺¹ is bounded over the whole range of the argument: e^max for exp, 1 for sin and cos, and for log, 1/x and sqrt the argument's range must stay away from 0, or the library refuses. Coefficients that are irrational, like e^c, are certified intervals; their midpoints go into P and their radii into I.</p>
+<pre><code>const D = Domain(R`0:1/2`);
+const x = TM.x(D, { order: 12 });
+const g = exp(sin(x)).multiply(x);
+g.coefficients;   // exact Rationals, in powers of (x − 1/4)
+g.remainder;      // a tiny interval
+g.range();        // Bernstein bounds with bisection
+g.integral();     // certified ∫ over D</code></pre>
+  <h2>Derivatives</h2>
+  <p>The remainder of a model says nothing about the derivative's error: f could wiggle inside I. So <code>model.derivative()</code> only works for exact polynomials, and derivatives are taken from the formula instead (<a href="expressions.html">symbolic d/dx</a>), then modelled afresh with their own remainder.</p>
+<nav class="pager" aria-label="Previous and next page"><a class="prev" href="fast.html">← Fast, then certified</a><a class="next" href="values.html">Values to many digits →</a></nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js"></script>
+</body>
+</html>

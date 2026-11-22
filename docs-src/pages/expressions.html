@@ -1,0 +1,13 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Formulas and derivatives</h1>
+  <p><code>fn(text)</code> parses calculator notation into a plain tree of <code>num</code>, <code>var</code>, <code>const</code>, <code>op</code> and <code>call</code> nodes. The same tree can then be evaluated three ways: with floats for previews, as a Taylor model for certified answers, or with plain intervals for quick exclusion tests.</p>
+  <h2>Symbolic d/dx</h2>
+  <p>Derivatives follow the rules you know (sum, product, quotient, chain; d/dx aᵇ in general form), and simplify as they build: constants fold, 0·u and 1·u disappear, (uᵐ)ⁿ becomes uᵐⁿ. Because the derivative is a formula, its model has its own proven remainder.</p>
+  <div data-demo="deriv"></div>
+<pre><code>fn("x^3 + 2x - 1/x").derivative().toString();   // "3*x^2 + 2 + 1/x^2"
+differentiate(parse("atan(x^2)"), "x");         // an AST: 2*x/(1 + x^4)</code></pre>
+  <h2>Parameters and intervals</h2>
+  <p>Names other than the variable are parameters: <code>fn("a*x^2", { params: { a: "3/8" } })</code>. A parameter may be an interval, <code>{ a: R`1:2` }</code>; then every answer holds for every a in that range.</p>
+  <h2>Non-smooth pieces</h2>
+  <p><code>abs</code>, <code>min</code> and <code>max</code> are modelled where they are smooth on the domain (the argument keeps one sign, or one argument stays on top) and refused where they are not. Split the domain there, or write the function <a href="#piecewise">piecewise</a>.</p>

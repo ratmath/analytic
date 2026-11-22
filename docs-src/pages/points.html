@@ -1,0 +1,13 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Values to many digits</h1>
+  <p>At a single rational point, the library sums each function's series with an explicit bound on the tail, after reducing the argument to where the series converges fast:</p>
+  <ul>
+    <li><strong>exp</strong>: halve the argument until it is below 1/4, sum Σ rᵏ/k! (the tail after k terms is at most twice the next term), then square back.</li>
+    <li><strong>log</strong>: <code>2·atanh((q − 1)/(q + 1))</code> after scaling by powers of 2, with log 2 from the same series.</li>
+    <li><strong>sin, cos</strong>: reduce modulo 2π with a certified π, then the alternating series; the uncertainty in π becomes a little more width.</li>
+    <li><strong>atan, π</strong>: an alternating series for small arguments, argument halving otherwise; π from Machin's formula.</li>
+    <li><strong>sqrt</strong>: an integer square root on scaled numerator and denominator, exact when the square is perfect.</li>
+  </ul>
+  <div data-demo="points"></div>
+  <p>The display uses RatMath's interval notation: <code>0.46235716975[69:70]</code> means the value lies between 0.4623571697569 and 0.4623571697570.</p>

@@ -1,0 +1,72 @@
+<!-- wide: no -->
+<div class="eyebrow">Reference</div>
+  <h1>Everything in the library</h1>
+  <p>Numbers can be JS integers, bigints, strings such as <code>"3/4"</code> or <code>"0.1"</code> (decimals are exact), Core <code>Rational</code>s, or Core intervals such as <code>R`1/2:1`</code>. Functions marked <em>R</em> return a <a href="#fast">Refinement</a>: <code>.quick</code> is the float preview, <code>.exact()</code> or <code>await .settle()</code> gives the certified answer. When a hypothesis fails (a log of something that can reach 0, a divisor that can be 0, a point outside the domain), the library throws an <code>AnalyticError</code> with a <code>code</code> and a reason. It does not return a bound it cannot prove.</p>
+
+  <h2>Formulas</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>fn(text, { variable, params })</td><td>AnalyticFunction or PiecewiseFunction</td><td>Text, an AST, or the piecewise form <code>"rule if region; …; rule otherwise"</code></td></tr>
+    <tr><td>f.value(x, { digits = 20 })</td><td><em>R</em> RationalInterval</td><td>a point interval for rational-only formulas</td></tr>
+    <tr><td>f.range(I, { digits = 6, order = 8, maxPieces = 256 })</td><td><em>R</em> RationalInterval</td><td>preview: 256 samples (trust rough)</td></tr>
+    <tr><td>f.integral(a, b, { digits = 12, order = 12, maxPieces })</td><td><em>R</em> RationalInterval</td><td>preview: Gauss–Legendre</td></tr>
+    <tr><td>f.derivative()</td><td>a new function</td><td>symbolic and simplified</td></tr>
+    <tr><td>f.model(D, { order, bits, centre })</td><td>TaylorModel</td><td>certified on the domain D</td></tr>
+    <tr><td>f.float(x)</td><td>number</td><td>no guarantee</td></tr>
+    <tr><td>f.with({ a: "3/8" })</td><td>a new function</td><td>other parameter values (sliders)</td></tr>
+    <tr><td>f.toString()</td><td>string</td><td>calculator notation that parses back</td></tr>
+  </table></div>
+  <p>Grammar: <code>+ - * / ^</code> (or <code>**</code>), parentheses, implicit products (<code>2x</code>, <code>3(x+1)</code>, <code>2sin(x)</code>), <code>-x^2 = -(x^2)</code>, <code>^</code> right-associative. Functions: <code>exp log ln sqrt sin cos tan atan sinh cosh tanh log1p abs min max</code>; constants <code>pi e</code>. It is the same grammar and the same plain AST as <code>@ratmath/graphics</code>.</p>
+
+  <h2>Features of a function</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>record kinds</th><th>fields</th></tr>
+    <tr><td>zeros(f, [a, b], opts)</td><td>exact, sign-change, possible, undefined</td><td>at, lo, hi, unique, multiplicity, atMost, bound</td></tr>
+    <tr><td>poles(f, [a, b], opts)</td><td>pole, hole, undefined</td><td>order (poles), value (a hole's limit)</td></tr>
+    <tr><td>extrema(f, [a, b], opts)</td><td>max, min, flat, possible</td><td>value, unique</td></tr>
+    <tr><td>inflections(f, [a, b], opts)</td><td>inflection, possible</td><td>value, unique</td></tr>
+    <tr><td>simplestBetween(a, b)</td><td>Rational</td><td>smallest denominator in [a, b]</td></tr>
+  </table></div>
+  <p>All four are <em>R</em>. Options: <code>variable</code>, <code>params</code>, <code>tolerance</code> (bracket width, default 10⁻⁶), <code>pieces</code>, <code>maxDepth</code>, <code>flatBits</code>. Previews are <code>{ kind: "guess", at }</code>. A bracket with no record certainly holds none.</p>
+
+  <h2>Piecewise</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>piecewise([[region, rule], …], opts)</td><td>PiecewiseFunction</td><td>first matching piece wins</td></tr>
+    <tr><td>where`2:!x:8`</td><td>Region</td><td>template tag; values may be interpolated</td></tr>
+    <tr><td>new Region(text | x =&gt; bool, { variable, params })</td><td>Region</td><td><code>.test(x)</code>, <code>.match(x)</code> → { n }, <code>.intervals(a, b)</code>, <code>.breakpoints(a, b)</code></td></tr>
+    <tr><td>p.breaks([a, b])</td><td><em>R</em> records</td><td>{ at, value, left, right, kind: continuous | jump | removable | edge | unproven, defined }</td></tr>
+    <tr><td>p.segments(a, b)</td><td>array</td><td>open pieces and points with the active rule</td></tr>
+    <tr><td>p.value, range, integral, zeros, extrema, inflections, poles, derivative</td><td></td><td>piece by piece</td></tr>
+  </table></div>
+
+  <h2>Differential equations</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>ode.solve({ f, y0, t0, until, order = 10, step, tol, maxSteps, vars, time, params, float })</td><td><em>R</em> ODESolution</td><td>preview: RK4 samples { t, y }</td></tr>
+    <tr><td>sol.at(t), sol.final, sol.steps, sol.complete, sol.reason, sol.describe()</td><td></td><td>enclosures of y(t)</td></tr>
+    <tr><td>ode.step({ f, y0, step, order })</td><td>{ t0, t1, models, model }</td><td>one validated step, or an error</td></tr>
+  </table></div>
+  <p><code>f</code> is a formula in <code>t</code> and <code>y</code>, an array of formulas for a system (<code>vars</code> names the unknowns), or a JS function <code>(t, y) =&gt; model</code> with an optional <code>float</code> twin for previews.</p>
+
+  <h2>Taylor models</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>notes</th></tr>
+    <tr><td>Domain(R`a:b`, { centre })</td><td>centre defaults to the midpoint</td></tr>
+    <tr><td>TM.x(D, { order = 12, bits = 96 }), TM.constant(D, v), TM.polynomial(D, [a0, a1, …])</td><td>sources</td></tr>
+    <tr><td>.add .subtract .negate .multiply .divide .pow(n)</td><td>with models or numbers</td></tr>
+    <tr><td>exp sin cos tan log log1p atan sqrt sinh cosh tanh reciprocal power(g, a)</td><td>elementary functions of models</td></tr>
+    <tr><td>.at(x) .range() .integral(a, b) .integrate() .derivative()</td><td>derivative only for exact polynomials</td></tr>
+    <tr><td>.coefficients .remainder .centre .order .describe() .toJSON()</td><td></td></tr>
+    <tr><td>series(D, { coefficient, rule, M, q, error, lookahead })</td><td>user series; rules lagrange, ratio, alternating, explicit</td></tr>
+  </table></div>
+
+  <h2>Points, constants, plumbing</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>notes</th></tr>
+    <tr><td>enclose.exp(x, bits) (also log, sqrt, atan, sin, cos, tan, sinh, cosh, tanh, log1p)</td><td>points or intervals → RationalInterval</td></tr>
+    <tr><td>constants.pi(bits), constants.e(bits)</td><td></td></tr>
+    <tr><td>createScope({ digits, bits, order })</td><td>callable set for evaluators: exp, sin, …, model, integral, range, fn, d, ode, zeros, …</td></tr>
+    <tr><td>Refinement, live(compute, onStage, { idleMs })</td><td>the shared fast-then-exact shape</td></tr>
+    <tr><td>parse, format, differentiate(ast, name), compileFloat(ast), modelOf(ast, env, base), encloseAst(ast, env, bits)</td><td>expression tools</td></tr>
+  </table></div>

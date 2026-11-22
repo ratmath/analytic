@@ -1,0 +1,11 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Ranges and integrals</h1>
+  <h2>Bounding a polynomial</h2>
+  <p>Evaluating a polynomial with interval arithmetic gives a valid range, but a loose one: x − x over [0, 1] comes out as [−1, 1]. The Bernstein form is better. Rewritten in the Bernstein basis on [a, b], the polynomial's range lies between its smallest and largest Bernstein coefficients, and the end coefficients are exact values. Splitting the interval tightens the bound quadratically.</p>
+  <h2>Adaptive pieces</h2>
+  <p><code>f.range(I)</code> keeps a list of pieces, each with a Taylor model. The outer bound is the hull of the pieces' bounds. The inner bound comes from certified values at piece midpoints: the true maximum is at least the largest of them. Only the pieces that hold the current extremes are split, until outer and inner bounds agree to the requested digits.</p>
+  <div data-demo="range"></div>
+  <h2>Integrals</h2>
+  <p>The integral of a Taylor model is the exact integral of P plus I·(b − a). <code>f.integral(a, b)</code> splits [a, b] until each piece's width meets its share of the budget, so effort goes where the function is hard.</p>
+  <div data-demo="integral"></div>

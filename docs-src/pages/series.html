@@ -1,0 +1,12 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Your own series</h1>
+  <p>For a function given by its power series coefficients aₖ, the remainder after degree p needs an argument. <code>series</code> makes you name one and checks what it can:</p>
+  <ul>
+    <li><strong>alternating</strong>: the terms alternate in sign and shrink, so the tail lies between 0 and the first omitted term. Checked on the next 32 terms for every x in the domain.</li>
+    <li><strong>ratio</strong>: |aₖ₊₁|·r ≤ q·|aₖ| with q &lt; 1 beyond p, so the tail is at most the first omitted term divided by 1 − q. Checked on the next 32 terms.</li>
+    <li><strong>lagrange</strong>: you supply M ≥ max |f⁽ᵖ⁺¹⁾| on the domain.</li>
+    <li><strong>explicit</strong>: you supply the error.</li>
+  </ul>
+  <p>What the library cannot check (the terms beyond the lookahead, your M, your error) is your claim, so the model is marked <code>assumed</code>, and <code>describe()</code> says so.</p>
+  <div data-demo="series"></div>
