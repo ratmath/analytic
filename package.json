@@ -42,7 +42,7 @@
   "bugs": {
     "url": "https://github.com/ratmath/analytic/issues"
   },
-  "homepage": "https://github.com/ratmath/analytic#readme",
+  "homepage": "https://ratmath.com/analytic/",
   "publishConfig": {
     "access": "public"
   }
