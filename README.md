@@ -276,6 +276,20 @@ computed on `x + 1 + sin(2x)/2`, which has no singularity to bisect into;
 results exactly at a hole are dropped (f is undefined there), `poles` reports
 each hole with the limit as `value`, and `value(1)` still refuses.
 
+**Removable points of quotients.** For f = u/v with v a polynomial, an exact
+rational zero c of v where u vanishes to the same order k is a hole: the limit
+u^(k)(c)/v^(k)(c) is certified by L'Hôpital, so `sin(x)/x` reports a hole at
+0 with value exactly 1. Near c the m-th derivative is written N_m / v^(m+1)
+and enclosed by the mean-value form N_m^(K)(X) / (v^(m+1))^(K)(X), which
+lets the searches pass through c. Results exactly at c are dropped.
+
+**Logs and roots.** `ln(g)` has a vertical asymptote where g has a zero:
+`poles` reports it as `kind: "pole"` with `source: "log"` (only where the
+blow-up reaches f, so `x·ln(x)` has none). Zeros of `sqrt(g)`, `g^p` (p > 0),
+`abs(g)` and constant multiples are found as zeros of g; through an even
+power, `sqrt` or `abs` a proven single zero is `isolated` rather than
+`sign-change`, since f keeps its sign.
+
 **Budgets.** The general engine works through a stack of brackets and pauses
 every 15 ms, so `settle()` keeps a page responsive. Each starting piece has a
 budget (`maxBoxes`, default 2000, and a share of `maxMs`, default 8000);

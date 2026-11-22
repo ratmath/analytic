@@ -161,6 +161,56 @@ export function logPoint(q, bits = 96) {
 
 // ---------------------------------------------------------------- sin, cos
 
+// Fixed-point interval arithmetic: an enclosure [lo, hi]·2^-W with BigInt ends.
+const fdiv = (n, d) => (n >= 0n ? n / d : -((-n + d - 1n) / d)); // floor, d > 0
+const cdiv = (n, d) => -fdiv(-n, d);
+function fixMul([a, b], [c, d], W) {
+  const p = [a * c, a * d, b * c, b * d];
+  let lo = p[0];
+  let hi = p[0];
+  for (const v of p) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  const s = 1n << W;
+  return [fdiv(lo, s), cdiv(hi, s)];
+}
+const fixAbsMax = ([a, b]) => (-a > b ? -a : b);
+
+/**
+ * sin and cos at a rational x by their Taylor series in fixed point with
+ * outward rounding: every term is an interval that contains the exact term,
+ * and once the terms decrease, the tail of the alternating series is bounded
+ * by the last term. Much cheaper than exact rational terms, whose denominators
+ * grow with every power of x.
+ */
+function sinCosFixed(x, wp) {
+  const W = BigInt(wp + 24);
+  const n = x.numerator;
+  const d = x.denominator;
+  const X = [fdiv(n << W, d), cdiv(n << W, d)];
+  const sq = fixMul(X, X, W);
+  const X2 = [sq[0] < 0n ? 0n : sq[0], sq[1]];
+  const x2max = Number(X2[1] >> W) + 1; // integer bound on x²
+  const eps = 1n << 8n; // 2^-(wp+16) in units of 2^-W: terms this small end the sum
+  const series = (t, first) => {
+    let sum = [t[0], t[1]];
+    for (let k = 1; ; k++) {
+      const m = BigInt((first + 2 * k - 1) * (first + 2 * k));
+      const p = fixMul(t, X2, W);
+      t = [fdiv(-p[1], m), cdiv(-p[0], m)];
+      sum = [sum[0] + t[0], sum[1] + t[1]];
+      const decreasing = (first + 2 * k + 1) * (first + 2 * k + 2) > x2max;
+      const big = fixAbsMax(t);
+      if (decreasing && big <= eps) return [sum[0] - big, sum[1] + big];
+      if (k > 100000) refuse("budget", "series did not converge within the term budget");
+    }
+  };
+  const den = 1n << W;
+  const toIv = ([lo, hi]) => new Iv(new Rational(lo, den), new Rational(hi, den));
+  return { sin: toIv(series(X, 1)), cos: toIv(series([den, den], 0)) };
+}
+
 /** {sin, cos} at a rational point. */
 export function sinCosPoint(q, bits = 96) {
   if (isZero(q)) return { sin: Iv.point(ZERO), cos: Iv.point(ONE) };
@@ -182,23 +232,7 @@ export function sinCosPoint(q, bits = 96) {
     const s2 = r.hi.subtract(x).abs();
     if (gt(s2, slack)) slack = s2;
   }
-  const x2 = x.multiply(x);
-  // Taylor with Lagrange tail |x|^k/k! (all derivatives bounded by 1).
-  const ax = x.abs();
-  let pa = ONE; // |x|^k/k! tracker for the tail
-  const sin = sumSeries(
-    x,
-    (t, k) => t.multiply(x2).negate().divide(new Rational(BigInt((2 * k) * (2 * k + 1)))),
-    (k, t) => (k === 0 ? null : t.abs().multiply(ax).divide(new Rational(BigInt(2 * k + 1)))),
-    wp,
-  );
-  const cos = sumSeries(
-    ONE,
-    (t, k) => t.multiply(x2).negate().divide(new Rational(BigInt((2 * k - 1) * (2 * k)))),
-    (k, t) => (k === 0 ? null : t.abs().multiply(ax).divide(new Rational(BigInt(2 * k + 1)))),
-    wp,
-  );
-  void pa;
+  const { sin, cos } = sinCosFixed(x, wp);
   // Lipschitz constant 1 for the reduction slack.
   const widen = (iv) => (isZero(slack) ? iv : new Iv(iv.lo.subtract(slack), iv.hi.add(slack)));
   return { sin: widen(sin).roundOut(bits + 4), cos: widen(cos).roundOut(bits + 4) };

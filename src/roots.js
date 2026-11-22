@@ -32,7 +32,7 @@ import { Iv } from "./interval.js";
 import { AnalyticError } from "./errors.js";
 import { ZERO, ONE, TWO, lt, le, gt, ge, isZero, sign, min, max, roundDyadic, bitLen, toQ } from "./rat.js";
 import { fn, evalParams } from "./fn.js";
-import { derivative as dAst, compileFloat, floatEnv, toRational } from "./expr.js";
+import { derivative as dAst, compileFloat, floatEnv, toRational, S } from "./expr.js";
 import { encloseAst } from "./ieval.js";
 import * as RP from "./rpoly.js";
 import { cancelHoles } from "./holes.js";
@@ -86,7 +86,98 @@ function setup(f, interval, opts) {
       F = fn(c.ast, { variable: F.variable, params: F.params });
     }
   }
-  return { F, a, b, tol, rf, bits, env, opts, flat, holes };
+  const st = { F, a, b, tol, rf, bits, env, opts, flat, holes, removable: [] };
+  if (!rf && exactParams) findRemovable(st, params);
+  return st;
+}
+
+// ---------------------------------------------------------------------------
+// Removable points of a quotient: f = u/v with v a polynomial, at an exact
+// rational zero c of v where u vanishes to at least the same order k. By
+// L'Hôpital the limit is u^(k)(c)/v^(k)(c). Near c, the m-th derivative is
+// written as N_m / v^(m+1) (N_0 = u, N_{m+1} = N_m′·v − (m+1)·N_m·v′); both
+// vanish to order K = (m+1)k at c, and Taylor's theorem with the mean-value
+// remainder gives f^(m)(x) ∈ N_m^(K)(X) / (v^(m+1))^(K)(X) for x in X ∋ c.
+
+const MAX_REMOVABLE_ORDER = 3;
+const MAX_REMOVABLE_K = 4;
+
+function exactZeroAt(ast, s, c) {
+  const y = safe((X) => encloseAst(ast, { ...s.env, [s.F.variable]: X }, s.bits), Iv.point(c));
+  return y && y.isPoint && isZero(y.lo);
+}
+
+function findRemovable(s, params) {
+  const ast = s.F.ast;
+  if (!(ast.type === "op" && ast.op === "/")) return;
+  const [u, v] = ast.args;
+  const rv = RP.rationalFunction(v, s.F.variable, params);
+  if (!rv || RP.deg(rv.den) !== 0 || RP.deg(rv.num) < 1) return;
+  const roots = rationalFeatures({ num: rv.num, den: [ONE] }, s.a, s.b, s.tol).roots.filter((r) => r.at && r.tags.has("zero"));
+  const x = s.F.variable;
+  for (const r of roots) {
+    const c = r.at;
+    // order k of v at c, and u must vanish to order k
+    let k = 0;
+    let vd = v;
+    let ud = u;
+    let ok = true;
+    while (k <= MAX_REMOVABLE_ORDER && exactZeroAt(vd, s, c)) {
+      if (!exactZeroAt(ud, s, c)) {
+        ok = false;
+        break;
+      }
+      vd = dAst(vd, x);
+      ud = dAst(ud, x);
+      k++;
+    }
+    if (!ok || k === 0 || k > MAX_REMOVABLE_ORDER) continue;
+    const rem = { c, k, u, v, orders: new Map() };
+    const lim = removableEval(rem, 0, s);
+    const value = lim && safe(lim, Iv.point(c));
+    if (!value) continue;
+    rem.value = value;
+    s.removable.push(rem);
+    s.holes.push({ at: c, lo: c, hi: c });
+  }
+}
+
+/** Evaluator of f^(m) on boxes containing rem.c, or null if it cannot be built. */
+function removableEval(rem, m, s) {
+  if (rem.orders.has(m)) return rem.orders.get(m);
+  const x = s.F.variable;
+  let result = null;
+  try {
+    let N = rem.u;
+    const dv = dAst(rem.v, x);
+    for (let j = 0; j < m; j++) N = S.sub(S.mul(dAst(N, x), rem.v), S.mul(S.mul({ type: "num", value: new Rational(BigInt(j + 1)) }, N), dv));
+    let D = m === 0 ? rem.v : { type: "op", op: "^", args: [rem.v, { type: "num", value: new Rational(BigInt(m + 1)) }] };
+    const K = (m + 1) * rem.k;
+    let ok = K <= MAX_REMOVABLE_K; // beyond this the derivative trees swell too much to be useful
+    if (!ok) throw new AnalyticError("budget", "removable order too high");
+    for (let j = 0; j < K; j++) {
+      if (!exactZeroAt(N, s, rem.c) || !exactZeroAt(D, s, rem.c)) {
+        ok = false;
+        break;
+      }
+      N = dAst(N, x);
+      D = dAst(D, x);
+    }
+    if (ok) {
+      const NK = N;
+      const DK = D;
+      result = (X) => {
+        const env = { ...s.env, [x]: X };
+        const d = encloseAst(DK, env, s.bits);
+        if (d.containsZero()) return null;
+        return encloseAst(NK, env, s.bits).div(d);
+      };
+    }
+  } catch (e) {
+    if (!(e instanceof AnalyticError)) throw e;
+  }
+  rem.orders.set(m, result);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,9 +342,25 @@ function* rationalCritical(s, kind) {
 // ---------------------------------------------------------------------------
 // General engine: interval bisection + Krawczyk
 
-function makeEval(ast, s) {
+function makeEval(ast, s, order) {
   const bits = s.bits;
-  return (X) => encloseAst(ast, { ...s.env, [s.F.variable]: X }, bits);
+  const plain = (X) => encloseAst(ast, { ...s.env, [s.F.variable]: X }, bits);
+  if (order === undefined || order > MAX_REMOVABLE_ORDER + 2 || !s.removable.length) return plain;
+  // near a removable point use the mean-value form on the hull of X and c
+  return (X) => {
+    for (const rem of s.removable) {
+      const dist = lt(rem.c, X.lo) ? X.lo.subtract(rem.c) : lt(X.hi, rem.c) ? rem.c.subtract(X.hi) : ZERO;
+      if (le(dist, X.width)) {
+        const g = removableEval(rem, order, s);
+        const H = g && safe(g, new Iv(min(X.lo, rem.c), max(X.hi, rem.c)));
+        if (H) {
+          const P = isZero(dist) ? null : safe(plain, X);
+          return P ? P.intersect(H) ?? H : H;
+        }
+      }
+    }
+    return plain(X);
+  };
 }
 
 function safe(fnc, X) {
@@ -269,8 +376,8 @@ function safe(fnc, X) {
  * Zeros of the tree `ast` (with derivative trees ds = [f′, f″, ...]) on [a, b].
  * Each result also carries sLo, sHi: proven signs of f at lo and hi (0 = unknown).
  */
-function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4, maxBoxes = 2000, maxMs = 8000, sliceMs = 15 } = {}) {
-  const f = makeEval(ast, s);
+function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4, maxBoxes = 2000, maxMs = 8000, sliceMs = 15, order } = {}) {
+  const f = makeEval(ast, s, order);
   const ds = [];
   let cur = ast;
   for (let i = 0; i < maxMultiplicity; i++) {
@@ -280,7 +387,7 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       if (!(e instanceof AnalyticError)) throw e;
       break;
     }
-    ds.push(makeEval(cur, s));
+    ds.push(makeEval(cur, s, order === undefined ? undefined : order + i + 1));
   }
   const df = ds[0];
   const out = [];
@@ -348,6 +455,11 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       return;
     }
     if (!y.containsZero()) return;
+    // an end of X is a known exact zero and f is strictly monotone on X: no other zero
+    if (seen.has(lo.toString()) || seen.has(hi.toString())) {
+      const dX = df ? safe(df, X) : null;
+      if (dX && !dX.containsZero()) return;
+    }
     const k = krawczyk(X);
     if (k === "none") return;
     if (k && k.exact) {
@@ -357,6 +469,9 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       return;
     }
     if (k) {
+      // the unique zero may be a simple rational (0, 1, -2/3): try the simplest one in the bracket
+      const c = simplestBetween(k.lo, k.hi);
+      if (pointSign(c) === 0) return addExact(c);
       const sl = pointSign(k.lo);
       const sh = pointSign(k.hi);
       if (sl === 0) addExact(k.lo);
@@ -477,7 +592,7 @@ function offHoles(s, list) {
 
 /** Holes as records with the limit of f there. */
 function holeRecords(s) {
-  const g = makeEval(s.F.ast, s);
+  const g = makeEval(s.F.ast, s, 0);
   return s.holes.map((h) => {
     const y = safe(g, new Iv(h.lo, h.hi));
     return record({ kind: "hole", ...h, ...(y ? { value: ri(y) } : {}), unique: true });
@@ -491,8 +606,51 @@ function clean(r) {
   return record(rest);
 }
 
+/**
+ * Wrappers that keep the zero set: sqrt(g), g^p (p > 0), −g, c·g. Zeros of f
+ * are found as zeros of g (where g is defined). Through sqrt or a power the
+ * multiplicity changes, so `scaled` says it no longer applies.
+ */
+function zeroCore(ast) {
+  let power = ONE; // f ≈ core^power near a zero (sqrt: 1/2)
+  let even = false; // f keeps its sign across zeros of the core
+  for (;;) {
+    if (ast.type === "call" && (ast.name === "sqrt" || ast.name === "abs") && ast.args.length === 1) {
+      if (ast.name === "sqrt") power = power.multiply(new Rational(1n, 2n));
+      even = true;
+      ast = ast.args[0];
+    } else if (ast.type === "op" && ast.op === "neg") ast = ast.args[0];
+    else if (ast.type === "op" && ast.op === "^" && ast.args[1].type === "num" && ast.args[1].value.numerator > 0n) {
+      const p = ast.args[1].value;
+      power = power.multiply(p);
+      if (p.denominator !== 1n || p.numerator % 2n === 0n) even = true;
+      ast = ast.args[0];
+    } else if (ast.type === "op" && ast.op === "*" && ast.args[0].type === "num" && !isZero(ast.args[0].value)) ast = ast.args[1];
+    else if (ast.type === "op" && ast.op === "*" && ast.args[1].type === "num" && !isZero(ast.args[1].value)) ast = ast.args[0];
+    else if (ast.type === "op" && ast.op === "/" && ast.args[1].type === "num") ast = ast.args[0];
+    else return { ast, power, even };
+  }
+}
+
 function* generalZerosStage(s) {
-  const list = yield* generalZeros(s.F.ast, s, s.opts);
+  const core = s.removable.length ? { ast: s.F.ast } : zeroCore(s.F.ast);
+  let list = yield* generalZeros(core.ast, s, { ...s.opts, order: core.ast === s.F.ast ? 0 : undefined });
+  if (core.ast !== s.F.ast) {
+    // f may be undefined where its core is defined (sqrt of a negative): keep
+    // only zeros where f itself evaluates, and drop the core's multiplicity
+    const f = makeEval(s.F.ast, s);
+    list = list.filter((r) => r.kind === "undefined" || safe(f, Iv.point(r.at ?? middle(r.lo, r.hi))) !== null || r.at);
+    // multiplicities scale by the power (an integer power only: sqrt halves
+    // them); where f keeps its sign, a proven core sign change is an isolated zero
+    list = list.map((r) => {
+      const { multiplicity, atMost, ...rest } = r;
+      const out = { ...rest };
+      const intPow = core.power.denominator === 1n ? core.power.numerator : null;
+      if (multiplicity !== undefined && intPow) out.multiplicity = multiplicity * Number(intPow);
+      if (core.even && r.kind === "sign-change") out.kind = "isolated";
+      return out;
+    });
+  }
   return { value: offHoles(s, list).map(clean), via: `interval bisection with Krawczyk uniqueness tests${s.holes.length ? "; holes cancelled exactly" : ""}${budgetNote(list)}` };
 }
 
@@ -500,9 +658,9 @@ function* generalCritical(s, kind) {
   const k = kind === "extrema" ? 1 : 2;
   let ast = s.F.ast;
   for (let i = 0; i < k; i++) ast = dAst(ast, s.F.variable);
-  const next = makeEval(dAst(ast, s.F.variable), s); // f″ for extrema, f‴ for inflections
-  const f0 = makeEval(s.F.ast, s);
-  const list = offHoles(s, yield* generalZeros(ast, s, { maxMultiplicity: 2, ...s.opts }));
+  const next = makeEval(dAst(ast, s.F.variable), s, k + 1); // f″ for extrema, f‴ for inflections
+  const f0 = makeEval(s.F.ast, s, 0);
+  const list = offHoles(s, yield* generalZeros(ast, s, { maxMultiplicity: 2, ...s.opts, order: k }));
   const out = [];
   for (const r of list) {
     if (r.kind === "undefined") continue;
@@ -562,6 +720,10 @@ function poleCandidates(ast, guards = [], out = []) {
       }
     }
   }
+  if (ast.type === "call" && (ast.name === "log" || ast.name === "ln") && ast.args.length === 1) {
+    // log(g) → −∞ as g → 0+: a vertical asymptote of f where g has a zero
+    out.push({ num: ONE_AST, den: ast.args[0], guards, source: "log" });
+  }
   if (ast.type === "call" && ast.name === "tan") {
     out.push({ num: { type: "call", name: "sin", args: ast.args }, den: { type: "call", name: "cos", args: ast.args }, guards });
   }
@@ -593,7 +755,7 @@ function* generalPoles(s) {
   const key = (r) => `${r.lo}|${r.hi}`;
   const poleKeys = new Set();
   let i = 0;
-  for (const { num, den, guards } of cands) {
+  for (const { num, den, guards, source } of cands) {
     const list = yield* generalZeros(den, s, { ...s.opts, maxMultiplicity: 2 });
     const numEval = makeEval(num, s);
     for (const r of list) {
@@ -604,12 +766,13 @@ function* generalPoles(s) {
         const where = r.at ? { at: r.at, lo: r.at, hi: r.at } : { lo: r.lo, hi: r.hi };
         if (!poleKeys.has(key(where))) {
           poleKeys.add(key(where));
-          out.push(record({ kind: "pole", ...where, unique: !!r.unique }));
+          out.push(record({ kind: "pole", ...where, unique: !!r.unique, ...(source ? { source } : {}) }));
         }
       }
     }
     yield { done: ++i, of: cands.length + dens.length, step: "denominator" };
   }
+  out.push(...holeRecords(s));
   // other zeros of denominators: f is undefined there, behaviour unknown
   for (const den of dens) {
     const list = yield* generalZeros(den, s, { ...s.opts, maxMultiplicity: 2 });
@@ -621,7 +784,6 @@ function* generalPoles(s) {
     }
     yield { done: ++i, of: cands.length + dens.length, step: "denominator" };
   }
-  out.push(...holeRecords(s));
   out.sort((x, y) => x.lo.compareTo(y.lo));
   return { value: out, via: `zeros of denominators; poles where the blow-up provably reaches f${s.holes.length ? "; holes from the exact gcd of the rational part" : ""}` };
 }

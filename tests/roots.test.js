@@ -72,12 +72,18 @@ describe("general functions: Krawczyk engine", () => {
     expect(holds(z[1], Math.PI)).toBe(true);
     expect(holds(z[2], 2 * Math.PI)).toBe(true);
   });
-  test("a double root: exact at 0 with multiplicity 2; at π only 'at most 2'", () => {
+  test("a double root: sin(x)^2 is searched as sin(x), so π is proven too", () => {
     const z = zeros("sin(x)^2", [-1, 4]).exact();
     expect(z[0]).toMatchObject({ kind: "exact", multiplicity: 2 });
-    expect(z[1]).toMatchObject({ kind: "possible", atMost: 2 });
+    expect(z[1]).toMatchObject({ kind: "isolated", unique: true });
     expect(holds(z[1], Math.PI)).toBe(true);
     expect(z.length).toBe(2);
+  });
+  test("a double root without a visible square stays 'at most 2'", () => {
+    const z = zeros("1 - cos(x)", [1, 8]).exact();
+    expect(z.length).toBe(1);
+    expect(z[0]).toMatchObject({ kind: "possible", atMost: 2 });
+    expect(holds(z[0], 2 * Math.PI)).toBe(true);
   });
   test("domain gaps are reported, not searched forever", () => {
     const z = zeros("log(x)", [-1, 3]).exact();
@@ -164,5 +170,34 @@ describe("work budget", () => {
     const list = job.exact();
     expect(list.some((r) => r.kind === "possible")).toBe(true);
     expect(job.exactStage().via).toContain("budget");
+  });
+});
+
+describe("graphics' feature cases", () => {
+  const near = (r, x) => (r.at ? Math.abs(r.at.toNumber() - x) : Math.abs((r.lo.toNumber() + r.hi.toNumber()) / 2 - x)) < 1e-3;
+  test("sin(x)/x: a certified hole at 0 with limit 1, no extrema, two inflections", () => {
+    const I = R`-4:4`;
+    const p = poles("sin(x)/x", I).exact();
+    expect(p.map((r) => r.kind)).toEqual(["hole"]);
+    expect(p[0].at.toString()).toBe("0");
+    expect(p[0].value.low.toString()).toBe("1");
+    expect(p[0].value.high.toString()).toBe("1");
+    expect(extrema("sin(x)/x", I, { tolerance: "1/10000" }).exact()).toEqual([]);
+    const inf = inflections("sin(x)/x", I, { tolerance: "1/10000" }).exact();
+    expect(inf.map((r) => r.kind)).toEqual(["inflection", "inflection"]);
+    expect(near(inf[1], 2.0815759778)).toBe(true);
+    const z = zeros("sin(x)/x", I).exact();
+    expect(z.map((r) => r.kind)).toEqual(["sign-change", "sign-change"]);
+  });
+  test("ln(x): a vertical asymptote at 0", () => {
+    const p = poles("ln(x)", [-1, 1]).exact();
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({ kind: "pole", source: "log" });
+    expect(p[0].at.toString()).toBe("0");
+    expect(poles("x*ln(x)", [-1, 1]).exact()).toEqual([]); // x·ln x → 0
+  });
+  test("sqrt(9 - x^2): exact zeros ±3 and nothing else", () => {
+    const z = zeros("sqrt(9 - x^2)", [-4, 4]).exact();
+    expect(z.map((r) => `${r.kind} ${r.at}`)).toEqual(["exact -3", "exact 3"]);
   });
 });
