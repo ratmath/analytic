@@ -1,6 +1,25 @@
 // Assemble docs/<page>.html from docs-src/layout.html and docs-src/pages/*.html.
 // Each page is a plain HTML fragment; the nav, head and pager are shared.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+
+// Stamp every asset URL with a hash of the assets, so a browser never mixes a
+// cached old script with a new page (GitHub Pages caches for ten minutes).
+const STAMP = /(\.(?:js|css))\?v=[0-9a-f]+/g;
+function stampAssets() {
+  const dir = "docs/assets";
+  const files = readdirSync(dir).filter((f) => /\.(js|css)$/.test(f)).sort();
+  const texts = Object.fromEntries(files.map((f) => [f, readFileSync(`${dir}/${f}`, "utf8")]));
+  const hash = createHash("sha256");
+  for (const f of files) hash.update(f).update(texts[f].replace(STAMP, "$1"));
+  const v = hash.digest("hex").slice(0, 10);
+  for (const f of files) {
+    if (!f.endsWith(".js")) continue;
+    const out = texts[f].replace(/(from\s+"\.\/[\w-]+\.js)(?:\?v=[0-9a-f]+)?"/g, `$1?v=${v}"`);
+    if (out !== texts[f]) writeFileSync(`${dir}/${f}`, out);
+  }
+  return v;
+}
 
 export const PAGES = [
   { name: "intro", file: "index.html", title: "Introduction" },
@@ -20,7 +39,8 @@ export const PAGES = [
 ];
 
 export function buildPages() {
-  const layout = readFileSync("docs-src/layout.html", "utf8");
+  const v = stampAssets();
+  const layout = readFileSync("docs-src/layout.html", "utf8").replace(/(assets\/[\w-]+\.(?:js|css))"/g, `$1?v=${v}"`);
   const pages = PAGES.filter((p) => p.name).map((p) => ({ ...p, file: p.file ?? `${p.name}.html` }));
   const fileOf = Object.fromEntries(pages.map((p) => [p.name, p.file]));
   for (const [i, p] of pages.entries()) {
