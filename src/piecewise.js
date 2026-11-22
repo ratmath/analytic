@@ -1,11 +1,11 @@
 // Piecewise functions: pairs of (region, rule), first match wins.
 //
-// Regions use a betweenness chain on the tested variable:
+// Regions use a betweenness chain on the tested variable (Core's Region):
 //
-//   2:x:8      2 ≤ x ≤ 8          :x:8     x ≤ 8         2:x:     x ≥ 2
-//   2:!x:8     2 < x ≤ 8          2:x:!8   2 ≤ x < 8     (a "!" right after a colon makes it strict)
+//   2:x:8      2 ≤ x ≤ 8          _:x:8    x ≤ 8         2:x:_    x ≥ 2
+//   2:!x:8     2 < x ≤ 8          2:x:!8   2 ≤ x < 8     (":!" is a strict link)
 //   2n:x:!2n+1 2n ≤ x < 2n+1 for some integer n (any other free name is an integer)
-//   :x:!-1 | 1:!x:   unions with "|";   "all", "else", "otherwise": everything
+//   _:x:!-1 || 1:!x:_   unions with "||";   "all", "else", "otherwise": everything
 //
 // Bounds are rational expressions of the parameters and at most one integer
 // variable, affine in it. A region can also be a plain function x => boolean;
@@ -14,85 +14,38 @@
 //
 // Rules may use the integer variable too: "x - n if n:x:!n+1" is the
 // sawtooth, "(-1)^n if n:x:!n+1" a square wave.
-import { Rational, RationalInterval } from "@ratmath/core";
+import { Rational, RationalInterval, Region as CoreRegion } from "@ratmath/core";
 import { Refinement } from "./refine.js";
 import { Iv } from "./interval.js";
 import { refuse, AnalyticError } from "./errors.js";
-import { ZERO, ONE, lt, le, gt, ge, isZero, min, max, toQ } from "./rat.js";
-import { parse, toAst, format, freeVariables, toRational, derivative as dAst } from "./expr.js";
+import { ZERO, ONE, lt, isZero, toQ } from "./rat.js";
+import { toAst, format, freeVariables, toRational, derivative as dAst } from "./expr.js";
 import { AnalyticFunction, evalParams, gaussLegendre } from "./fn.js";
 import * as roots from "./roots.js";
 
 const q = (v) => (v instanceof Rational ? v : typeof v === "number" || typeof v === "string" ? toRational(v) : toQ(v));
-const MAX_PIECES = 100000;
-
-// ---- exact evaluation of bound expressions -------------------------------------
-
-function evalQ(ast, env) {
-  switch (ast.type) {
-    case "num":
-      return ast.value;
-    case "var": {
-      const v = env[ast.name];
-      if (!(v instanceof Rational)) refuse("bad-region", `bound uses ${ast.name}, which has no exact rational value`);
-      return v;
-    }
-    case "op": {
-      const [a, b] = ast.args.map((x) => evalQ(x, env));
-      switch (ast.op) {
-        case "+": return a.add(b);
-        case "-": return a.subtract(b);
-        case "*": return a.multiply(b);
-        case "/":
-          if (isZero(b)) refuse("bad-region", "a bound divides by 0");
-          return a.divide(b);
-        case "neg": return a.negate();
-        case "^": {
-          if (b.denominator !== 1n) refuse("bad-region", "bounds take integer powers only");
-          return a.pow(Number(b.numerator));
-        }
-      }
-    }
-  }
-  return refuse("bad-region", `bounds must be rational expressions (got ${ast.type} ${ast.name ?? ast.op ?? ""}); pi, e and functions are not supported in bounds yet`);
-}
-
-/** Bound as an affine function of the integer variable: { c0, c1 } with value c0 + c1·n. */
-function affine(ast, params, iname) {
-  if (!iname || !freeVariables(ast).has(iname)) return { c0: evalQ(ast, params), c1: ZERO };
-  const at = (k) => evalQ(ast, { ...params, [iname]: new Rational(BigInt(k)) });
-  const c0 = at(0);
-  const c1 = at(1).subtract(c0);
-  for (const k of [2, -1, 3]) {
-    if (at(k).compareTo(c0.add(c1.multiply(new Rational(BigInt(k))))) !== 0) {
-      refuse("bad-region", `bound ${format(ast)} is not affine in ${iname}`);
-    }
-  }
-  return { c0, c1 };
-}
 
 // ---- regions -------------------------------------------------------------------
+//
+// Chain regions are Core's Region (@ratmath/core 0.9.0); this wrapper adds
+// predicate regions, the "all"/"otherwise" words and AnalyticError codes.
 
 const EVERYTHING = new Set(["all", "else", "otherwise", "always", ""]);
+const CONSTANTS = new Set(["pi", "e"]);
 
-function parseChain(text, variable) {
-  const parts = text.split(":");
-  if (parts.length !== 3) refuse("bad-region", `"${text}" should look like a:${variable}:b (either side may be empty)`);
-  const strict = [parts[1].trimStart().startsWith("!"), parts[2].trimStart().startsWith("!")];
-  const clean = (s) => s.trim().replace(/^!/, "").trim();
-  const [lo, mid, hi] = [clean(parts[0]), clean(parts[1]), clean(parts[2])];
-  if (mid !== variable) refuse("bad-region", `the middle of "${text}" should be the variable ${variable}`);
-  return {
-    lo: lo === "" ? null : parse(lo),
-    hi: hi === "" ? null : parse(hi),
-    loStrict: strict[0],
-    hiStrict: strict[1],
-  };
+function viaCore(run) {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof AnalyticError) throw error;
+    const message = String(error.message).replace(/^Region: /, "");
+    return refuse(/more than \d+ pieces/.test(message) ? "budget" : "bad-region", message);
+  }
 }
 
 export class Region {
   /**
-   * Region.from("2:!x:8" | "2n:x:!2n+1 | ..." | x => boolean | Region, { variable, params })
+   * Region.from("2:!x:8" | "2n:x:!2n+1 || ..." | x => boolean | Region, { variable, params })
    */
   static from(spec, opts = {}) {
     if (spec instanceof Region) return spec;
@@ -105,25 +58,21 @@ export class Region {
     if (typeof spec === "function") {
       this.fn = spec;
       this.text = spec.toString();
+      this.core = null;
       this.alternatives = null;
       this.integer = null;
       Object.freeze(this);
       return;
     }
+    if (spec instanceof CoreRegion) spec = spec.text;
     this.text = String(spec).trim();
-    const alts = this.text.split("|").map((s) => s.trim());
-    const names = new Set();
-    const chains = alts.map((a) => {
-      if (EVERYTHING.has(a.toLowerCase())) return { all: true };
-      const c = parseChain(a, variable);
-      for (const t of [c.lo, c.hi]) if (t) for (const n of freeVariables(t)) if (!(n in this.params)) names.add(n);
-      return c;
-    });
-    if (names.size > 1) refuse("bad-region", `at most one integer variable per region, found ${[...names].join(", ")}`);
-    this.integer = names.size ? [...names][0] : null;
-    this.alternatives = chains.map((c) =>
-      c.all ? c : { ...c, L: c.lo && affine(c.lo, this.params, this.integer), U: c.hi && affine(c.hi, this.params, this.integer) },
-    );
+    const text = EVERYTHING.has(this.text.toLowerCase()) ? `_:${variable}:_` : this.text;
+    this.core = viaCore(() => CoreRegion.parse(text, { variable, params: this.params }));
+    if (CONSTANTS.has(this.core.integer)) {
+      refuse("bad-region", `bounds must be rational expressions; pi and e are not supported in bounds yet`);
+    }
+    this.integer = this.core.integer;
+    this.alternatives = this.core.alternatives;
     Object.freeze(this);
   }
 
@@ -136,13 +85,7 @@ export class Region {
       const r = this.fn(q(x)); // function regions always receive a Core Rational
       return r ? { n: null } : null;
     }
-    x = q(x);
-    for (const c of this.alternatives) {
-      if (c.all) return { n: null };
-      const m = matchChain(c, x);
-      if (m) return m;
-    }
-    return null;
+    return viaCore(() => this.core.match(q(x)));
   }
 
   test(x) {
@@ -152,122 +95,18 @@ export class Region {
   /** Concrete intervals of the region that meet [a, b]: { lo, hi, loStrict, hiStrict, n }; null for function regions. */
   intervals(a, b) {
     if (this.fn) return null;
-    a = q(a);
-    b = q(b);
-    const out = [];
-    for (const c of this.alternatives) {
-      if (c.all) {
-        out.push({ lo: null, hi: null, loStrict: false, hiStrict: false, n: null });
-        continue;
-      }
-      const ns = this.integer ? integerRange(c, a, b) : [null];
-      for (const n of ns) {
-        const N = n === null ? ZERO : new Rational(BigInt(n));
-        const lo = c.L ? c.L.c0.add(c.L.c1.multiply(N)) : null;
-        const hi = c.U ? c.U.c0.add(c.U.c1.multiply(N)) : null;
-        if (lo && hi && gt(lo, hi)) continue;
-        if (lo && gt(lo, b)) continue;
-        if (hi && lt(hi, a)) continue;
-        out.push({ lo, hi, loStrict: c.loStrict, hiStrict: c.hiStrict, n });
-      }
-    }
-    return out;
+    return viaCore(() => this.core.intervals(q(a), q(b)));
   }
 
   /** Every finite endpoint of the region inside [a, b]. */
   breakpoints(a, b) {
-    const iv = this.intervals(a, b);
-    if (!iv) return null;
-    const pts = [];
-    for (const r of iv) for (const p of [r.lo, r.hi]) if (p && ge(p, q(a)) && le(p, q(b))) pts.push(p);
-    return pts;
+    if (this.fn) return null;
+    return viaCore(() => this.core.breakpoints(q(a), q(b)));
   }
 
   toString() {
     return this.text;
   }
-}
-
-function matchChain(c, x) {
-  const okConst = (A, strict, isLower) => {
-    const v = A.c0;
-    return isLower ? (strict ? lt(v, x) : le(v, x)) : strict ? lt(x, v) : le(x, v);
-  };
-  if (!c.L?.c1 || isZero(c.L.c1)) {
-    if (c.L && !okConst(c.L, c.loStrict, true)) return null;
-  }
-  if (!c.U?.c1 || isZero(c.U.c1)) {
-    if (c.U && !okConst(c.U, c.hiStrict, false)) return null;
-  }
-  const varying = (c.L && !isZero(c.L.c1)) || (c.U && !isZero(c.U.c1));
-  if (!varying) return { n: null };
-  // n-range from each varying bound:  c0 + c1 n ≤ x  (lower)   x ≤ c0 + c1 n  (upper)
-  let nlo = null; // { v, strict }
-  let nhi = null;
-  const tighten = (v, strict, upper) => {
-    if (upper) {
-      if (!nhi || lt(v, nhi.v) || (v.compareTo(nhi.v) === 0 && strict)) nhi = { v, strict };
-    } else if (!nlo || gt(v, nlo.v) || (v.compareTo(nlo.v) === 0 && strict)) nlo = { v, strict };
-  };
-  if (c.L && !isZero(c.L.c1)) {
-    const v = x.subtract(c.L.c0).divide(c.L.c1); // c1 n ≤ x − c0
-    tighten(v, c.loStrict, gt(c.L.c1, ZERO));
-  }
-  if (c.U && !isZero(c.U.c1)) {
-    const v = x.subtract(c.U.c0).divide(c.U.c1); // x − c0 ≤ c1 n
-    tighten(v, c.hiStrict, lt(c.U.c1, ZERO));
-  }
-  // smallest integer n in the range
-  let n;
-  if (nlo) {
-    const f = floorQ(nlo.v);
-    const onIt = new Rational(f).compareTo(nlo.v) === 0;
-    n = onIt && !nlo.strict ? f : f + 1n;
-  } else {
-    if (!nhi) return { n: null };
-    // unbounded below: report the largest fitting n
-    const f = floorQ(nhi.v);
-    n = nhi.strict && new Rational(f).compareTo(nhi.v) === 0 ? f - 1n : f;
-    return { n: Number(n) };
-  }
-  if (nhi) {
-    const N = new Rational(n);
-    if (nhi.strict ? !lt(N, nhi.v) : !le(N, nhi.v)) return null;
-  }
-  return { n: Number(n) };
-}
-
-function floorQ(v) {
-  const a = v.numerator;
-  const b = v.denominator;
-  const f = a / b;
-  return a < 0n && f * b !== a ? f - 1n : f;
-}
-
-/** Integers n whose concrete piece can meet [a, b]. */
-function integerRange(c, a, b) {
-  let lo = -Infinity;
-  let hi = Infinity;
-  const cut = (A, bound, isLowerBound) => {
-    // isLowerBound: piece's lower end L(n) ≤ b ; else piece's upper end U(n) ≥ a
-    if (!A || isZero(A.c1)) return;
-    const v = (isLowerBound ? b : a).subtract(A.c0).divide(A.c1);
-    const f = Number(floorQ(v));
-    const cl = Number(-floorQ(v.negate()));
-    const pos = gt(A.c1, ZERO);
-    if (isLowerBound === pos) hi = Math.min(hi, f); // c1 n ≤ … with c1 > 0  →  n ≤ v
-    else lo = Math.max(lo, cl);
-    void bound;
-  };
-  cut(c.L, null, true);
-  cut(c.U, null, false);
-  if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
-    refuse("bad-region", "this region has infinitely many pieces in the interval; give both bounds in terms of n");
-  }
-  if (hi - lo + 1 > MAX_PIECES) refuse("budget", `more than ${MAX_PIECES} pieces in the interval`);
-  const out = [];
-  for (let n = lo; n <= hi; n++) out.push(n);
-  return out;
 }
 
 /** where`2:!x:8` — a Region from a template (values may be interpolated). */

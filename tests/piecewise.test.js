@@ -8,11 +8,11 @@ describe("regions", () => {
   test("chains with strict ends and open sides", () => {
     const r = where`2:!x:8`;
     expect([2, 3, 8, 9].map((x) => r.test(x))).toEqual([false, true, true, false]);
-    expect(new Region(":x:8").test(-1000)).toBe(true);
-    expect(new Region(":x:!8").test(8)).toBe(false);
-    expect(new Region("2:x:").test("2")).toBe(true);
+    expect(new Region("_:x:8").test(-1000)).toBe(true);
+    expect(new Region("_:x:!8").test(8)).toBe(false);
+    expect(new Region("2:x:_").test("2")).toBe(true);
     expect(new Region("all").test(5)).toBe(true);
-    expect(new Region(":x:!-1 | 1:!x:").test(0)).toBe(false);
+    expect(new Region("_:x:!-1 || 1:!x:_").test(0)).toBe(false);
   });
   test("integer variables: 2n :x:! 2n+1 and 2n+1 :x:! 2n+2", () => {
     const even = new Region("2n :x:! 2n+1");
@@ -29,15 +29,19 @@ describe("regions", () => {
     expect(() => new Region("n^2:x:n^2+1")).toThrow(AnalyticError);
     expect(() => new Region("pi:x:4")).toThrow(AnalyticError);
     expect(() => new Region("1:y:2")).toThrow(AnalyticError);
+    // 0.1.0 spellings: empty sides and a single | are gone (use _ and ||)
+    expect(() => new Region(":x:8")).toThrow(AnalyticError);
+    expect(() => new Region("1:x:2 | 3:x:4")).toThrow(AnalyticError);
+    expect(new Region(R.region`1:x:2`).test(2)).toBe(true);
   });
 });
 
 describe("piecewise functions", () => {
-  const abs = fn("-x if :x:!0; x if 0:x:");
+  const abs = fn("-x if _:x:!0; x if 0:x:_");
   test("text and pair forms agree", () => {
-    const p = piecewise([[":x:!0", "-x"], ["0:x:", "x"]]);
+    const p = piecewise([["_:x:!0", "-x"], ["0:x:_", "x"]]);
     for (const x of [-2.5, 0, 1.75]) expect(p.float(x)).toBe(abs.float(x));
-    expect(abs.toString()).toBe("-x if :x:!0; x if 0:x:");
+    expect(abs.toString()).toBe("-x if _:x:!0; x if 0:x:_");
   });
   test("first match wins; gaps are undefined", () => {
     const f = fn("1 if 0:x:2; 2 if 1:x:3");
@@ -60,28 +64,28 @@ describe("piecewise functions", () => {
     expect(S(sq.integral(0, "5/2").exact())).toBe("1/2:1/2");
   });
   test("breaks: jumps, continuity, closed side", () => {
-    const f = fn("x^2 if :x:1; 3 - x if 1:!x:2; 5 otherwise");
+    const f = fn("x^2 if _:x:1; 3 - x if 1:!x:2; 5 otherwise");
     const b = f.breaks([-1, 4]).exact();
     expect(b.map((r) => [S(r.at), r.kind, S(r.value), S(r.left), S(r.right)])).toEqual([
       ["1", "jump", "1:1", "1:1", "2:2"],
       ["2", "jump", "1:1", "1:1", "5:5"],
     ]);
-    const c = fn("x^2 if :x:1; 2x - 1 if 1:!x:").breaks([0, 2]).exact();
+    const c = fn("x^2 if _:x:1; 2x - 1 if 1:!x:_").breaks([0, 2]).exact();
     expect(c[0].kind).toBe("continuous");
-    const hole = fn("x if :x:!1; x if 1:!x:").breaks([0, 2]).exact();
+    const hole = fn("x if _:x:!1; x if 1:!x:_").breaks([0, 2]).exact();
     expect(hole[0]).toMatchObject({ kind: "removable", defined: false });
   });
   test("zeros and extrema piece by piece", () => {
-    const z = zeros("x^2 - 2 if :x:0; x - 1 if 0:!x:", [-3, 3]).exact();
+    const z = zeros("x^2 - 2 if _:x:0; x - 1 if 0:!x:_", [-3, 3]).exact();
     expect(z.map((r) => [r.kind, r.piece])).toEqual([["sign-change", 0], ["exact", 1]]);
     expect(z[0].lo.toNumber()).toBeCloseTo(-Math.SQRT2, 5);
     const saw = fn("x - n if n:x:!n+1").zeros([-2, 2]).exact();
     expect(saw.map((r) => S(r.at))).toEqual(["-2", "-1", "0", "1", "2"]);
-    const e = extrema("x^3 - 3x if :x:0; x if 0:!x:", [-3, 3]).exact();
+    const e = extrema("x^3 - 3x if _:x:0; x if 0:!x:_", [-3, 3]).exact();
     expect(e.map((r) => [r.kind, S(r.at)])).toEqual([["max", "-1"]]);
   });
   test("derivative is taken rule by rule", () => {
-    const d = fn("x^2 if :x:1; 3x otherwise").derivative();
+    const d = fn("x^2 if _:x:1; 3x otherwise").derivative();
     expect(d.float(0.5)).toBe(1);
     expect(d.float(2)).toBe(3);
   });

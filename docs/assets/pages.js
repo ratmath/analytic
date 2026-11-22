@@ -273,7 +273,7 @@ const DEMOS = {
     demo(el, {
       title: "Piecewise functions",
       inputs: [
-        { id: "f", label: "f(x)", value: "x^2 if :x:1; 3 - x if 1:!x:2; 1/2 otherwise" },
+        { id: "f", label: "f(x)", value: "x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise" },
         { id: "I", label: "interval", value: "-2:4" },
       ],
       tasks: ({ f, I }) => {
