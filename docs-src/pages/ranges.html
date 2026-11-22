@@ -1,0 +1,39 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Ranges and integrals</h1>
+  <p>The range of f on [a, b] is the interval from its smallest to its largest value there. Sampling finds values inside the range, but it can miss a narrow peak between samples, so a sampled range is only ever a lower estimate of the true one. A certified range is an interval that provably contains every value, and that is tight enough to be useful.</p>
+
+  <h2>The dependency problem</h2>
+  <p>The simplest certified method is interval arithmetic: replace x by the interval [a, b] and compute. Every operation's result contains all possible results, so the answer is valid. But it forgets that the two x's in a formula are the same number. On [0, 1], x·(1 − x) becomes [0, 1]·[0, 1] = [0, 1], while the true range is [0, 1/4]. And x − x becomes [−1, 1] instead of 0. The overestimate shrinks only in proportion to the width of the interval.</p>
+  <p>Taylor models fix most of this. They keep the dependence on x as a polynomial with exact coefficients, so x − x is exactly the zero polynomial and x·(1 − x) is exactly x − x². What is left is to bound a polynomial, and that has a good answer.</p>
+  <div data-demo="dependency"></div>
+
+  <h2>Bounding a polynomial: the Bernstein form</h2>
+  <p>Rewrite P on [a, b] in the Bernstein basis: with t = (x − a)/(b − a),</p>
+  <span class="math">P(x) = Σₖ βₖ · C(n, k) · tᵏ (1 − t)ⁿ⁻ᵏ,   k = 0 … n.</span>
+  <p>The basis functions are nonnegative and add up to 1, so P(x) is a weighted average of the coefficients βₖ: its range lies between min βₖ and max βₖ. The end coefficients are exact values, β₀ = P(a) and βₙ = P(b). The coefficients come from the power-basis ones by an exact rational transformation, and when the interval is halved (de Casteljau's algorithm), the gap between the Bernstein bound and the true range shrinks like the square of the width. The library bisects a few times by default.</p>
+  <p>A Taylor model's range is then that polynomial bound plus the remainder interval.</p>
+
+  <h2>Adaptive pieces</h2>
+  <p><code>f.range(I)</code> keeps a list of pieces, each with its own Taylor model. Two bounds are tracked:</p>
+  <ul>
+    <li>the <strong>outer bound</strong>: the hull of every piece's model bound. The true range is inside it.</li>
+    <li>the <strong>inner bound</strong>: from certified values at piece midpoints. The true maximum is at least the largest of them, and the true minimum at most the smallest.</li>
+  </ul>
+  <p>Only the pieces that hold the current outer extremes are split, so the work goes to where the maximum and minimum are, and the search stops when outer and inner bounds agree to the requested digits. The answer is the outer bound, so it is a true enclosure whose excess is at most that tolerance.</p>
+  <div data-demo="range"></div>
+<pre><code>const r = fn("x*cos(x)").range(R`0:3`, { digits: 6 });
+r.quick.value;   // [lo, hi] from 256 samples, marked "rough"
+r.exact();       // RationalInterval containing every value of x·cos(x) on [0, 3]
+r.exactStage().via   // "Taylor models (order 8) on 28 pieces"</code></pre>
+
+  <h2>Integrals</h2>
+  <p>A Taylor model integrates exactly: if f(x) − P(x − c) ∈ I on [a, b], then</p>
+  <span class="math">∫ₐᵇ f ∈ ∫ₐᵇ P(x − c) dx + I·(b − a),</span>
+  <p>and the integral of P is an exact rational. The width of the answer is the width of I times the length of the interval. <code>f.integral(a, b)</code> splits [a, b] into pieces until each piece's width is at most its share of the tolerance (in proportion to its length), so the effort goes to the parts where f is hard to approximate. The preview is a 16-panel Gauss–Legendre sum on doubles.</p>
+  <div data-demo="integral"></div>
+  <p>The number of pieces grows slowly with the digits asked for. An order-n model on a piece of width h has a remainder of order hⁿ⁺¹, so halving every piece gains about n + 1 bits, or around 4 digits at order 12, while doubling the work.</p>
+  <div data-demo="pieces"></div>
+
+  <h2>Integrable singularities and holes</h2>
+  <p>A removable gap in a rational part, as in (x² − 1)/(x − 1) + sin(2x)/2, is cancelled exactly before integrating, so the integral across x = 1 works. A true singularity, such as 1/√x at 0, makes the models' remainders unbounded and the integral is refused rather than guessed.</p>

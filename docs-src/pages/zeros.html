@@ -1,0 +1,39 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Zeros, poles and extrema</h1>
+  <p>Finding where f = 0 numerically is easy. Proving it is harder: that there is a zero in a bracket, that there is only one, and that there are none elsewhere. The library uses two engines.</p>
+  <div data-demo="zeros"></div>
+  <h2>Rational functions: exact</h2>
+  <p>When f is built from + − × ÷ and integer powers with rational numbers, it is read exactly as N/D. Then:</p>
+  <ul>
+    <li><strong>Holes.</strong> G = gcd(N, D) cancels. Points where G = 0 are holes: f is undefined there, but the limit exists, and the library reports it.</li>
+    <li><strong>Multiplicity.</strong> Yun's square-free decomposition writes N/G = a₁·a₂²·a₃³⋯ with each aᵢ free of repeated roots, so every root comes with its multiplicity, and every pole with its order.</li>
+    <li><strong>Isolation.</strong> A Sturm sequence counts the distinct roots in any interval exactly. Bisection splits at the simplest rational in the middle half of each bracket, so roots like 1 or −2/3 are hit exactly, and irrational roots end in brackets like [1393/985, 1970/1393] around √2.</li>
+  </ul>
+  <h2>Everything else: Krawczyk</h2>
+  <p>For a bracket X with midpoint m, Y ≈ 1/f′(m), and an interval bound F′(X) on the derivative,</p>
+  <span class="math">K = m − Y·f(m) + (1 − Y·F′(X))·(X − m)</span>
+  <p>contains every zero of f in X. If K misses X, there is no zero. If K lies inside X, there is exactly one, and replacing X by K ∩ X narrows it quadratically, like Newton's method but with proof. Where F′(X) contains 0 (a double root, two close roots), the test cannot decide, so the bracket is reported as <code>possible</code>, with <code>atMost: m</code> when the m-th derivative is proven nonzero there: by Rolle's theorem, f then has at most m zeros there, counted with multiplicity.</p>
+  <p>At an exact zero, the derivatives that are exactly 0 there give a lower bound on the multiplicity. When Rolle's bound matches it nearby, the multiplicity is proven. So sin(x)² has a zero of multiplicity exactly 2 at 0, while near π it can only say "at most 2": no finite computation can tell a double root from two very close roots, or from a near miss.</p>
+  <h2>Functions flat to every order</h2>
+  <p>e^(−1/x²) and all its derivatives tend to 0 at x = 0. Near 0 it is smaller than any number the library can represent, so it cannot be told apart from 0 there. Those brackets come back as <code>possible</code> with <code>bound</code>, the proven maximum of |f| on them, and with no <code>atMost</code>, because every derivative is just as flat. Outside them f is proven positive.</p>
+  <div data-demo="flat"></div>
+  <h2>Poles, extrema, inflections</h2>
+  <p>Poles are zeros of denominators (and of cos inside tan) where the numerator is proven nonzero, and only where the blow-up reaches f. A division inside exp is not a pole of f: e^(−1/x²) tends to 0. Extrema are zeros of f′, classified by the sign of f″ or by the sign change of f′. Inflection points are zeros of f″ where f″ changes sign.</p>
+  <p>When f′ has the same proven sign at both ends of an undecided bracket, the record carries <code>touching: true</code>. Then either f′ only touches 0 there and f has no extremum (1 + cos 2x at π/2 is like this), or a maximum and a minimum sit together inside the bracket. No finite precision can tell these apart when the touch is at an irrational point, so this is the strongest honest answer.</p>
+
+  <h2>Holes and removable points</h2>
+  <p>Some formulas are undefined at a point where the function has an obvious value. The library handles two common kinds exactly.</p>
+  <ul>
+    <li><strong>Rational parts.</strong> In (x² − 1)/(x − 1) + sin(2x)/2, the summands that are rational functions of x are combined into N/D and the exact gcd is cancelled. Questions are then answered for x + 1 + sin(2x)/2, and x = 1 is reported as a <code>hole</code> with the limit as its value.</li>
+    <li><strong>Quotients with a polynomial denominator.</strong> For sin(x)/x (also 4·sin(x)/x or sin(x)/x + x, which are rewritten as one quotient), the denominator's exact zero c = 0 is a hole when the numerator vanishes there to the same order k. L'Hôpital's rule gives the limit u⁽ᵏ⁾(c)/v⁽ᵏ⁾(c), exactly 1 here. Near c, the m-th derivative is written as Nₘ/v^(m+1) and enclosed with the mean-value form of Taylor's theorem, so the searches for extrema and inflections pass straight through the hole.</li>
+  </ul>
+  <p>Results exactly at a hole are dropped from zeros, extrema and inflections, because f itself is not defined there; <code>poles</code> lists the hole with its value, so a plot can draw an open dot.</p>
+<pre><code>poles("sin(x)/x", [-4, 4]).exact();    // [{ kind: "hole", at: 0, value: [1, 1] }]
+extrema("sin(x)/x", [-8, 8]).exact();  // min, min at ±4.4934 and max, max at ±7.7253</code></pre>
+
+  <h2>Logs and square roots</h2>
+  <p>ln(g) tends to −∞ where g tends to 0 from above, so <code>poles</code> reports a zero of g as <code>kind: "pole"</code> with <code>source: "log"</code>, again only where the blow-up reaches f: x·ln(x) has none, since it tends to 0. Zeros of sqrt(g), gᵖ (p &gt; 0), abs(g) and constant multiples are found as zeros of g, which avoids the infinite slope of the square root at its zeros. Through an even power, sqrt or abs, f does not change sign at the zero, so a proven single zero inside a bracket is reported as <code>isolated</code> rather than <code>sign-change</code>.</p>
+
+  <h2>Budgets</h2>
+  <p>The general engine works through a stack of brackets and pauses every 15 ms, so a page that calls <code>settle()</code> stays responsive. Each starting piece has a budget (<code>maxBoxes</code>, default 2000, and a share of <code>maxMs</code>, default 8000). Brackets left when it runs out come back as <code>possible</code>, and the <code>via</code> line says the budget was hit.</p>

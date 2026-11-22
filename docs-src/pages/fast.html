@@ -1,0 +1,59 @@
+<!-- wide: no -->
+<div class="eyebrow">Idea</div>
+  <h1>Fast, then certified</h1>
+  <p>Certified answers cost more than floating-point ones, sometimes a thousand times more. Someone dragging a slider needs a picture now; someone writing down a result needs it to be true. So every question returns a <code>Refinement</code> that can answer both ways. It is the same class the RatMath linear algebra and graphics libraries use, so one loop can drive all three.</p>
+<pre><code>const job = fn("exp(sin(3x))*x").range(R`0:3`, { digits: 6 });
+job.quick;            // { stage: "float", value: [lo, hi], trust: "rough" }
+for (const s of job.stages()) …   // float, then progress ticks, then the certified stage
+job.exact();          // run to the end now (fine in a Worker)
+await job.settle({ signal, sliceMs: 8, onProgress });   // the same, in time slices</code></pre>
+  <div data-demo="stages"></div>
+  <h2>A worked run</h2>
+  <p>The range above, run through <code>stages()</code> by hand, yields 21 stages:</p>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>stage</th><th>what it holds</th></tr>
+    <tr><td>float</td><td>[0, 7.1735…] from 256 samples, trust rough. The upper end is a sampled value, so the true maximum may be a little higher.</td></tr>
+    <tr><td>progress 1 of 256</td><td>partial: a certified range from one Taylor model on all of [0, 3], from about −1.5·10⁹ to 1.5·10⁹. Valid, and useless.</td></tr>
+    <tr><td>progress 2 … 19</td><td>partial: the outer bound tightens as the pieces holding the extremes are split; by the second tick it is already about [−186, 196]</td></tr>
+    <tr><td>exact</td><td>an interval from just below 0 to 7.17352…, via "Taylor models (order 8) on 25 pieces"</td></tr>
+  </table></div>
+  <p>Every partial is a true enclosure, so a display may show it as soon as it arrives. <code>of</code> is the budget (maxPieces), not a forecast: this run stopped after 19 of 256 because outer and inner bounds met.</p>
+
+  <h2>What each question previews</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>question</th><th>preview</th><th>trust</th></tr>
+    <tr><td>f.value(x)</td><td>the float formula at x</td><td>good, or unsure if not finite</td></tr>
+    <tr><td>f.range(I)</td><td>min and max of 256 samples</td><td>rough</td></tr>
+    <tr><td>f.integral(a, b)</td><td>16-panel Gauss–Legendre</td><td>good (rough for piecewise)</td></tr>
+    <tr><td>zeros, extrema, inflections</td><td>{ kind: "guess", at } from sign changes of f, f′ or f″ on samples</td><td>rough</td></tr>
+    <tr><td>p.breaks</td><td>none</td><td>unsure</td></tr>
+    <tr><td>ode.solve</td><td>RK4 samples { t, y } on 200 steps</td><td>good, or unsure if it blows up</td></tr>
+  </table></div>
+
+  <h2>How far to trust a preview</h2>
+  <p><code>trust</code> is <code>good</code> when the float computation is normally accurate (a value, an integral by Gauss–Legendre), <code>rough</code> when it can miss things (a range from samples can miss a narrow peak; zero guesses come from sign changes, so a double root is invisible), and <code>unsure</code> when the float answer is not finite.</p>
+  <h2>Progress and partial answers</h2>
+  <p>Progress ticks look like <code>{ stage: "progress", done, of, step, partial }</code>. <code>partial</code> is the answer so far: a range that is already valid but still wide, an integral over the pieces done, the ODE steps validated so far, the zeros found so far. A display can sharpen as they arrive.</p>
+  <h2>Sliders: live</h2>
+<pre><code>const f = fn("a*sin(x)", { params: { a: 1 } });
+const update = live((a) => f.with({ a }).value("1/2"), (stage) => show(stage.value, stage.exact), { idleMs: 30 });
+slider.oninput = () => update(`${slider.value}/8`);</code></pre>
+  <p>Each update shows the preview at once. Certified work starts once the input has been still for <code>idleMs</code>, runs in slices, and is cancelled by the next update, so only the latest question is ever finished.</p>
+  <h2>Your own refinement</h2>
+  <p>A <code>Refinement</code> is two functions: one that returns the preview, and a generator that yields progress and returns the certified answer. Anything built this way gets <code>stages</code>, <code>exact</code>, <code>settle</code> and <code>live</code> for free.</p>
+<pre><code>import { Refinement, fn } from "@ratmath/analytic";
+
+const f = fn("exp(-x^2)");
+const area = new Refinement(
+  () => ({ value: 0.8820813907, trust: "good" }),   // erf(2)·√π/2 from a table
+  function* () {
+    const parts = [];
+    for (let k = 0; k < 4; k++) {
+      parts.push(f.integral(`${k}/2`, `${k + 1}/2`, { digits: 15 }).exact());
+      yield { done: k + 1, of: 4, step: "piece", partial: parts.length };
+    }
+    return { value: parts.reduce((a, b) => a.add(b)), via: "four certified integrals" };
+  },
+);
+const total = await area.settle({ onProgress: (p) => console.log(p.done, "/", p.of) });</code></pre>
+  <p>Cancelling is cooperative: <code>settle</code> checks the signal between slices, so a generator that yields often stops quickly. A generator that never yields runs to the end in one slice.</p>
