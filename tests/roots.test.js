@@ -189,6 +189,19 @@ describe("graphics' feature cases", () => {
     const z = zeros("sin(x)/x", I).exact();
     expect(z.map((r) => r.kind)).toEqual(["sign-change", "sign-change"]);
   });
+  test("scaled and shifted quotients: holes found through products and sums", () => {
+    for (const [f, lim] of [["sin(x)/x * 4", "4"], ["4*sin(x)/x", "4"], ["sin(x)/x + x", "1"]]) {
+      const p = poles(f, [-8, 8]).exact();
+      expect(p.map((r) => `${r.kind} ${r.at} ${r.value.low}`)).toEqual([`hole 0 ${lim}`]);
+    }
+    const e = extrema("sin(x)/x * 4", [-8, 8], { tolerance: "1/10000" }).exact();
+    expect(e.map((r) => r.kind)).toEqual(["max", "min", "min", "max"]);
+  });
+  test("flat touches of f′ are marked", () => {
+    const e = extrema("(x^2 - 1)/(x - 1) + sin(2x)/2", [-2, 2], { tolerance: "1/10000" }).exact();
+    expect(e).toHaveLength(2);
+    for (const r of e) expect(r).toMatchObject({ kind: "possible", touching: true });
+  });
   test("ln(x): a vertical asymptote at 0", () => {
     const p = poles("ln(x)", [-1, 1]).exact();
     expect(p).toHaveLength(1);

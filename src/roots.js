@@ -107,10 +107,57 @@ function exactZeroAt(ast, s, c) {
   return y && y.isPoint && isZero(y.lo);
 }
 
+/**
+ * f as one quotient u/v with v a polynomial in x, through products, sums,
+ * negation and constant factors: (u/v)·w = (u·w)/v, u/v + w = (u + w·v)/v.
+ * Returns null when no polynomial denominator is found.
+ */
+function asQuotient(ast, x, params) {
+  const ONE_AST = { type: "num", value: ONE };
+  const isOne = (t) => t.type === "num" && t.value.compareTo(ONE) === 0;
+  const go = (n) => {
+    if (n.type === "op") {
+      if (n.op === "/") {
+        const rv = RP.rationalFunction(n.args[1], x, params);
+        if (rv && RP.deg(rv.den) === 0 && RP.deg(rv.num) >= 1) {
+          const a = go(n.args[0]);
+          return { u: a.u, v: isOne(a.v) ? n.args[1] : S.mul(a.v, n.args[1]) };
+        }
+        if (n.args[1].type === "num") {
+          const a = go(n.args[0]);
+          return { u: S.div ? S.div(a.u, n.args[1]) : { type: "op", op: "/", args: [a.u, n.args[1]] }, v: a.v };
+        }
+        return { u: n, v: ONE_AST };
+      }
+      if (n.op === "neg") {
+        const a = go(n.args[0]);
+        return { u: S.neg(a.u), v: a.v };
+      }
+      if (n.op === "*") {
+        const a = go(n.args[0]);
+        const b = go(n.args[1]);
+        return { u: S.mul(a.u, b.u), v: isOne(a.v) ? b.v : isOne(b.v) ? a.v : S.mul(a.v, b.v) };
+      }
+      if (n.op === "+" || n.op === "-") {
+        const a = go(n.args[0]);
+        const b = go(n.args[1]);
+        if (isOne(a.v) && isOne(b.v)) return { u: n, v: ONE_AST };
+        const comb = n.op === "+" ? S.add : S.sub;
+        if (isOne(b.v)) return { u: comb(a.u, S.mul(b.u, a.v)), v: a.v };
+        if (isOne(a.v)) return { u: comb(S.mul(a.u, b.v), b.u), v: b.v };
+        return { u: comb(S.mul(a.u, b.v), S.mul(b.u, a.v)), v: S.mul(a.v, b.v) };
+      }
+    }
+    return { u: n, v: ONE_AST };
+  };
+  const q = go(ast);
+  return isOne(q.v) ? null : q;
+}
+
 function findRemovable(s, params) {
-  const ast = s.F.ast;
-  if (!(ast.type === "op" && ast.op === "/")) return;
-  const [u, v] = ast.args;
+  const q = asQuotient(s.F.ast, s.F.variable, params);
+  if (!q) return;
+  const { u, v } = q;
   const rv = RP.rationalFunction(v, s.F.variable, params);
   if (!rv || RP.deg(rv.den) !== 0 || RP.deg(rv.num) < 1) return;
   const roots = rationalFeatures({ num: rv.num, den: [ONE] }, s.a, s.b, s.tol).roots.filter((r) => r.at && r.tags.has("zero"));
@@ -678,7 +725,11 @@ function* generalCritical(s, kind) {
       label = kind === "extrema" ? (r.sLo > 0 ? "max" : "min") : "inflection";
       unique = !!r.unique;
     }
-    out.push(record({ kind: label, ...(r.at ? { at: r.at } : {}), lo: r.lo, hi: r.hi, value: ri(v), unique }));
+    // f′ (or f″) has the same proven sign at both ends: either no extremum
+    // (inflection) here, or a pair within the bracket; not decidable by
+    // finite precision when the touch is not at a rational point
+    const touching = label === "possible" && r.sLo && r.sHi && r.sLo === r.sHi ? { touching: true } : {};
+    out.push(record({ kind: label, ...(r.at ? { at: r.at } : {}), lo: r.lo, hi: r.hi, value: ri(v), unique, ...touching }));
   }
   return { value: out, via: `zeros of f${kind === "extrema" ? "′" : "″"} by Krawczyk, classified by f${kind === "extrema" ? "″" : "‴"} or sign changes${budgetNote(list)}` };
 }

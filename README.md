@@ -276,12 +276,19 @@ computed on `x + 1 + sin(2x)/2`, which has no singularity to bisect into;
 results exactly at a hole are dropped (f is undefined there), `poles` reports
 each hole with the limit as `value`, and `value(1)` still refuses.
 
-**Removable points of quotients.** For f = u/v with v a polynomial, an exact
+**Removable points of quotients.** f is first written as one quotient
+through products, sums and constant factors (`4·sin(x)/x`, `sin(x)/x + x`).
+For f = u/v with v a polynomial, an exact
 rational zero c of v where u vanishes to the same order k is a hole: the limit
 u^(k)(c)/v^(k)(c) is certified by L'Hôpital, so `sin(x)/x` reports a hole at
 0 with value exactly 1. Near c the m-th derivative is written N_m / v^(m+1)
 and enclosed by the mean-value form N_m^(K)(X) / (v^(m+1))^(K)(X), which
 lets the searches pass through c. Results exactly at c are dropped.
+
+A `possible` extremum or inflection with `touching: true` has f′ (or f″) of
+the same proven sign at both ends: either nothing is there (f′ only touches
+0, as for 1 + cos 2x at π/2) or a max–min pair lies inside the bracket. Finite
+precision cannot tell these apart unless the touch is at a rational point.
 
 **Logs and roots.** `ln(g)` has a vertical asymptote where g has a zero:
 `poles` reports it as `kind: "pole"` with `source: "log"` (only where the
