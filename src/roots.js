@@ -35,6 +35,7 @@ import { fn, evalParams } from "./fn.js";
 import { derivative as dAst, compileFloat, floatEnv, toRational } from "./expr.js";
 import { encloseAst } from "./ieval.js";
 import * as RP from "./rpoly.js";
+import { cancelHoles } from "./holes.js";
 import { hornerBound } from "./poly.js";
 
 const q = (v) => (v instanceof Rational ? v : toRational(typeof v === "object" && v.toString ? v.toString() : v));
@@ -66,7 +67,7 @@ const ri = (iv) => iv.toRationalInterval();
 const record = (r) => Object.freeze(r);
 
 function setup(f, interval, opts) {
-  const F = fn(f, { variable: opts.variable, params: opts.params });
+  let F = fn(f, { variable: opts.variable, params: opts.params });
   const [a, b] = Array.isArray(interval) ? interval.map(q) : [Iv.from(interval).lo, Iv.from(interval).hi];
   const tol = q(opts.tolerance ?? "1/1000000");
   const params = evalParams(F.params);
@@ -76,7 +77,16 @@ function setup(f, interval, opts) {
   const env = {};
   for (const [k, v] of Object.entries(params)) env[k] = Iv.from(v);
   const flat = new Rational(1n, 1n << BigInt(opts.flatBits ?? 4 * bits));
-  return { F, a, b, tol, rf, bits, env, opts, flat };
+  // cancel removable singularities of the rational summands (holes)
+  let holes = [];
+  if (!rf && exactParams) {
+    const c = cancelHoles(F.ast, F.variable, params);
+    if (c) {
+      holes = rationalFeatures({ num: c.G, den: [ONE] }, a, b, tol).roots.filter((r) => r.tags.has("zero")).map(placeOf);
+      F = fn(c.ast, { variable: F.variable, params: F.params });
+    }
+  }
+  return { F, a, b, tol, rf, bits, env, opts, flat, holes };
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +269,7 @@ function safe(fnc, X) {
  * Zeros of the tree `ast` (with derivative trees ds = [f′, f″, ...]) on [a, b].
  * Each result also carries sLo, sHi: proven signs of f at lo and hi (0 = unknown).
  */
-function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4 } = {}) {
+function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4, maxBoxes = 2000, maxMs = 8000, sliceMs = 15 } = {}) {
   const f = makeEval(ast, s);
   const ds = [];
   let cur = ast;
@@ -322,6 +332,9 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
     }
     return unique ? X : null;
   };
+  // Boxes are processed from a stack, so the search can pause (yield) and
+  // stop at a budget; unfinished boxes are reported as "possible".
+  const stack = [];
   const work = (lo, hi, depth) => {
     const X = new Iv(lo, hi);
     const y = safe(f, X);
@@ -339,8 +352,8 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
     if (k === "none") return;
     if (k && k.exact) {
       addExact(k.exact);
-      if (lt(k.X.lo, k.exact)) work(k.X.lo, k.exact, depth + 1);
-      if (lt(k.exact, k.X.hi)) work(k.exact, k.X.hi, depth + 1);
+      if (lt(k.exact, k.X.hi)) stack.push([k.exact, k.X.hi, depth + 1]);
+      if (lt(k.X.lo, k.exact)) stack.push([k.X.lo, k.exact, depth + 1]);
       return;
     }
     if (k) {
@@ -362,20 +375,41 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
   const split = (lo, hi, depth) => {
     const m = middle(lo, hi);
     if (pointSign(m) === 0) addExact(m);
-    work(lo, m, depth + 1);
-    work(m, hi, depth + 1);
+    stack.push([m, hi, depth + 1], [lo, m, depth + 1]);
   };
   const { a, b } = s;
   if (pointSign(a) === 0) addExact(a);
   if (pointSign(b) === 0) addExact(b);
   const step = b.subtract(a).divide(new Rational(BigInt(pieces)));
+  const budget = maxBoxes;
+  const tStart = Date.now();
+  let capped = false;
   for (let i = 0; i < pieces; i++) {
     const lo = a.add(step.multiply(new Rational(BigInt(i))));
     const hi = i === pieces - 1 ? b : lo.add(step);
     if (i < pieces - 1 && pointSign(hi) === 0) addExact(hi);
-    if (gt(hi, lo)) work(lo, hi, 0);
+    if (gt(hi, lo)) stack.push([lo, hi, 0]);
+    let boxes = 0;
+    let t0 = Date.now();
+    // time left is shared fairly among the pieces still to do
+    const deadline = t0 + Math.max(50, (maxMs - (t0 - tStart)) / (pieces - i));
+    while (stack.length) {
+      if (boxes >= budget || Date.now() > deadline) {
+        capped = true;
+        for (const [l, h] of stack.splice(0)) out.push({ kind: "possible", lo: l, hi: h, sLo: null, sHi: null, budget: true });
+        break;
+      }
+      const [l, h, d] = stack.pop();
+      work(l, h, d);
+      boxes++;
+      if (Date.now() - t0 > sliceMs) {
+        yield { done: i, of: pieces, step: `piece ${i + 1}: ${boxes} boxes` };
+        t0 = Date.now();
+      }
+    }
     yield { done: i + 1, of: pieces, step: "piece", partial: out.map(clean) };
   }
+  if (capped) out.capped = true;
   return absorbNearExact(mergeAdjacent(out, atMost), ds, atMost, s);
 }
 
@@ -435,6 +469,23 @@ function mergeAdjacent(list, atMost) {
   return out;
 }
 
+/** Drop results sitting exactly on a hole: f is not defined there. */
+function offHoles(s, list) {
+  if (!s.holes.length) return list;
+  return list.filter((r) => !(r.at && s.holes.some((h) => h.at && h.at.compareTo(r.at) === 0)));
+}
+
+/** Holes as records with the limit of f there. */
+function holeRecords(s) {
+  const g = makeEval(s.F.ast, s);
+  return s.holes.map((h) => {
+    const y = safe(g, new Iv(h.lo, h.hi));
+    return record({ kind: "hole", ...h, ...(y ? { value: ri(y) } : {}), unique: true });
+  });
+}
+
+const budgetNote = (list) => (list.some((r) => r.budget) ? "; work budget hit, so some brackets are left as possible (raise maxBoxes)" : "");
+
 function clean(r) {
   const { sLo, sHi, ...rest } = r;
   return record(rest);
@@ -442,7 +493,7 @@ function clean(r) {
 
 function* generalZerosStage(s) {
   const list = yield* generalZeros(s.F.ast, s, s.opts);
-  return { value: list.map(clean), via: "interval bisection with Krawczyk uniqueness tests" };
+  return { value: offHoles(s, list).map(clean), via: `interval bisection with Krawczyk uniqueness tests${s.holes.length ? "; holes cancelled exactly" : ""}${budgetNote(list)}` };
 }
 
 function* generalCritical(s, kind) {
@@ -451,7 +502,7 @@ function* generalCritical(s, kind) {
   for (let i = 0; i < k; i++) ast = dAst(ast, s.F.variable);
   const next = makeEval(dAst(ast, s.F.variable), s); // f″ for extrema, f‴ for inflections
   const f0 = makeEval(s.F.ast, s);
-  const list = yield* generalZeros(ast, s, s.opts);
+  const list = offHoles(s, yield* generalZeros(ast, s, { maxMultiplicity: 2, ...s.opts }));
   const out = [];
   for (const r of list) {
     if (r.kind === "undefined") continue;
@@ -471,7 +522,7 @@ function* generalCritical(s, kind) {
     }
     out.push(record({ kind: label, ...(r.at ? { at: r.at } : {}), lo: r.lo, hi: r.hi, value: ri(v), unique }));
   }
-  return { value: out, via: `zeros of f${kind === "extrema" ? "′" : "″"} by Krawczyk, classified by f${kind === "extrema" ? "″" : "‴"} or sign changes` };
+  return { value: out, via: `zeros of f${kind === "extrema" ? "′" : "″"} by Krawczyk, classified by f${kind === "extrema" ? "″" : "‴"} or sign changes${budgetNote(list)}` };
 }
 
 /**
@@ -570,8 +621,9 @@ function* generalPoles(s) {
     }
     yield { done: ++i, of: cands.length + dens.length, step: "denominator" };
   }
+  out.push(...holeRecords(s));
   out.sort((x, y) => x.lo.compareTo(y.lo));
-  return { value: out, via: "zeros of denominators; poles where the blow-up provably reaches f" };
+  return { value: out, via: `zeros of denominators; poles where the blow-up provably reaches f${s.holes.length ? "; holes from the exact gcd of the rational part" : ""}` };
 }
 
 // ---------------------------------------------------------------------------

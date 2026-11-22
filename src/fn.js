@@ -11,6 +11,7 @@ import { ONE, TWO, ZERO, toQ, lt, le, max, min } from "./rat.js";
 import { toAst, format, compileFloat, floatEnv, modelOf, derivative, freeVariables, toRational } from "./expr.js";
 import { bitsForDigits } from "./scope.js";
 import { PiecewiseFunction, parsePiecewiseText } from "./piecewise.js";
+import { cancelHoles } from "./holes.js";
 
 const q = (v) => (typeof v === "string" ? toRational(v) : typeof v === "number" && !Number.isInteger(v) ? toRational(v) : toQ(v));
 const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
@@ -29,6 +30,7 @@ export function evalParams(p) {
 
 export class AnalyticFunction {
   #float;
+  #regular;
   constructor(expression, { variable = "x", params: p = {} } = {}) {
     this.ast = toAst(expression);
     this.variable = variable;
@@ -53,6 +55,22 @@ export class AnalyticFunction {
   /** Symbolic derivative d/d(variable), as a new AnalyticFunction. */
   derivative() {
     return new AnalyticFunction(derivative(this.ast, this.variable), { variable: this.variable, params: this.params });
+  }
+
+  /**
+   * The same function with removable singularities of its rational summands
+   * cancelled: (x^2 - 1)/(x - 1) + sin(x) becomes x + 1 + sin(x). Equal to f
+   * wherever f is defined; used for integrals and ranges, which do not see
+   * single points.
+   */
+  regular() {
+    if (this.#regular === undefined) {
+      const p = evalParams(this.params);
+      const exact = Object.values(p).every((v) => v instanceof Rational);
+      const c = exact ? cancelHoles(this.ast, this.variable, p) : null;
+      this.#regular = c ? new AnalyticFunction(c.ast, { variable: this.variable, params: this.params }) : this;
+    }
+    return this.#regular;
   }
 
   /** Float value at a JS number (fast; no guarantee). */
@@ -106,7 +124,7 @@ export class AnalyticFunction {
         // sampling can miss a peak between samples
         return { value: [lo, hi], trust: "rough" };
       },
-      () => rangeStages(this, I, opts),
+      () => rangeStages(this.regular(), I, opts),
     );
   }
 
@@ -119,7 +137,7 @@ export class AnalyticFunction {
         const value = gaussLegendre((t) => this.float(t), A.toNumber(), B.toNumber(), 16);
         return { value, trust: Number.isFinite(value) ? "good" : "unsure" };
       },
-      () => integralStages(this, A, B, opts),
+      () => integralStages(this.regular(), A, B, opts),
     );
   }
 }

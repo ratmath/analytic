@@ -13,6 +13,10 @@ reaches 0, a divisor whose range contains 0, a point outside the domain) the
 library throws an `AnalyticError` with a reason instead of returning a bound it
 cannot prove.
 
+**Docs site:** an introduction, a full reference, a live explorer and topic
+pages with interactive demos live in `docs/` (GitHub Pages from the `docs`
+folder). Rebuild the bundled library with `bun run docs:build`.
+
 Design notes: `docs/design/analytic-functions.md` in the [ratmath umbrella](https://github.com/ratmath/ratmath).
 This package depends only on Core (not on `packages/reals`).
 
@@ -264,6 +268,50 @@ no finite test can separate "tiny" from "zero". Brackets on which
 proof of a single crossing come back as `possible` with `bound` (the proven
 maximum of |f| there) and no `atMost`, since every derivative is also flat. They are
 never reported as zeros. Outside them, f is proven nonzero.
+
+**Holes.** When f has summands that are rational functions of x, as in
+`(x^2 - 1)/(x - 1) + sin(2x)/2`, they are combined into N/D and the exact
+gcd is cancelled. Zeros, extrema, inflections, integrals and ranges are then
+computed on `x + 1 + sin(2x)/2`, which has no singularity to bisect into;
+results exactly at a hole are dropped (f is undefined there), `poles` reports
+each hole with the limit as `value`, and `value(1)` still refuses.
+
+**Budgets.** The general engine works through a stack of brackets and pauses
+every 15 ms, so `settle()` keeps a page responsive. Each starting piece has a
+budget (`maxBoxes`, default 2000, and a share of `maxMs`, default 8000);
+brackets left when it runs out come back as `possible`, and `via` says so.
+
+## Piecewise functions
+
+A piecewise function is a list of (region, rule) pairs; the first region that
+contains x wins. Regions are betweenness chains on x:
+
+| region | meaning |
+| --- | --- |
+| `2:x:8` | 2 ≤ x ≤ 8 |
+| `:x:8`, `2:x:` | x ≤ 8, x ≥ 2 (an empty side is unbounded) |
+| `2:!x:8`, `2:x:!8` | 2 < x ≤ 8, 2 ≤ x < 8 (`!` right after a colon is strict) |
+| `2n :x:! 2n+1` | 2n ≤ x < 2n+1 for some integer n |
+| `:x:!-1 \| 1:!x:` | a union |
+| `all`, `else`, `otherwise` | every x |
+
+A name in a bound that is not a parameter is an integer variable; bounds must
+be affine in it, and the rule may use it (`x - n if n:x:!n+1` is the
+sawtooth). A region can also be a plain function of a Rational returning a
+boolean; that answers point questions only, since ranges, integrals and zeros
+need breakpoints.
+
+```js
+import { fn, piecewise, where } from "@ratmath/analytic";
+const f = fn("x^2 if :x:1; 3 - x if 1:!x:2; 1/2 otherwise");
+const square = piecewise([["2n:x:!2n+1", "1"], ["2n+1:x:!2n+2", "-1"]]);
+const r = where`${a}:!x:${b}`; // a Region from a template
+f.breaks([-2, 4]).exact();     // jumps, removable points, closed sides
+```
+
+`value`, `range`, `integral`, `zeros`, `extrema`, `inflections` and `poles`
+work piece by piece and tag results with `piece` (and `n`). A sign change
+across a jump is not a zero.
 
 ## Not yet done
 

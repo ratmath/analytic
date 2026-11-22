@@ -98,7 +98,17 @@ const FNS = {
 
 /** Enclosure of the tree over env (names → Iv) at about `bits` bits. */
 export function encloseAst(ast, env, bits = 64) {
+  // derivative trees share subtrees (sin(u) → cos(u)·u′ keeps u): evaluate each node once
+  const memo = new Map();
   const go = (n) => {
+    if (n.type === "op" || n.type === "call") {
+      let r = memo.get(n);
+      if (r === undefined) memo.set(n, (r = eval1(n)));
+      return r;
+    }
+    return eval1(n);
+  };
+  const eval1 = (n) => {
     switch (n.type) {
       case "num":
         return Iv.point(n.value);

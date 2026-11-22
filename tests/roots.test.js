@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { R, Rational } from "@ratmath/core";
-import { zeros, poles, extrema, inflections, simplestBetween } from "../index.js";
+import { zeros, poles, extrema, inflections, simplestBetween, fn } from "../index.js";
 
 const S = (r) => r.toString();
 const num = (x) => x.toNumber();
@@ -124,5 +124,45 @@ describe("general functions: Krawczyk engine", () => {
     expect(poles("exp(1/x)", [-1, 1]).exact().map((r) => r.kind)).toEqual(["undefined"]);
     expect(poles("x/(x-1) + exp(x)", [-1, 2]).exact().map((r) => r.kind)).toEqual(["pole"]);
     expect(poles("2*tan(x)^2", [0, 2]).exact().map((r) => r.kind)).toEqual(["pole"]);
+  });
+});
+
+describe("holes in rational summands", () => {
+  const f = "(x^2 - 1)/(x - 1) + sin(2x)/2";
+  test("inflections near a hole settle: 11 at kπ/2 on [-8, 8]", () => {
+    const list = inflections(f, R`-8:8`, { tolerance: "1/10000" }).exact();
+    expect(list.length).toBe(11);
+    for (const [i, r] of list.entries()) {
+      expect(r.kind).toBe("inflection");
+      const k = i - 5;
+      const c = (r.lo.toNumber() + r.hi.toNumber()) / 2;
+      expect(Math.abs(c - (k * Math.PI) / 2)).toBeLessThan(1e-4);
+    }
+  });
+  test("the hole is reported with its limit", () => {
+    const list = poles(f, R`-2:2`).exact();
+    expect(list.map((r) => r.kind)).toEqual(["hole"]);
+    expect(list[0].at.toString()).toBe("1");
+    const lim = 2 + Math.sin(2) / 2;
+    expect(list[0].value.low.toNumber()).toBeLessThanOrEqual(lim);
+    expect(list[0].value.high.toNumber()).toBeGreaterThanOrEqual(lim);
+  });
+  test("integral across the hole", () => {
+    const iv = fn(f).integral(0, 2, { digits: 10 }).exact();
+    const ref = 4 + (1 - Math.cos(4)) / 4; // ∫0^2 (x + 1) + sin(2x)/2
+    expect(iv.low.toNumber()).toBeLessThanOrEqual(ref + 1e-12);
+    expect(iv.high.toNumber()).toBeGreaterThanOrEqual(ref - 1e-12);
+  });
+  test("the value at the hole is still refused", () => {
+    expect(() => fn(f).value(1).exact()).toThrow();
+  });
+});
+
+describe("work budget", () => {
+  test("a capped search reports possible brackets and says so", () => {
+    const job = extrema("sin(x)/x", R`-1:1`, { maxBoxes: 20 });
+    const list = job.exact();
+    expect(list.some((r) => r.kind === "possible")).toBe(true);
+    expect(job.exactStage().via).toContain("budget");
   });
 });
