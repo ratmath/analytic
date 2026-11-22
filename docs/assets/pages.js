@@ -1,6 +1,7 @@
 // Mounts the demos on each docs page and handles page switching.
 import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js";
 import { explorer } from "./explore.js";
+import { MORE } from "./more-demos.js";
 
 const { R, fn } = A;
 const num = (s) => A.Rational.from ? A.Rational.from(String(s).trim()) : new A.Rational(String(s).trim());
@@ -351,15 +352,15 @@ const DEMOS = {
       title: "Your own series with a remainder rule",
       inputs: [
         { id: "a", label: "coefficient a_k =", value: "(-1)^k/(2k+1)" },
-        { id: "D", label: "domain (centre 0)", value: "-1/2:1/2" },
+        { id: "D", label: "domain (centre 0)", value: "0:1/2" },
         { id: "p", label: "degree kept", kind: "range", min: 2, max: 30, value: 10 },
         { id: "rule", label: "rule", kind: "select", options: ["alternating", "ratio"], value: "alternating" },
         { id: "q", label: "q (ratio rule)", value: "1/2" },
       ],
       tasks: ({ a, D, p, rule, q }) => {
-        const C = fn(a, { variable: "k" });
+        // substitute the integer k into the formula, so (-1)^k is an integer power
         const coef = (k) => {
-          const v = C.value(String(k)).exact();
+          const v = fn(a.replace(/(?<![A-Za-z_])k(?![A-Za-z0-9_])/g, `(${k})`)).value("0").exact();
           if (v.low.compareTo(v.high) !== 0) throw new Error("coefficients must be exact rationals");
           return v.low;
         };
@@ -376,6 +377,7 @@ const DEMOS = {
     }),
 
   explore: (el) => explorer(el),
+  ...MORE,
 };
 
 // ---- page switching -----------------------------------------------------------
@@ -395,17 +397,9 @@ function mountDemos(page) {
   }
 }
 
-function showPage() {
-  const id = location.hash.slice(1) || "intro";
-  const page = document.querySelector(`section.page[data-page="${id}"]`) ?? document.querySelector('section.page[data-page="intro"]');
-  document.querySelectorAll("section.page").forEach((s) => (s.hidden = s !== page));
-  document.querySelectorAll("nav.toc a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${page.dataset.page}`));
-  const sel = document.getElementById("toc-select");
-  if (sel) sel.value = page.dataset.page;
-  mountDemos(page);
-  window.scrollTo(0, 0);
-}
-
-window.addEventListener("hashchange", showPage);
-document.getElementById("toc-select")?.addEventListener("change", (e) => (location.hash = e.target.value));
-showPage();
+// Old single-page links (index.html#zeros) go to the page's own file.
+const OLD = { intro: "index.html", reference: "reference.html", explore: "explore.html", fast: "fast.html", models: "models.html", points: "values.html", expressions: "expressions.html", ranges: "ranges.html", zeros: "zeros.html", piecewise: "piecewise.html", odes: "odes.html", series: "series.html" };
+const old = OLD[location.hash.slice(1)];
+if (old && !location.pathname.endsWith(old)) location.replace(old);
+document.getElementById("toc-select")?.addEventListener("change", (e) => (location.href = e.target.value));
+mountDemos(document);

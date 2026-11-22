@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{title}} · RatMath Analytic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+{{options}}
+  </select>
+  <nav class="toc" aria-label="Contents">
+{{links}}
+  </nav>
+</aside>
+<main>
+<section class="page{{wide}}" data-page="{{name}}">
+{{body}}
+<nav class="pager" aria-label="Previous and next page">{{pager}}</nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js"></script>
+</body>
+</html>

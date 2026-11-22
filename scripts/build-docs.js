@@ -1,3 +1,4 @@
+import { buildPages } from "./build-pages.js";
 // Bundle the library (with @ratmath/core) for the docs site.
 const out = await Bun.build({ entrypoints: ["./scripts/docs-entry.js"], outdir: "./docs/assets", naming: "analytic.js", target: "browser", format: "esm", minify: true });
 if (!out.success) {
@@ -5,3 +6,4 @@ if (!out.success) {
   process.exit(1);
 }
 console.log("docs/assets/analytic.js written");
+console.log(`${buildPages()} pages written to docs/`);

@@ -3,292 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>RatMath Analytic</title>
+<title>Introduction · RatMath Analytic</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
-<style>
-/* Layout: a sticky table of contents beside one long reading column; demos sit in the column as working instruments. */
-:root {
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --sunk: #eef1f5;
-  --fg: #182131;
-  --muted: #5b6676;
-  --line: #d9dee7;
-  --accent: #2b55c9;
-  --accent-soft: #e3eaff;
-  --accent-dark: #16307a;
-  --accent-light: #8fa9ee;
-  --exact: #17735a;
-  --exact-soft: #dff3eb;
-  --float: #9a5b00;
-  --float-soft: #fbeed6;
-  --bad: #b42318;
-  --pivot: #ffe08a;
-  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0e131a; --surface: #151b24; --sunk: #1b2330; --fg: #e5e9f0; --muted: #98a3b4; --line: #2a3443;
-    --accent: #86a6ff; --accent-soft: #1e2a4a; --accent-dark: #c9d6ff; --accent-light: #4a63a8; --exact: #52c79e; --exact-soft: #133229; --float: #f2b65a; --float-soft: #3a2a10;
-    --bad: #ff8a80; --pivot: #6b5714; color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0e131a; --surface: #151b24; --sunk: #1b2330; --fg: #e5e9f0; --muted: #98a3b4; --line: #2a3443;
-  --accent: #86a6ff; --accent-soft: #1e2a4a; --accent-dark: #c9d6ff; --accent-light: #4a63a8; --exact: #52c79e; --exact-soft: #133229; --float: #f2b65a; --float-soft: #3a2a10;
-  --bad: #ff8a80; --pivot: #6b5714; color-scheme: dark;
-}
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 var(--font-body); }
-a { color: var(--accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.shell { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.5rem; max-width: 76rem; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 1.5rem 4rem; }
-header.brand { display: flex; flex-direction: column; gap: .15rem; margin-bottom: 1.25rem; }
-header.brand .mark { font: 700 1.15rem/1.2 var(--font-display); letter-spacing: -.01em; }
-header.brand .mark span { color: var(--accent); }
-header.brand small { color: var(--muted); font-size: .8rem; }
-aside { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1.5rem); align-self: start; max-height: calc(100vh - 3rem); overflow: auto; }
-nav.toc { display: flex; flex-direction: column; gap: .1rem; }
-nav.toc .group { margin-top: .9rem; font: 600 .7rem/1 var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 0 .6rem .35rem; }
-nav.toc a { display: block; padding: .32rem .6rem; border-radius: 6px; color: var(--fg); text-decoration: none; font-size: .92rem; }
-nav.toc a:hover { background: var(--sunk); }
-nav.toc a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-#toc-select { display: none; width: 100%; font: inherit; padding: .5rem; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
-main { min-width: 0; }
-section.page { max-width: 46rem; }
-h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; text-wrap: balance; letter-spacing: -.01em; }
-h1 { font-size: 2.1rem; margin: .2rem 0 .8rem; }
-h2 { font-size: 1.35rem; margin: 2.4rem 0 .6rem; }
-h3 { font-size: 1.08rem; margin: 1.6rem 0 .4rem; }
-p, li { max-width: 65ch; }
-.lede { font-size: 1.08rem; color: var(--muted); }
-.eyebrow { font: 600 .72rem/1 var(--font-body); text-transform: uppercase; letter-spacing: .09em; color: var(--accent); }
-code, kbd, .num, .lines { font-family: var(--font-mono); font-size: .88em; }
-code { background: var(--sunk); padding: .08em .35em; border-radius: 4px; }
-pre { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; font: .83rem/1.55 var(--font-mono); }
-pre code { background: none; padding: 0; }
-.math { font-family: var(--font-mono); background: var(--sunk); border-radius: 6px; padding: .55rem .8rem; display: block; overflow-x: auto; margin: .6rem 0; font-size: .9rem; }
-.muted { color: var(--muted); }
-.small { font-size: .85rem; }
-.err { color: var(--bad); }
-table.ref { border-collapse: collapse; width: 100%; font-size: .9rem; }
-table.ref th, table.ref td { text-align: left; vertical-align: top; padding: .45rem .6rem; border-bottom: 1px solid var(--line); }
-table.ref th { font: 600 .75rem/1.3 var(--font-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-table.ref td:first-child { white-space: nowrap; font-family: var(--font-mono); font-size: .84rem; }
-.tablewrap { overflow-x: auto; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .75rem; margin: 1rem 0; }
-.cards a { display: flex; flex-direction: column; gap: .2rem; padding: .8rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-decoration: none; color: var(--fg); }
-.cards a:hover { border-color: var(--accent); }
-.cards strong { font-family: var(--font-display); }
-.cards span { color: var(--muted); font-size: .86rem; }
-
-/* demos */
-.demo-card { margin: 1.2rem 0; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: .8rem; }
-.demo-title { font: 600 .95rem/1.3 var(--font-display); }
-.demo-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 1rem; align-items: start; }
-.inputs { display: flex; flex-direction: column; gap: .7rem; min-width: 0; }
-.field { display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; color: var(--muted); }
-.editor { display: flex; flex-direction: column; gap: .4rem; }
-.grid { display: grid; gap: 4px; overflow-x: auto; }
-.grid input, input.text, input.small, select { font: .88rem var(--font-mono); padding: .35rem .4rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 0; }
-.grid input { text-align: center; width: 100%; }
-input.small { width: 5rem; }
-.sizer, .actions, .rr-controls, .player-nav { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-button { font: 500 .86rem var(--font-body); padding: .42rem .8rem; border-radius: 7px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); cursor: pointer; }
-button.ghost { background: transparent; color: var(--accent); border-color: var(--line); }
-button:disabled { opacity: .45; cursor: default; }
-.sizer button { padding: .2rem .5rem; font-size: .78rem; }
-.fast { display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
-.stage { border-radius: 9px; padding: .6rem .7rem; min-width: 0; border: 1px solid var(--line); }
-.stage.float { background: var(--float-soft); border-color: transparent; }
-.stage.exact { background: var(--exact-soft); border-color: transparent; transition: opacity .2s; }
-.stage.exact.stale { opacity: .55; }
-.stage-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .35rem; font-size: .78rem; }
-.stage-body { overflow-x: auto; }
-.chip { font: 600 .7rem/1 var(--font-body); text-transform: uppercase; letter-spacing: .08em; padding: .28rem .5rem; border-radius: 99px; }
-.chip.float { color: var(--float); background: var(--surface); }
-.chip.exact { color: var(--exact); background: var(--surface); }
-.meta { color: var(--muted); font-family: var(--font-mono); font-size: .75rem; }
-.trust { font-family: var(--font-mono); font-size: .75rem; padding: .1rem .4rem; border-radius: 4px; background: var(--surface); }
-.trust.good { color: var(--exact); }
-.trust.rough { color: var(--float); }
-.trust.unsure { color: var(--bad); }
-.pending::after { content: ""; display: inline-block; width: .6em; height: .6em; margin-left: .4em; border-radius: 50%; background: var(--exact); animation: pulse 1s infinite; }
-@keyframes pulse { 50% { opacity: .2; } }
-@media (prefers-reduced-motion: reduce) { .pending::after { animation: none; } .stage.exact { transition: none; } }
-.mxwrap { overflow-x: auto; max-width: 100%; }
-table.mx { border-collapse: separate; border-spacing: 0; font: .86rem/1.3 var(--font-mono); font-variant-numeric: tabular-nums; border-left: 2px solid var(--fg); border-right: 2px solid var(--fg); border-radius: 4px; margin: .2rem 0; }
-table.mx td { padding: .22rem .6rem; text-align: right; white-space: nowrap; }
-table.mx td.bar { border-left: 1px dashed var(--muted); }
-table.mx tr.hl td { background: var(--accent-soft); }
-table.mx td.hlc { background: var(--accent-soft); }
-table.mx td.pivot { background: var(--pivot); font-weight: 600; }
-table.data { border-collapse: collapse; font: .82rem/1.35 var(--font-mono); font-variant-numeric: tabular-nums; }
-table.data th, table.data td { border-bottom: 1px solid var(--line); padding: .3rem .6rem; text-align: left; white-space: nowrap; }
-table.data th { font-family: var(--font-body); color: var(--muted); font-weight: 600; }
-dl.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem .8rem; margin: 0; }
-dl.kv dt { color: var(--muted); font-size: .8rem; padding-top: .15rem; }
-dl.kv dd { margin: 0; min-width: 0; overflow-x: auto; }
-.list { display: flex; flex-direction: column; gap: .2rem; }
-.alg small { color: var(--muted); font-family: var(--font-body); }
-.lines { display: flex; flex-direction: column; gap: .15rem; background: var(--sunk); border-radius: 6px; padding: .5rem .7rem; overflow-x: auto; }
-.player { border-top: 1px solid var(--line); padding-top: .8rem; display: flex; flex-direction: column; gap: .6rem; }
-.player-head { display: flex; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
-.player-main { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: 1rem; }
-.steplist { max-height: 22rem; overflow: auto; border-right: 1px solid var(--line); padding-right: .4rem; }
-ol.steps { margin: 0; padding-left: 1.4rem; font-size: .82rem; }
-ol.steps li.on .steplink { color: var(--accent); font-weight: 600; }
-.steplink { background: none; border: 0; color: var(--fg); padding: .12rem 0; text-align: left; font: inherit; cursor: pointer; }
-.player-body { min-width: 0; display: flex; flex-direction: column; gap: .6rem; }
-.step h4 { margin: 0 0 .3rem; font-size: 1rem; }
-.step p { margin: .2rem 0 .6rem; }
-.mats { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
-.mats figure { margin: 0; min-width: 0; max-width: 100%; }
-figcaption { font-size: .75rem; color: var(--muted); }
-.rr-state { min-width: 0; }
-.rr-status { font-size: .88rem; color: var(--muted); }
-.rr-status.done { color: var(--exact); font-weight: 600; }
-.rr-controls label { display: flex; gap: .3rem; align-items: center; font-size: .85rem; color: var(--muted); }
-ol.rr-log { font: .8rem var(--font-mono); color: var(--muted); margin: 0; padding-left: 1.4rem; columns: 2; }
-
-/* workbench */
-section.page.wide { max-width: 72rem; }
-.wb { display: flex; flex-direction: column; gap: .9rem; margin: 1.2rem 0; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 1rem; }
-.wb-top, .wb-modes, .wb-card-head, .wb-entry-head, .wb-cmdrow, .wb-examples, .wb-buttons, .wb-scalars { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-.wb-spacer { flex: 1; }
-.wb-settings { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; }
-.wb-seg { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
-.wb-seg button { padding: .3rem .7rem; font-size: .84rem; }
-.wb-seg button.on { background: var(--accent); color: var(--surface); }
-.wb-check { display: inline-flex; gap: .35rem; align-items: center; font-size: .86rem; color: var(--fg); }
-.wb-check.off { color: var(--muted); }
-.wb-check input[type="checkbox"] { accent-color: var(--accent); width: 1rem; height: 1rem; }
-.wb-buttons button.dim { opacity: .45; }
-.wb-alg small { color: var(--muted); font-family: var(--font-body); font-size: .8rem; }
-.wb-modes button { padding: .25rem .6rem; font: .8rem var(--font-mono); }
-.wb-modes button.on { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-.wb-layout { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
-.wb-left, .wb-right { display: flex; flex-direction: column; gap: .7rem; min-width: 0; }
-.wb-left h3 { margin: 0; }
-.wb-mats { display: flex; flex-direction: column; gap: .7rem; }
-.wb-card { border: 1px solid var(--line); border-radius: 10px; padding: .6rem; display: flex; flex-direction: column; gap: .45rem; background: var(--bg); }
-.wb-card .grid input { background: var(--surface); }
-.wb-card-head button, .wb-entry-head button.ghost { padding: .15rem .5rem; font-size: .76rem; }
-.wb-name { font: 700 1.05rem/1 var(--font-mono); color: var(--accent); }
-.grid input.bad { border-color: var(--bad); color: var(--bad); }
-.wb-text { font: .85rem/1.5 var(--font-mono); width: 100%; padding: .4rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); resize: vertical; }
-.wb-add { align-self: flex-start; }
-.wb-chip { font: .82rem var(--font-mono); background: var(--sunk); border-radius: 99px; padding: .15rem .3rem .15rem .6rem; display: inline-flex; align-items: center; gap: .2rem; }
-.wb-x { background: none; border: 0; color: var(--muted); padding: 0 .3rem; font-size: .9rem; }
-.wb-label { font-size: .85rem; color: var(--muted); }
-.wb-cmd { flex: 1; min-width: 12rem; font-size: .95rem; padding: .5rem .6rem; }
-.wb-statusrow { min-height: 1.1rem; }
-.wb-example { background: var(--sunk); color: var(--fg); border: 1px solid transparent; font: .78rem var(--font-mono); padding: .2rem .5rem; }
-.wb-example:hover { border-color: var(--accent); }
-.wb-palette { display: flex; flex-direction: column; gap: .35rem; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: .6rem 0; }
-.wb-group { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: .5rem; align-items: baseline; }
-.wb-group-label { font: 600 .7rem/1 var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.wb-buttons button { padding: .2rem .55rem; font: .8rem var(--font-mono); }
-.wb-log { display: flex; flex-direction: column; gap: .7rem; }
-.wb-entry { border-radius: 10px; background: var(--exact-soft); padding: .6rem .75rem; display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
-.wb-src { background: none; border: 0; padding: 0; color: var(--fg); font: 500 .9rem var(--font-mono); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
-.wb-out { overflow-x: auto; min-width: 0; }
-.wb-out p { margin: 0; }
-.wb-mat { display: flex; align-items: flex-end; gap: .5rem; }
-.wb-big { font-size: 1.05rem; }
-.wb-note { color: var(--muted); font-size: .86rem; margin: .3rem 0 0; }
-.wb-rec dl.kv { align-items: start; }
-tr.wb-sub td { font: 600 .72rem/1 var(--font-body) !important; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding-top: 1rem; }
-@media (max-width: 900px) {
-  .wb-layout { grid-template-columns: minmax(0, 1fr); }
-  .wb-group { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
-}
-
-/* hero */
-.hero { padding: .5rem 0 1rem; }
-.hero h1 { font-size: 2.5rem; }
-.hero-demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: var(--surface); }
-.hero-left { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
-.hero-out { display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
-.slider { font-size: .85rem; color: var(--muted); }
-.slider output { font-family: var(--font-mono); color: var(--fg); }
-input[type="range"] { width: 100%; accent-color: var(--accent); }
-.wk-track { position: relative; height: 1.4rem; background: var(--sunk); border-radius: 99px; overflow: hidden; margin: .4rem 0; }
-.wk-dot { position: absolute; left: 0; top: .2rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--accent); margin-left: 2%; will-change: transform; }
-.wk-track .wk-dot { transform: translateX(0); }
-.xs { display: flex; flex-direction: column; gap: .15rem; font-size: .95rem; overflow-x: auto; }
-
-@media (max-width: 900px) {
-  .shell { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
-  aside { position: static; max-height: none; }
-  nav.toc { display: none; }
-  #toc-select { display: block; }
-  .demo-grid, .hero-demo, .player-main { grid-template-columns: minmax(0, 1fr); }
-  .steplist { border-right: 0; border-bottom: 1px solid var(--line); max-height: 9rem; padding-bottom: .4rem; }
-  .hero h1 { font-size: 1.9rem; }
-  ol.rr-log { columns: 1; }
-}
-
-/* analytic additions */
-canvas.plot { width: 100%; height: 260px; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
-canvas.plot.tall { height: 380px; }
-button.toggle { background: transparent; color: var(--fg); border-color: var(--line); padding: .25rem .6rem; font-size: .82rem; }
-button.toggle.on { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-.params { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .4rem 1rem; }
-.explore-out { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: .8rem; align-items: start; }
-.explore-out .stage-body table.data td { white-space: normal; overflow-wrap: anywhere; }
-.explore-out .stage-body table.data td:first-child { white-space: nowrap; overflow-wrap: normal; }
-code.plain { background: none; padding: 0; }
-.legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .8rem; color: var(--muted); }
-.legend i { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; margin-right: .3rem; vertical-align: -1px; }
-@media (max-width: 900px) { .explore-out { grid-template-columns: minmax(0, 1fr); } }
-</style>
+<link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
 <div class="shell">
 <aside>
-  <header class="brand"><div class="mark">RatMath <span>analytic</span></div><small>Functions with proofs attached</small></header>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
   <select id="toc-select" aria-label="Page">
-    <option value="intro">Introduction</option>
-    <option value="reference">Reference</option>
-    <option value="explore">Explore</option>
-    <option value="fast">Fast, then certified</option>
-    <option value="models">Taylor models</option>
-    <option value="points">Values to many digits</option>
-    <option value="expressions">Formulas and derivatives</option>
-    <option value="ranges">Ranges and integrals</option>
-    <option value="zeros">Zeros, poles and extrema</option>
-    <option value="piecewise">Piecewise functions</option>
-    <option value="odes">Differential equations</option>
-    <option value="series">Your own series</option>
+    <option value="index.html" selected>Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html">Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html">Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html">Differential equations</option>
+    <option value="series.html">Your own series</option>
   </select>
   <nav class="toc" aria-label="Contents">
-    <a href="#intro">Introduction</a>
-    <a href="#reference">Reference</a>
-    <a href="#explore">Explore</a>
+    <a href="index.html" class="on" aria-current="page">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
     <div class="group">Ideas</div>
-    <a href="#fast">Fast, then certified</a>
-    <a href="#models">Taylor models</a>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html">Taylor models</a>
     <div class="group">Topics</div>
-    <a href="#points">Values to many digits</a>
-    <a href="#expressions">Formulas and derivatives</a>
-    <a href="#ranges">Ranges and integrals</a>
-    <a href="#zeros">Zeros, poles and extrema</a>
-    <a href="#piecewise">Piecewise functions</a>
-    <a href="#odes">Differential equations</a>
-    <a href="#series">Your own series</a>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html">Differential equations</a>
+    <a href="series.html">Your own series</a>
   </nav>
 </aside>
 <main>
-
 <section class="page" data-page="intro">
-  <div class="hero">
+<div class="hero">
     <div class="eyebrow">@ratmath/analytic</div>
     <h1>Answers about functions that come with a proof</h1>
     <p class="lede">A JavaScript library for calculus on exact rational numbers. Ask for a value, a range, an integral, the zeros or the solution of a differential equation. You get a floating-point answer at once, then an interval that is guaranteed to contain the true answer.</p>
@@ -297,7 +56,7 @@ code.plain { background: none; padding: 0; }
   <p>Move the slider. The curve and the guesses follow at float speed. When you stop, the zeros are proven, each one in its own small bracket that is shown to contain exactly one. The integral and the range come back as intervals, and the true values are inside them.</p>
   <h2>Why intervals</h2>
   <p>Most values of <code>exp</code>, <code>sin</code> or an integral are irrational, so no fraction is exactly right. RatMath's answer is a rational interval that certainly contains the true value, as narrow as you ask. Every step that could lose accuracy (a truncated series, a rounded constant, a range over a whole interval) is counted and added to the interval. So the result is a statement you can rely on, not an estimate.</p>
-  <p>Underneath sits the <a href="#models">Taylor model</a>: an exact polynomial plus an interval remainder, valid on a whole interval of inputs. Arithmetic, composition, integration and ODE steps all act on these models and keep that guarantee.</p>
+  <p>Underneath sits the <a href="models.html">Taylor model</a>: an exact polynomial plus an interval remainder, valid on a whole interval of inputs. Arithmetic, composition, integration and ODE steps all act on these models and keep that guarantee.</p>
   <h2>A first program</h2>
 <pre><code>import { R } from "@ratmath/core";
 import { fn, zeros, ode } from "@ratmath/analytic";
@@ -312,267 +71,19 @@ zeros("x^3 - 3x + 1", [-3, 3]).exact();   // three brackets, each with exactly o
 ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2" }).exact().final;  // y(1/2), certified</code></pre>
   <h2>Topics</h2>
   <div class="cards">
-    <a href="#explore"><strong>Explore</strong><span>Type any function and ask questions</span></a>
-    <a href="#fast"><strong>Fast, then certified</strong><span>Previews, progress, sliders</span></a>
-    <a href="#models"><strong>Taylor models</strong><span>Polynomial plus remainder</span></a>
-    <a href="#points"><strong>Many digits</strong><span>exp, log, sin, π with error bounds</span></a>
-    <a href="#expressions"><strong>Formulas</strong><span>Parsing and symbolic d/dx</span></a>
-    <a href="#ranges"><strong>Ranges and integrals</strong><span>Bernstein bounds, adaptive pieces</span></a>
-    <a href="#zeros"><strong>Zeros and extrema</strong><span>Sturm, Krawczyk, multiplicity</span></a>
-    <a href="#piecewise"><strong>Piecewise</strong><span>Regions like 2n :x:! 2n+1</span></a>
-    <a href="#odes"><strong>ODEs</strong><span>Validated Picard steps</span></a>
-    <a href="#series"><strong>Your own series</strong><span>Remainder rules you can check</span></a>
+    <a href="explore.html"><strong>Explore</strong><span>Type any function and ask questions</span></a>
+    <a href="fast.html"><strong>Fast, then certified</strong><span>Previews, progress, sliders</span></a>
+    <a href="models.html"><strong>Taylor models</strong><span>Polynomial plus remainder</span></a>
+    <a href="values.html"><strong>Many digits</strong><span>exp, log, sin, π with error bounds</span></a>
+    <a href="expressions.html"><strong>Formulas</strong><span>Parsing and symbolic d/dx</span></a>
+    <a href="ranges.html"><strong>Ranges and integrals</strong><span>Bernstein bounds, adaptive pieces</span></a>
+    <a href="zeros.html"><strong>Zeros and extrema</strong><span>Sturm, Krawczyk, multiplicity</span></a>
+    <a href="piecewise.html"><strong>Piecewise</strong><span>Regions like 2n :x:! 2n+1</span></a>
+    <a href="odes.html"><strong>ODEs</strong><span>Validated Picard steps</span></a>
+    <a href="series.html"><strong>Your own series</strong><span>Remainder rules you can check</span></a>
   </div>
+<nav class="pager" aria-label="Previous and next page"><span></span><a class="next" href="reference.html">Reference →</a></nav>
 </section>
-
-<section class="page" data-page="reference" hidden>
-  <div class="eyebrow">Reference</div>
-  <h1>Everything in the library</h1>
-  <p>Numbers can be JS integers, bigints, strings such as <code>"3/4"</code> or <code>"0.1"</code> (decimals are exact), Core <code>Rational</code>s, or Core intervals such as <code>R`1/2:1`</code>. Functions marked <em>R</em> return a <a href="#fast">Refinement</a>: <code>.quick</code> is the float preview, <code>.exact()</code> or <code>await .settle()</code> gives the certified answer. When a hypothesis fails (a log of something that can reach 0, a divisor that can be 0, a point outside the domain), the library throws an <code>AnalyticError</code> with a <code>code</code> and a reason. It does not return a bound it cannot prove.</p>
-
-  <h2>Formulas</h2>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>call</th><th>returns</th><th>notes</th></tr>
-    <tr><td>fn(text, { variable, params })</td><td>AnalyticFunction or PiecewiseFunction</td><td>Text, an AST, or the piecewise form <code>"rule if region; …; rule otherwise"</code></td></tr>
-    <tr><td>f.value(x, { digits = 20 })</td><td><em>R</em> RationalInterval</td><td>a point interval for rational-only formulas</td></tr>
-    <tr><td>f.range(I, { digits = 6, order = 8, maxPieces = 256 })</td><td><em>R</em> RationalInterval</td><td>preview: 256 samples (trust rough)</td></tr>
-    <tr><td>f.integral(a, b, { digits = 12, order = 12, maxPieces })</td><td><em>R</em> RationalInterval</td><td>preview: Gauss–Legendre</td></tr>
-    <tr><td>f.derivative()</td><td>a new function</td><td>symbolic and simplified</td></tr>
-    <tr><td>f.model(D, { order, bits, centre })</td><td>TaylorModel</td><td>certified on the domain D</td></tr>
-    <tr><td>f.float(x)</td><td>number</td><td>no guarantee</td></tr>
-    <tr><td>f.with({ a: "3/8" })</td><td>a new function</td><td>other parameter values (sliders)</td></tr>
-    <tr><td>f.toString()</td><td>string</td><td>calculator notation that parses back</td></tr>
-  </table></div>
-  <p>Grammar: <code>+ - * / ^</code> (or <code>**</code>), parentheses, implicit products (<code>2x</code>, <code>3(x+1)</code>, <code>2sin(x)</code>), <code>-x^2 = -(x^2)</code>, <code>^</code> right-associative. Functions: <code>exp log ln sqrt sin cos tan atan sinh cosh tanh log1p abs min max</code>; constants <code>pi e</code>. It is the same grammar and the same plain AST as <code>@ratmath/graphics</code>.</p>
-
-  <h2>Features of a function</h2>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>call</th><th>record kinds</th><th>fields</th></tr>
-    <tr><td>zeros(f, [a, b], opts)</td><td>exact, sign-change, possible, undefined</td><td>at, lo, hi, unique, multiplicity, atMost, bound</td></tr>
-    <tr><td>poles(f, [a, b], opts)</td><td>pole, hole, undefined</td><td>order (poles), value (a hole's limit)</td></tr>
-    <tr><td>extrema(f, [a, b], opts)</td><td>max, min, flat, possible</td><td>value, unique</td></tr>
-    <tr><td>inflections(f, [a, b], opts)</td><td>inflection, possible</td><td>value, unique</td></tr>
-    <tr><td>simplestBetween(a, b)</td><td>Rational</td><td>smallest denominator in [a, b]</td></tr>
-  </table></div>
-  <p>All four are <em>R</em>. Options: <code>variable</code>, <code>params</code>, <code>tolerance</code> (bracket width, default 10⁻⁶), <code>pieces</code>, <code>maxDepth</code>, <code>flatBits</code>. Previews are <code>{ kind: "guess", at }</code>. A bracket with no record certainly holds none.</p>
-
-  <h2>Piecewise</h2>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>call</th><th>returns</th><th>notes</th></tr>
-    <tr><td>piecewise([[region, rule], …], opts)</td><td>PiecewiseFunction</td><td>first matching piece wins</td></tr>
-    <tr><td>where`2:!x:8`</td><td>Region</td><td>template tag; values may be interpolated</td></tr>
-    <tr><td>new Region(text | x =&gt; bool, { variable, params })</td><td>Region</td><td><code>.test(x)</code>, <code>.match(x)</code> → { n }, <code>.intervals(a, b)</code>, <code>.breakpoints(a, b)</code></td></tr>
-    <tr><td>p.breaks([a, b])</td><td><em>R</em> records</td><td>{ at, value, left, right, kind: continuous | jump | removable | edge | unproven, defined }</td></tr>
-    <tr><td>p.segments(a, b)</td><td>array</td><td>open pieces and points with the active rule</td></tr>
-    <tr><td>p.value, range, integral, zeros, extrema, inflections, poles, derivative</td><td></td><td>piece by piece</td></tr>
-  </table></div>
-
-  <h2>Differential equations</h2>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>call</th><th>returns</th><th>notes</th></tr>
-    <tr><td>ode.solve({ f, y0, t0, until, order = 10, step, tol, maxSteps, vars, time, params, float })</td><td><em>R</em> ODESolution</td><td>preview: RK4 samples { t, y }</td></tr>
-    <tr><td>sol.at(t), sol.final, sol.steps, sol.complete, sol.reason, sol.describe()</td><td></td><td>enclosures of y(t)</td></tr>
-    <tr><td>ode.step({ f, y0, step, order })</td><td>{ t0, t1, models, model }</td><td>one validated step, or an error</td></tr>
-  </table></div>
-  <p><code>f</code> is a formula in <code>t</code> and <code>y</code>, an array of formulas for a system (<code>vars</code> names the unknowns), or a JS function <code>(t, y) =&gt; model</code> with an optional <code>float</code> twin for previews.</p>
-
-  <h2>Taylor models</h2>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>call</th><th>notes</th></tr>
-    <tr><td>Domain(R`a:b`, { centre })</td><td>centre defaults to the midpoint</td></tr>
-    <tr><td>TM.x(D, { order = 12, bits = 96 }), TM.constant(D, v), TM.polynomial(D, [a0, a1, …])</td><td>sources</td></tr>
-    <tr><td>.add .subtract .negate .multiply .divide .pow(n)</td><td>with models or numbers</td></tr>
-    <tr><td>exp sin cos tan log log1p atan sqrt sinh cosh tanh reciprocal power(g, a)</td><td>elementary functions of models</td></tr>
-    <tr><td>.at(x) .range() .integral(a, b) .integrate() .derivative()</td><td>derivative only for exact polynomials</td></tr>
-    <tr><td>.coefficients .remainder .centre .order .describe() .toJSON()</td><td></td></tr>
-    <tr><td>series(D, { coefficient, rule, M, q, error, lookahead })</td><td>user series; rules lagrange, ratio, alternating, explicit</td></tr>
-  </table></div>
-
-  <h2>Points, constants, plumbing</h2>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>call</th><th>notes</th></tr>
-    <tr><td>enclose.exp(x, bits) (also log, sqrt, atan, sin, cos, tan, sinh, cosh, tanh, log1p)</td><td>points or intervals → RationalInterval</td></tr>
-    <tr><td>constants.pi(bits), constants.e(bits)</td><td></td></tr>
-    <tr><td>createScope({ digits, bits, order })</td><td>callable set for evaluators: exp, sin, …, model, integral, range, fn, d, ode, zeros, …</td></tr>
-    <tr><td>Refinement, live(compute, onStage, { idleMs })</td><td>the shared fast-then-exact shape</td></tr>
-    <tr><td>parse, format, differentiate(ast, name), compileFloat(ast), modelOf(ast, env, base), encloseAst(ast, env, bits)</td><td>expression tools</td></tr>
-  </table></div>
-</section>
-
-<section class="page wide" data-page="explore" hidden>
-  <div class="eyebrow">Explore</div>
-  <h1>Ask anything about a function</h1>
-  <p>Type a formula, or a piecewise function such as <code>x - n if n:x:!n+1</code>. Names other than <code>x</code> become sliders in steps of 1/8. Choose which questions to ask. Each answer shows its float preview at once and its certified form when it arrives. Your last function is remembered in this browser.</p>
-  <div class="legend"><span><i style="background: var(--accent)"></i>zeros, f</span><span><i style="background: var(--accent-dark)"></i>maxima and minima</span><span><i style="background: var(--accent-light)"></i>inflection points</span><span><i style="background: var(--bad)"></i>poles</span><span><i style="border: 2px solid var(--accent); background: var(--surface)"></i>open: undecided, a hole, or a one-sided limit</span></div>
-  <div data-demo="explore"></div>
-</section>
-
-<section class="page" data-page="fast" hidden>
-  <div class="eyebrow">Idea</div>
-  <h1>Fast, then certified</h1>
-  <p>Certified answers cost more than floating-point ones, sometimes a thousand times more. Someone dragging a slider needs a picture now; someone writing down a result needs it to be true. So every question returns a <code>Refinement</code> that can answer both ways. It is the same class the RatMath linear algebra and graphics libraries use, so one loop can drive all three.</p>
-<pre><code>const job = fn("exp(sin(3x))*x").range(R`0:3`, { digits: 6 });
-job.quick;            // { stage: "float", value: [lo, hi], trust: "rough" }
-for (const s of job.stages()) …   // float, then progress ticks, then the certified stage
-job.exact();          // run to the end now (fine in a Worker)
-await job.settle({ signal, sliceMs: 8, onProgress });   // the same, in time slices</code></pre>
-  <div data-demo="stages"></div>
-  <h2>How far to trust a preview</h2>
-  <p><code>trust</code> is <code>good</code> when the float computation is normally accurate (a value, an integral by Gauss–Legendre), <code>rough</code> when it can miss things (a range from samples can miss a narrow peak; zero guesses come from sign changes, so a double root is invisible), and <code>unsure</code> when the float answer is not finite.</p>
-  <h2>Progress and partial answers</h2>
-  <p>Progress ticks look like <code>{ stage: "progress", done, of, step, partial }</code>. <code>partial</code> is the answer so far: a range that is already valid but still wide, an integral over the pieces done, the ODE steps validated so far, the zeros found so far. A display can sharpen as they arrive.</p>
-  <h2>Sliders: live</h2>
-<pre><code>const f = fn("a*sin(x)", { params: { a: 1 } });
-const update = live((a) => f.with({ a }).value("1/2"), (stage) => show(stage.value, stage.exact), { idleMs: 30 });
-slider.oninput = () => update(`${slider.value}/8`);</code></pre>
-  <p>Each update shows the preview at once. Certified work starts once the input has been still for <code>idleMs</code>, runs in slices, and is cancelled by the next update, so only the latest question is ever finished.</p>
-</section>
-
-<section class="page" data-page="models" hidden>
-  <div class="eyebrow">Idea</div>
-  <h1>Taylor models</h1>
-  <p>A Taylor model on a domain D = [a, b] with centre c is a pair (P, I): a polynomial P with exact rational coefficients and a rational interval I, such that</p>
-  <span class="math">f(x) − P(x − c) ∈ I   for every x in D.</span>
-  <p>This is the basic object of validated numerics (Berz and Makino; Moore's interval analysis). It is stronger than a value: it describes f on the whole domain, so ranges, integrals and compositions come from it with the error already counted.</p>
-  <div data-demo="model"></div>
-  <h2>Arithmetic</h2>
-  <p>Sums add polynomials and remainders. A product multiplies the polynomials exactly, keeps degrees up to the order, and bounds the rest: the dropped high-degree part over D, plus P·J + Q·I + I·J. Each bound is a range of an exact polynomial, so nothing is lost but what is deliberately moved into the remainder.</p>
-  <h2>Elementary functions</h2>
-  <p>For exp, sin, log and the others, the library composes the function's own Taylor series about g(c) with the model g. The Lagrange remainder f⁽ⁿ⁺¹⁾(ξ)/(n+1)!·hⁿ⁺¹ is bounded over the whole range of the argument: e^max for exp, 1 for sin and cos, and for log, 1/x and sqrt the argument's range must stay away from 0, or the library refuses. Coefficients that are irrational, like e^c, are certified intervals; their midpoints go into P and their radii into I.</p>
-<pre><code>const D = Domain(R`0:1/2`);
-const x = TM.x(D, { order: 12 });
-const g = exp(sin(x)).multiply(x);
-g.coefficients;   // exact Rationals, in powers of (x − 1/4)
-g.remainder;      // a tiny interval
-g.range();        // Bernstein bounds with bisection
-g.integral();     // certified ∫ over D</code></pre>
-  <h2>Derivatives</h2>
-  <p>The remainder of a model says nothing about the derivative's error: f could wiggle inside I. So <code>model.derivative()</code> only works for exact polynomials, and derivatives are taken from the formula instead (<a href="#expressions">symbolic d/dx</a>), then modelled afresh with their own remainder.</p>
-</section>
-
-<section class="page" data-page="points" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Values to many digits</h1>
-  <p>At a single rational point, the library sums each function's series with an explicit bound on the tail, after reducing the argument to where the series converges fast:</p>
-  <ul>
-    <li><strong>exp</strong>: halve the argument until it is below 1/4, sum Σ rᵏ/k! (the tail after k terms is at most twice the next term), then square back.</li>
-    <li><strong>log</strong>: <code>2·atanh((q − 1)/(q + 1))</code> after scaling by powers of 2, with log 2 from the same series.</li>
-    <li><strong>sin, cos</strong>: reduce modulo 2π with a certified π, then the alternating series; the uncertainty in π becomes a little more width.</li>
-    <li><strong>atan, π</strong>: an alternating series for small arguments, argument halving otherwise; π from Machin's formula.</li>
-    <li><strong>sqrt</strong>: an integer square root on scaled numerator and denominator, exact when the square is perfect.</li>
-  </ul>
-  <div data-demo="points"></div>
-  <p>The display uses RatMath's interval notation: <code>0.46235716975[69:70]</code> means the value lies between 0.4623571697569 and 0.4623571697570.</p>
-</section>
-
-<section class="page" data-page="expressions" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Formulas and derivatives</h1>
-  <p><code>fn(text)</code> parses calculator notation into a plain tree of <code>num</code>, <code>var</code>, <code>const</code>, <code>op</code> and <code>call</code> nodes. The same tree can then be evaluated three ways: with floats for previews, as a Taylor model for certified answers, or with plain intervals for quick exclusion tests.</p>
-  <h2>Symbolic d/dx</h2>
-  <p>Derivatives follow the rules you know (sum, product, quotient, chain; d/dx aᵇ in general form), and simplify as they build: constants fold, 0·u and 1·u disappear, (uᵐ)ⁿ becomes uᵐⁿ. Because the derivative is a formula, its model has its own proven remainder.</p>
-  <div data-demo="deriv"></div>
-<pre><code>fn("x^3 + 2x - 1/x").derivative().toString();   // "3*x^2 + 2 + 1/x^2"
-differentiate(parse("atan(x^2)"), "x");         // an AST: 2*x/(1 + x^4)</code></pre>
-  <h2>Parameters and intervals</h2>
-  <p>Names other than the variable are parameters: <code>fn("a*x^2", { params: { a: "3/8" } })</code>. A parameter may be an interval, <code>{ a: R`1:2` }</code>; then every answer holds for every a in that range.</p>
-  <h2>Non-smooth pieces</h2>
-  <p><code>abs</code>, <code>min</code> and <code>max</code> are modelled where they are smooth on the domain (the argument keeps one sign, or one argument stays on top) and refused where they are not. Split the domain there, or write the function <a href="#piecewise">piecewise</a>.</p>
-</section>
-
-<section class="page" data-page="ranges" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Ranges and integrals</h1>
-  <h2>Bounding a polynomial</h2>
-  <p>Evaluating a polynomial with interval arithmetic gives a valid range, but a loose one: x − x over [0, 1] comes out as [−1, 1]. The Bernstein form is better. Rewritten in the Bernstein basis on [a, b], the polynomial's range lies between its smallest and largest Bernstein coefficients, and the end coefficients are exact values. Splitting the interval tightens the bound quadratically.</p>
-  <h2>Adaptive pieces</h2>
-  <p><code>f.range(I)</code> keeps a list of pieces, each with a Taylor model. The outer bound is the hull of the pieces' bounds. The inner bound comes from certified values at piece midpoints: the true maximum is at least the largest of them. Only the pieces that hold the current extremes are split, until outer and inner bounds agree to the requested digits.</p>
-  <div data-demo="range"></div>
-  <h2>Integrals</h2>
-  <p>The integral of a Taylor model is the exact integral of P plus I·(b − a). <code>f.integral(a, b)</code> splits [a, b] until each piece's width meets its share of the budget, so effort goes where the function is hard.</p>
-  <div data-demo="integral"></div>
-</section>
-
-<section class="page" data-page="zeros" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Zeros, poles and extrema</h1>
-  <p>Finding where f = 0 numerically is easy. Proving it is harder: that there is a zero in a bracket, that there is only one, and that there are none elsewhere. The library uses two engines.</p>
-  <div data-demo="zeros"></div>
-  <h2>Rational functions: exact</h2>
-  <p>When f is built from + − × ÷ and integer powers with rational numbers, it is read exactly as N/D. Then:</p>
-  <ul>
-    <li><strong>Holes.</strong> G = gcd(N, D) cancels. Points where G = 0 are holes: f is undefined there, but the limit exists, and the library reports it.</li>
-    <li><strong>Multiplicity.</strong> Yun's square-free decomposition writes N/G = a₁·a₂²·a₃³⋯ with each aᵢ free of repeated roots, so every root comes with its multiplicity, and every pole with its order.</li>
-    <li><strong>Isolation.</strong> A Sturm sequence counts the distinct roots in any interval exactly. Bisection splits at the simplest rational in the middle half of each bracket, so roots like 1 or −2/3 are hit exactly, and irrational roots end in brackets like [1393/985, 1970/1393] around √2.</li>
-  </ul>
-  <h2>Everything else: Krawczyk</h2>
-  <p>For a bracket X with midpoint m, Y ≈ 1/f′(m), and an interval bound F′(X) on the derivative,</p>
-  <span class="math">K = m − Y·f(m) + (1 − Y·F′(X))·(X − m)</span>
-  <p>contains every zero of f in X. If K misses X, there is no zero. If K lies inside X, there is exactly one, and replacing X by K ∩ X narrows it quadratically, like Newton's method but with proof. Where F′(X) contains 0 (a double root, two close roots), the test cannot decide, so the bracket is reported as <code>possible</code>, with <code>atMost: m</code> when the m-th derivative is proven nonzero there: by Rolle's theorem, f then has at most m zeros there, counted with multiplicity.</p>
-  <p>At an exact zero, the derivatives that are exactly 0 there give a lower bound on the multiplicity. When Rolle's bound matches it nearby, the multiplicity is proven. So sin(x)² has a zero of multiplicity exactly 2 at 0, while near π it can only say "at most 2": no finite computation can tell a double root from two very close roots, or from a near miss.</p>
-  <h2>Functions flat to every order</h2>
-  <p>e^(−1/x²) and all its derivatives tend to 0 at x = 0. Near 0 it is smaller than any number the library can represent, so it cannot be told apart from 0 there. Those brackets come back as <code>possible</code> with <code>bound</code>, the proven maximum of |f| on them, and with no <code>atMost</code>, because every derivative is just as flat. Outside them f is proven positive.</p>
-  <div data-demo="flat"></div>
-  <h2>Poles, extrema, inflections</h2>
-  <p>Poles are zeros of denominators (and of cos inside tan) where the numerator is proven nonzero, and only where the blow-up reaches f. A division inside exp is not a pole of f: e^(−1/x²) tends to 0. Extrema are zeros of f′, classified by the sign of f″ or by the sign change of f′. Inflection points are zeros of f″ where f″ changes sign.</p>
-</section>
-
-<section class="page" data-page="piecewise" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Piecewise functions</h1>
-  <p>A piecewise function is a list of pairs: a region and a rule. The first region that contains x decides the rule. Regions use a betweenness chain on x:</p>
-  <div class="tablewrap"><table class="ref">
-    <tr><th>region</th><th>meaning</th></tr>
-    <tr><td>2:x:8</td><td>2 ≤ x ≤ 8</td></tr>
-    <tr><td>_:x:8 &nbsp;&nbsp; 2:x:_</td><td>x ≤ 8 &nbsp;&nbsp; x ≥ 2 (_ is an unbounded side)</td></tr>
-    <tr><td>2:!x:8 &nbsp;&nbsp; 2:x:!8</td><td>2 &lt; x ≤ 8 &nbsp;&nbsp; 2 ≤ x &lt; 8 (:! is a strict link)</td></tr>
-    <tr><td>2n :x:! 2n+1</td><td>2n ≤ x &lt; 2n+1 for some integer n</td></tr>
-    <tr><td>_:x:!-1 || 1:!x:_</td><td>a union: x &lt; −1 or x &gt; 1</td></tr>
-    <tr><td>all, else, otherwise</td><td>every x</td></tr>
-  </table></div>
-  <p>A name in a bound that is not a parameter is an integer variable. Bounds must be affine in it (like 2n + 1 or 3 − n/2). For each x the library solves for the integer n that fits, and the rule can use n too: <code>x - n if n:x:!n+1</code> is the sawtooth. A region can also be a plain function <code>x =&gt; boolean</code>; it answers point questions, but ranges, integrals and zeros need breakpoints, which only chains provide.</p>
-  <div data-demo="regions"></div>
-<pre><code>fn("x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise");
-piecewise([["2n:x:!2n+1", "1"], ["2n+1:x:!2n+2", "-1"]]);   // a square wave
-where`${a}:!x:${b}`;                                          // a Region from a template</code></pre>
-  <div data-demo="piecewise"></div>
-  <h2>Breaks</h2>
-  <p><code>breaks([a, b])</code> lists each breakpoint with the value there (if any piece contains it), the limits from the left and right rules, and a kind. <code>continuous</code> means all three are proven equal. <code>jump</code> means the two limits are proven different. <code>removable</code> means the limits agree but the value is missing or different. That is what a plot needs to draw filled and open dots.</p>
-  <h2>Questions piece by piece</h2>
-  <p>Values, ranges, integrals, zeros, extrema and inflections are answered on each open piece with that piece's rule, then combined. A sign change across a jump is not a zero. The zero finder only looks inside pieces and at points where the value is exactly 0.</p>
-</section>
-
-<section class="page" data-page="odes" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Differential equations</h1>
-  <p>For y′ = F(t, y) with y(t₀) given, a step over [t₀, t₀ + h] works like this:</p>
-  <ol>
-    <li>Iterate Picard's map on polynomials to get P ≈ y on the step.</li>
-    <li>Look for an interval I with Φ(P + I) ⊂ P + I, where Φ(y)(t) = y₀ + ∫ F(s, y(s)) ds is evaluated in Taylor-model arithmetic. Φ then maps the set of functions within I of P into itself. By Schauder's fixed-point theorem, and uniqueness for these smooth right-hand sides, the solution stays within I of P on the whole step.</li>
-    <li>Shrink I by applying Φ again, or halve h and retry if no such I exists.</li>
-  </ol>
-  <p>Steps chain through the enclosure at the end of each step. Step sizes adapt: h halves when validation fails, or while halving still shrinks the width a step adds, and doubles after a success. A solution that blows up ends with <code>complete: false</code> and a reason, never with a wrong enclosure.</p>
-  <div data-demo="ode"></div>
-<pre><code>ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });   // a system
-ode.solve({ f: "y", y0: R`1:101/100`, until: 1 });                        // an uncertain start</code></pre>
-  <h2>The wrapping effect</h2>
-  <p>Systems are enclosed component by component, as boxes. A rotating flow turns each box, and the box around the turned box is larger. Over long spans the enclosure grows for that reason alone. Shorter spans, higher order, or (not built yet) preconditioned steps keep it tight.</p>
-</section>
-
-<section class="page" data-page="series" hidden>
-  <div class="eyebrow">Topic</div>
-  <h1>Your own series</h1>
-  <p>For a function given by its power series coefficients aₖ, the remainder after degree p needs an argument. <code>series</code> makes you name one and checks what it can:</p>
-  <ul>
-    <li><strong>alternating</strong>: the terms alternate in sign and shrink, so the tail lies between 0 and the first omitted term. Checked on the next 32 terms for every x in the domain.</li>
-    <li><strong>ratio</strong>: |aₖ₊₁|·r ≤ q·|aₖ| with q &lt; 1 beyond p, so the tail is at most the first omitted term divided by 1 − q. Checked on the next 32 terms.</li>
-    <li><strong>lagrange</strong>: you supply M ≥ max |f⁽ᵖ⁺¹⁾| on the domain.</li>
-    <li><strong>explicit</strong>: you supply the error.</li>
-  </ul>
-  <p>What the library cannot check (the terms beyond the lookahead, your M, your error) is your claim, so the model is marked <code>assumed</code>, and <code>describe()</code> says so.</p>
-  <div data-demo="series"></div>
-</section>
-
 </main>
 </div>
 <script type="module" src="assets/pages.js"></script>

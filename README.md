@@ -13,9 +13,15 @@ reaches 0, a divisor whose range contains 0, a point outside the domain) the
 library throws an `AnalyticError` with a reason instead of returning a bound it
 cannot prove.
 
-**Docs site:** an introduction, a full reference, a live explorer and topic
-pages with interactive demos live in `docs/` (GitHub Pages from the `docs`
-folder). Rebuild the bundled library with `bun run docs:build`.
+**Docs site:** GitHub Pages from the `docs` folder, one HTML file per page:
+an overview (`index.html`), a full reference (`reference.html`), a free-form
+explorer (`explore.html`), and topic pages with the mathematics, worked
+examples and live demos (values, formulas, Taylor models, ranges and
+integrals, zeros, piecewise, ODEs, series, fast-then-certified). The page
+bodies live in `docs-src/pages/` and share `docs-src/layout.html`;
+`bun run docs:build` bundles the library to `docs/assets/analytic.js` and
+writes the pages (`scripts/build-pages.js`). Edit `docs-src`, not the
+generated `docs/*.html`.
 
 Design notes: `docs/design/analytic-functions.md` in the [ratmath umbrella](https://github.com/ratmath/ratmath).
 This package depends only on Core (not on `packages/reals`).

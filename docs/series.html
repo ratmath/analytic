@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your own series · RatMath Analytic</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+    <option value="index.html">Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html">Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html">Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html">Differential equations</option>
+    <option value="series.html" selected>Your own series</option>
+  </select>
+  <nav class="toc" aria-label="Contents">
+    <a href="index.html">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
+    <div class="group">Ideas</div>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html">Taylor models</a>
+    <div class="group">Topics</div>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html">Differential equations</a>
+    <a href="series.html" class="on" aria-current="page">Your own series</a>
+  </nav>
+</aside>
+<main>
+<section class="page" data-page="series">
+<div class="eyebrow">Topic</div>
+  <h1>Your own series</h1>
+  <p>Many functions are known by their power series and nothing else: special functions, generating functions, solutions found by undetermined coefficients. <code>series</code> turns coefficients aₖ into a Taylor model, f(x) = Σ aₖ (x − c)ᵏ, on a domain you choose. The hard part is the remainder: the coefficients alone never prove how big the tail Σ over k &gt; p is. So <code>series</code> asks you to name the argument, checks what a computer can check, and records what it cannot.</p>
+
+  <h2>Four rules for the tail</h2>
+  <table class="ref">
+    <tr><th>Rule</th><th>Hypothesis</th><th>Tail bound</th><th>What is checked</th></tr>
+    <tr><td><code>alternating</code></td><td>the terms aₖ(x − c)ᵏ alternate in sign and shrink in size</td><td>between 0 and the first omitted term</td><td>the next 32 terms, for every x in the domain</td></tr>
+    <tr><td><code>ratio</code></td><td>|aₖ₊₁|·r ≤ q·|aₖ| beyond p, with q &lt; 1 and r the radius of the domain</td><td>at most the first omitted term divided by 1 − q</td><td>the next 32 terms</td></tr>
+    <tr><td><code>lagrange</code></td><td>you give M ≥ max |f⁽ᵖ⁺¹⁾| on the domain</td><td>M·rᵖ⁺¹/(p+1)!</td><td>nothing: M is your claim</td></tr>
+    <tr><td><code>explicit</code></td><td>you give the error bound</td><td>your bound</td><td>nothing</td></tr>
+  </table>
+  <p>A computer can check finitely many terms, and a rule is about all of them. So a model built with any rule is marked <code>assumed</code>, and <code>describe()</code> lists exactly what was assumed. A rule that fails on the checked terms is refused.</p>
+<pre><code>import { series, Domain } from "@ratmath/analytic";
+import { R } from "@ratmath/core";
+
+const D = Domain(R`0:1/2`, { centre: 0 });
+// log(1 + x) = x − x²/2 + x³/3 − …
+const L = series(D, { coefficient: (k) => (k === 0 ? R`0` : R`${k % 2 ? 1 : -1}/${k}`), degree: 20, order: 20, rule: "alternating" });
+L.at(R`1/4`);       // encloses log(5/4)
+L.assumed;          // true: terms beyond the next 32 are assumed to keep alternating
+L.describe();
+
+// e^x with Lagrange: on [0, 1/2] every derivative of e^x is below 2
+series(D, { coefficient: (k) => R`1/${factorial(k)}`, degree: 15, order: 15, rule: "lagrange", M: 2 });</code></pre>
+  <p>The alternating rule really is checked: on [−1/2, 1/2] the log(1 + x) series is refused, because for negative x every term is negative.</p>
+
+  <h2>Worked check: log(1 + x) at 1/4</h2>
+  <p>Keep degree 16 on [0, 1/2]. The first omitted term is at most (1/2)¹⁷/17 ≈ 5.8·10⁻⁷ anywhere on the domain, so the model's remainder is about that wide. At x = 1/4 alone the error is far smaller, (1/4)¹⁷/17 ≈ 3.4·10⁻¹², but a model promises a bound for the whole domain, and evaluating it at a point keeps the domain-wide remainder. For a sharper value at one point, use a narrower domain or a higher degree. The built-in <code>log</code> gets log(5/4) from its own series, so the two enclosures must overlap; the demo compares them.</p>
+  <div data-demo="seriesCheck"></div>
+
+  <h2>Build one from a formula</h2>
+  <p>Write the coefficient as a formula in k and choose a rule. The coefficients must come out as exact rationals.</p>
+  <div data-demo="series"></div>
+
+  <h2>Once you have the model</h2>
+  <p>A series model is an ordinary Taylor model, so everything on the <a href="models.html">Taylor models</a> page applies: compose it with exp or sin, multiply it by other models, take its range or integral. The assumption travels with it, and <code>describe()</code> on the final result still says what was assumed.</p>
+<nav class="pager" aria-label="Previous and next page"><a class="prev" href="odes.html">← Differential equations</a><span></span></nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js"></script>
+</body>
+</html>
