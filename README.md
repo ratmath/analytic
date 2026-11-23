@@ -320,15 +320,16 @@ brackets left when it runs out come back as `possible`, and `via` says so.
 ## Piecewise functions
 
 A piecewise function is a list of (region, rule) pairs; the first region that
-contains x wins. Regions are betweenness chains on x:
+contains x wins. Regions are betweenness chains on x, read by Core's `Region`
+(`@ratmath/core` 0.9.0); the same text works in `R.region` and RiX chains:
 
 | region | meaning |
 | --- | --- |
 | `2:x:8` | 2 ≤ x ≤ 8 |
-| `:x:8`, `2:x:` | x ≤ 8, x ≥ 2 (an empty side is unbounded) |
-| `2:!x:8`, `2:x:!8` | 2 < x ≤ 8, 2 ≤ x < 8 (`!` right after a colon is strict) |
+| `_:x:8`, `2:x:_` | x ≤ 8, x ≥ 2 (`_` is an unbounded side) |
+| `2:!x:8`, `2:x:!8` | 2 < x ≤ 8, 2 ≤ x < 8 (`:!` is a strict link) |
 | `2n :x:! 2n+1` | 2n ≤ x < 2n+1 for some integer n |
-| `:x:!-1 \| 1:!x:` | a union |
+| `_:x:!-1 \|\| 1:!x:_` | a union |
 | `all`, `else`, `otherwise` | every x |
 
 A name in a bound that is not a parameter is an integer variable; bounds must
@@ -339,7 +340,7 @@ need breakpoints.
 
 ```js
 import { fn, piecewise, where } from "@ratmath/analytic";
-const f = fn("x^2 if :x:1; 3 - x if 1:!x:2; 1/2 otherwise");
+const f = fn("x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise");
 const square = piecewise([["2n:x:!2n+1", "1"], ["2n+1:x:!2n+2", "-1"]]);
 const r = where`${a}:!x:${b}`; // a Region from a template
 f.breaks([-2, 4]).exact();     // jumps, removable points, closed sides

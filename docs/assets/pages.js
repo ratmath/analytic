@@ -1,8 +1,8 @@
 // Mounts the demos on each docs page and handles page switching.
-import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=48f3b44600";
-import { explorer } from "./explore.js?v=48f3b44600";
-import { MORE } from "./more-demos.js?v=48f3b44600";
-import { mountRunboxes } from "./runbox.js?v=48f3b44600";
+import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=cbeb5e37fa";
+import { explorer } from "./explore.js?v=cbeb5e37fa";
+import { MORE } from "./more-demos.js?v=cbeb5e37fa";
+import { mountRunboxes } from "./runbox.js?v=cbeb5e37fa";
 
 const { R, fn } = A;
 const num = (s) => A.Rational.from ? A.Rational.from(String(s).trim()) : new A.Rational(String(s).trim());
@@ -275,7 +275,7 @@ const DEMOS = {
     demo(el, {
       title: "Piecewise functions",
       inputs: [
-        { id: "f", label: "f(x)", value: "x^2 if :x:1; 3 - x if 1:!x:2; 1/2 otherwise" },
+        { id: "f", label: "f(x)", value: "x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise" },
         { id: "I", label: "interval", value: "-2:4" },
       ],
       tasks: ({ f, I }) => {

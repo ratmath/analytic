@@ -1,7 +1,7 @@
 // The explore page: type a function (or a piecewise one), pick an interval,
 // move parameter sliders, and ask questions. Every answer shows the float
 // preview at once and the certified answer when it arrives.
-import { A, h, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=48f3b44600";
+import { A, h, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=cbeb5e37fa";
 
 const STORE = "ratmath-analytic-explore-v1";
 const QUESTIONS = [
@@ -24,8 +24,8 @@ const EXAMPLES = [
   ["exp(-1/x^2)", "-2:2"],
   ["x - n if n:x:!n+1", "-3:3"],
   ["1 if 2n:x:!2n+1; -1 if 2n+1:x:!2n+2", "-4:4"],
-  ["x^2 if :x:1; 3 - x if 1:!x:2; a otherwise", "-2:4"],
-  ["atan(x)/x if :x:!0 | 0:!x:; 1 otherwise", "-6:6"],
+  ["x^2 if _:x:1; 3 - x if 1:!x:2; a otherwise", "-2:4"],
+  ["atan(x)/x if _:x:!0 || 0:!x:_; 1 otherwise", "-6:6"],
 ];
 
 function load() {
@@ -121,7 +121,7 @@ export function explorer(el) {
   }
   const regionAsts = (r) => {
     try {
-      return r.split("|").flatMap((alt) => alt.split(":").map((s) => s.replace("!", "").trim()).filter((s) => s && s !== "x" && !/^(all|else|otherwise)$/.test(s)).map((s) => A.parse(s)));
+      return r.split("||").flatMap((alt) => alt.split(":").map((s) => s.replace(/^!/, "").trim()).filter((s) => s && s !== "_" && s !== "x" && !/^(all|else|otherwise)$/.test(s)).map((s) => A.parse(s)));
     } catch {
       return [];
     }
