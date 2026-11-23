@@ -1,5 +1,7 @@
 # @ratmath/analytic
 
+Documentation and interactive explorer: https://ratmath.com/analytic/
+
 Taylor models with exact rational coefficients and certified remainders, built
 on [`@ratmath/core`](https://github.com/ratmath/core). A model on a domain `D = [a, b]` with centre `c`
 is a pair `(P, I)` with
