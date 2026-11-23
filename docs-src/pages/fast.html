@@ -57,3 +57,14 @@ const area = new Refinement(
 );
 const total = await area.settle({ onProgress: (p) => console.log(p.done, "/", p.of) });</code></pre>
   <p>Cancelling is cooperative: <code>settle</code> checks the signal between slices, so a generator that yields often stops quickly. A generator that never yields runs to the end in one slice.</p>
+
+<template data-runbox>
+const job = fn("exp(sin(3x))*x").range(R`0:3`, { digits: 6 });
+PRINT("quick:", job.quick);
+for (const s of job.stages()) {
+  if (s.stage === "progress") continue;      // there are many progress ticks
+  PRINT(s.stage, s.value, s.via ?? "");
+}
+// settle() is the same work in time slices, so a page stays responsive:
+await fn("x*cos(x)").integral(0, 3, { digits: 12 }).settle({ sliceMs: 8 })
+</template>

@@ -12,7 +12,7 @@
   </ul>
   <h2>Everything else: Krawczyk</h2>
   <p>For a bracket X with midpoint m, Y ≈ 1/f′(m), and an interval bound F′(X) on the derivative,</p>
-  <span class="math">K = m − Y·f(m) + (1 − Y·F′(X))·(X − m)</span>
+  \[ K = m - Y f(m) + \bigl(1 - Y F'(X)\bigr)(X - m) \]
   <p>contains every zero of f in X. If K misses X, there is no zero. If K lies inside X, there is exactly one, and replacing X by K ∩ X narrows it quadratically, like Newton's method but with proof. Where F′(X) contains 0 (a double root, two close roots), the test cannot decide, so the bracket is reported as <code>possible</code>, with <code>atMost: m</code> when the m-th derivative is proven nonzero there: by Rolle's theorem, f then has at most m zeros there, counted with multiplicity.</p>
   <p>At an exact zero, the derivatives that are exactly 0 there give a lower bound on the multiplicity. When Rolle's bound matches it nearby, the multiplicity is proven. So sin(x)² has a zero of multiplicity exactly 2 at 0, while near π it can only say "at most 2": no finite computation can tell a double root from two very close roots, or from a near miss.</p>
   <h2>Functions flat to every order</h2>
@@ -37,3 +37,11 @@ extrema("sin(x)/x", [-8, 8]).exact();  // min, min at ±4.4934 and max, max at �
 
   <h2>Budgets</h2>
   <p>The general engine works through a stack of brackets and pauses every 15 ms, so a page that calls <code>settle()</code> stays responsive. Each starting piece has a budget (<code>maxBoxes</code>, default 2000, and a share of <code>maxMs</code>, default 8000). Brackets left when it runs out come back as <code>possible</code>, and the <code>via</code> line says the budget was hit.</p>
+
+<template data-runbox>
+PRINT("poles of sin(x)/x:", poles("sin(x)/x", [-4, 4]).exact());
+for (const e of extrema("sin(x)/x", [-8, 8]).exact()) PRINT(e.kind, "near", e.lo.toDecimal(5), e.unique ? "(unique)" : "");
+const z = zeros("x^3 - 2", [0, 2]).exact();
+PRINT("cube root of 2 lies in", z[0].lo, "to", z[0].hi);
+inflections("x^3 - 3x", [-2, 2]).exact()
+</template>

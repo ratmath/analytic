@@ -1,7 +1,8 @@
 // Mounts the demos on each docs page and handles page switching.
-import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js";
-import { explorer } from "./explore.js";
-import { MORE } from "./more-demos.js";
+import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=48f3b44600";
+import { explorer } from "./explore.js?v=48f3b44600";
+import { MORE } from "./more-demos.js?v=48f3b44600";
+import { mountRunboxes } from "./runbox.js?v=48f3b44600";
 
 const { R, fn } = A;
 const num = (s) => A.Rational.from ? A.Rational.from(String(s).trim()) : new A.Rational(String(s).trim());
@@ -403,3 +404,4 @@ const old = OLD[location.hash.slice(1)];
 if (old && !location.pathname.endsWith(old)) location.replace(old);
 document.getElementById("toc-select")?.addEventListener("change", (e) => (location.href = e.target.value));
 mountDemos(document);
+mountRunboxes(document, { scope: A });

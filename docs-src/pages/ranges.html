@@ -10,7 +10,7 @@
 
   <h2>Bounding a polynomial: the Bernstein form</h2>
   <p>Rewrite P on [a, b] in the Bernstein basis: with t = (x − a)/(b − a),</p>
-  <span class="math">P(x) = Σₖ βₖ · C(n, k) · tᵏ (1 − t)ⁿ⁻ᵏ,   k = 0 … n.</span>
+  \[ P(x) = \sum_{k=0}^{n} \beta_k \binom{n}{k} t^k (1 - t)^{n-k}. \]
   <p>The basis functions are nonnegative and add up to 1, so P(x) is a weighted average of the coefficients βₖ: its range lies between min βₖ and max βₖ. The end coefficients are exact values, β₀ = P(a) and βₙ = P(b). The coefficients come from the power-basis ones by an exact rational transformation, and when the interval is halved (de Casteljau's algorithm), the gap between the Bernstein bound and the true range shrinks like the square of the width. The library bisects a few times by default.</p>
   <p>A Taylor model's range is then that polynomial bound plus the remainder interval.</p>
 
@@ -29,7 +29,7 @@ r.exactStage().via   // "Taylor models (order 8) on 28 pieces"</code></pre>
 
   <h2>Integrals</h2>
   <p>A Taylor model integrates exactly: if f(x) − P(x − c) ∈ I on [a, b], then</p>
-  <span class="math">∫ₐᵇ f ∈ ∫ₐᵇ P(x − c) dx + I·(b − a),</span>
+  \[ \int_a^b f \in \int_a^b P(x - c)\,dx + I\cdot(b - a), \]
   <p>and the integral of P is an exact rational. The width of the answer is the width of I times the length of the interval. <code>f.integral(a, b)</code> splits [a, b] into pieces until each piece's width is at most its share of the tolerance (in proportion to its length), so the effort goes to the parts where f is hard to approximate. The preview is a 16-panel Gauss–Legendre sum on doubles.</p>
   <div data-demo="integral"></div>
   <p>The number of pieces grows slowly with the digits asked for. An order-n model on a piece of width h has a remainder of order hⁿ⁺¹, so halving every piece gains about n + 1 bits, or around 4 digits at order 12, while doubling the work.</p>
@@ -37,3 +37,13 @@ r.exactStage().via   // "Taylor models (order 8) on 28 pieces"</code></pre>
 
   <h2>Integrable singularities and holes</h2>
   <p>A removable gap in a rational part, as in (x² − 1)/(x − 1) + sin(2x)/2, is cancelled exactly before integrating, so the integral across x = 1 works. A true singularity, such as 1/√x at 0, makes the models' remainders unbounded and the integral is refused rather than guessed.</p>
+
+<template data-runbox>
+const r = fn("x*cos(x)").range(R`0:3`, { digits: 6 });
+PRINT("quick (sampled):", r.quick.value, r.quick.trust);
+PRINT("certified:", r.exact());
+PRINT("how:", r.exactStage().via);
+const I = fn("exp(-x^2)").integral(0, 2, { digits: 12 });
+PRINT("∫₀² exp(−x²):", I.exact());
+I.exactStage().via
+</template>

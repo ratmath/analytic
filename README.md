@@ -21,7 +21,14 @@ integrals, zeros, piecewise, ODEs, series, fast-then-certified). The page
 bodies live in `docs-src/pages/` and share `docs-src/layout.html`;
 `bun run docs:build` bundles the library to `docs/assets/analytic.js` and
 writes the pages (`scripts/build-pages.js`). Edit `docs-src`, not the
-generated `docs/*.html`.
+generated `docs/*.html`. Math written as `\( … \)` or `\[ … \]` is typeset with
+KaTeX at build time (pages load the shared stylesheet from
+`ratmath.com/assets/katex/`). Every page ends with an editable JavaScript box
+that runs with the library in scope; its code comes from the page's
+`<template data-runbox>`, and the build runs every box and fails if one throws
+(`--verbose` prints what each shows). `docs/assets/runbox.js` and
+`scripts/docs-kit.js` are shared verbatim with the core, linalg and algebraic
+docs; keep the copies in sync.
 
 Design notes: `docs/design/analytic-functions.md` in the [ratmath umbrella](https://github.com/ratmath/ratmath).
 This package depends only on Core (not on `packages/reals`).

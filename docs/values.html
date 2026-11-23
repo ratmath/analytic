@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="assets/site.css">
+
+<link rel="stylesheet" href="assets/site.css?v=48f3b44600">
 </head>
 <body>
 <div class="shell">
@@ -90,10 +91,22 @@ import { R } from "@ratmath/core";
 enclose.exp(R`1/3`, 200);   // an Iv with relative width about 2^-200
 constants.pi(256);          // π to 256 bits
 constants.e(128);</code></pre>
+<section class="runbox" aria-label="Runnable code">
+  <div class="runbox-head"><strong>Try it</strong><span>Edit the code and run it with <code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code> in scope. The last line's value is shown; <code>PRINT(…)</code> adds lines, <code>TEX(…)</code> typesets math.</span></div>
+  <textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Code">const v = fn("exp(x)").value("1/3", { digits: 50 });
+PRINT("quick:", v.quick.value);
+PRINT("certified:", v.exact());
+PRINT("how:", v.exactStage().via);
+PRINT("rational formula, exact:", fn("x^2 + 1/x").value("3/7").exact());
+PRINT("π to 128 bits:", constants.pi(128));
+enclose.exp(R`1/3`, 100)</textarea>
+  <div class="runbox-bar"><button type="button" data-run>Run</button><button type="button" class="ghost" data-reset>Reset</button><span class="runbox-meta">Ctrl/⌘ + Enter runs</span></div>
+  <div class="runbox-out" aria-live="polite"></div>
+</section>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="models.html">← Taylor models</a><a class="next" href="expressions.html">Formulas and derivatives →</a></nav>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js"></script>
+<script type="module" src="assets/pages.js?v=48f3b44600"></script>
 </body>
 </html>

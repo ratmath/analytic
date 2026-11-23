@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="assets/site.css">
+
+<link rel="stylesheet" href="assets/site.css?v=48f3b44600">
 </head>
 <body>
 <div class="shell">
@@ -158,10 +159,20 @@
     <tr><td>num(v), v(name), op(o, ...args), call(name, ...args)</td><td>build an AST by hand</td></tr>
     <tr><td>parsePiecewiseText(text)</td><td>[[region, rule], …] or null when the text is not piecewise</td></tr>
   </table></div>
+<section class="runbox" aria-label="Runnable code">
+  <div class="runbox-head"><strong>Try it</strong><span>Edit the code and run it with <code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code> in scope. The last line's value is shown; <code>PRINT(…)</code> adds lines, <code>TEX(…)</code> typesets math.</span></div>
+  <textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Code">// Look something up in the tables above and try it here.
+const f = fn("x^2*exp(-x)");
+PRINT("f(1) =", f.value(1, { digits: 15 }).exact());
+PRINT("f' =", f.derivative().toString());
+f.range(R`0:5`, { digits: 6 }).exact()</textarea>
+  <div class="runbox-bar"><button type="button" data-run>Run</button><button type="button" class="ghost" data-reset>Reset</button><span class="runbox-meta">Ctrl/⌘ + Enter runs</span></div>
+  <div class="runbox-out" aria-live="polite"></div>
+</section>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="index.html">← Introduction</a><a class="next" href="explore.html">Explore →</a></nav>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js"></script>
+<script type="module" src="assets/pages.js?v=48f3b44600"></script>
 </body>
 </html>

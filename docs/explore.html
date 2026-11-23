@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="assets/site.css">
+
+<link rel="stylesheet" href="assets/site.css?v=48f3b44600">
 </head>
 <body>
 <div class="shell">
@@ -52,10 +53,22 @@
   <p>Type a formula, or a piecewise function such as <code>x - n if n:x:!n+1</code>. Names other than <code>x</code> become sliders in steps of 1/8. Choose which questions to ask. Each answer shows its float preview at once and its certified form when it arrives. Your last function is remembered in this browser.</p>
   <div class="legend"><span><i style="background: var(--accent)"></i>zeros, f</span><span><i style="background: var(--accent-dark)"></i>maxima and minima</span><span><i style="background: var(--accent-light)"></i>inflection points</span><span><i style="background: var(--bad)"></i>poles</span><span><i style="border: 2px solid var(--accent); background: var(--surface)"></i>open: undecided, a hole, or a one-sided limit</span></div>
   <div data-demo="explore"></div>
+<section class="runbox" aria-label="Runnable code">
+  <div class="runbox-head"><strong>Try it</strong><span>Edit the code and run it with <code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code> in scope. The last line's value is shown; <code>PRINT(…)</code> adds lines, <code>TEX(…)</code> typesets math.</span></div>
+  <textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Code">// Everything the explorer does is a few calls.
+const f = fn("sin(x)/x");
+PRINT("f(1/2) =", f.value("1/2", { digits: 25 }).exact());
+PRINT("range on [1, 10]:", f.range(R`1:10`, { digits: 4 }).exact());
+PRINT("zeros on [1, 10]:", zeros(f, [1, 10]).exact().length);
+PRINT("poles on [-1, 1]:", poles(f, [-1, 1]).exact());
+f.integral(1, 10, { digits: 8 }).exact()</textarea>
+  <div class="runbox-bar"><button type="button" data-run>Run</button><button type="button" class="ghost" data-reset>Reset</button><span class="runbox-meta">Ctrl/⌘ + Enter runs</span></div>
+  <div class="runbox-out" aria-live="polite"></div>
+</section>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="reference.html">← Reference</a><a class="next" href="fast.html">Fast, then certified →</a></nav>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js"></script>
+<script type="module" src="assets/pages.js?v=48f3b44600"></script>
 </body>
 </html>
