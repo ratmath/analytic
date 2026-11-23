@@ -34,3 +34,14 @@ ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2" }).exact().final;  // y(1/2), 
     <a href="#odes"><strong>ODEs</strong><span>Validated Picard steps</span></a>
     <a href="#series"><strong>Your own series</strong><span>Remainder rules you can check</span></a>
   </div>
+
+<template data-runbox>
+const f = fn("exp(sin(x))*x");
+PRINT("float preview:", f.value("1/3").quick.value);
+PRINT("certified, 30 digits:", f.value("1/3", { digits: 30 }).exact());
+PRINT("derivative:", f.derivative().toString());
+PRINT("∫ from 0 to 1:", f.integral(0, 1, { digits: 10 }).exact());
+PRINT("zeros of x^3 - 3x + 1:");
+for (const z of zeros("x^3 - 3x + 1", [-3, 3]).exact()) PRINT("  ", z.kind, z.lo, "to", z.hi, z.unique ? "(exactly one)" : "");
+ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2" }).exact().final
+</template>

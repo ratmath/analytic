@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="assets/site.css">
+
+<link rel="stylesheet" href="assets/site.css?v=cbeb5e37fa">
 </head>
 <body>
 <div class="shell">
@@ -105,10 +106,23 @@ const area = new Refinement(
 );
 const total = await area.settle({ onProgress: (p) => console.log(p.done, "/", p.of) });</code></pre>
   <p>Cancelling is cooperative: <code>settle</code> checks the signal between slices, so a generator that yields often stops quickly. A generator that never yields runs to the end in one slice.</p>
+<section class="runbox" aria-label="Runnable code">
+  <div class="runbox-head"><strong>Try it</strong><span>Edit the code and run it with <code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code> in scope. The last line's value is shown; <code>PRINT(…)</code> adds lines, <code>TEX(…)</code> typesets math.</span></div>
+  <textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Code">const job = fn("exp(sin(3x))*x").range(R`0:3`, { digits: 6 });
+PRINT("quick:", job.quick);
+for (const s of job.stages()) {
+  if (s.stage === "progress") continue;      // there are many progress ticks
+  PRINT(s.stage, s.value, s.via ?? "");
+}
+// settle() is the same work in time slices, so a page stays responsive:
+await fn("x*cos(x)").integral(0, 3, { digits: 12 }).settle({ sliceMs: 8 })</textarea>
+  <div class="runbox-bar"><button type="button" data-run>Run</button><button type="button" class="ghost" data-reset>Reset</button><span class="runbox-meta">Ctrl/⌘ + Enter runs</span></div>
+  <div class="runbox-out" aria-live="polite"></div>
+</section>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="explore.html">← Explore</a><a class="next" href="models.html">Taylor models →</a></nav>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js"></script>
+<script type="module" src="assets/pages.js?v=cbeb5e37fa"></script>
 </body>
 </html>

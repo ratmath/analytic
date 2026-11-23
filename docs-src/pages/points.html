@@ -42,3 +42,13 @@ import { R } from "@ratmath/core";
 enclose.exp(R`1/3`, 200);   // an Iv with relative width about 2^-200
 constants.pi(256);          // π to 256 bits
 constants.e(128);</code></pre>
+
+<template data-runbox>
+const v = fn("exp(x)").value("1/3", { digits: 50 });
+PRINT("quick:", v.quick.value);
+PRINT("certified:", v.exact());
+PRINT("how:", v.exactStage().via);
+PRINT("rational formula, exact:", fn("x^2 + 1/x").value("3/7").exact());
+PRINT("π to 128 bits:", constants.pi(128));
+enclose.exp(R`1/3`, 100)
+</template>
