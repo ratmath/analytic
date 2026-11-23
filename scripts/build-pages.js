@@ -1,25 +1,13 @@
 // Assemble docs/<page>.html from docs-src/layout.html and docs-src/pages/*.html.
 // Each page is a plain HTML fragment; the nav, head and pager are shared.
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { renderMath, addRunbox, stampAssets, stampLinks, KATEX_LINK } from "./docs-kit.js";
+import { runCode } from "../docs/assets/runbox.js";
 
-// Stamp every asset URL with a hash of the assets, so a browser never mixes a
-// cached old script with a new page (GitHub Pages caches for ten minutes).
-const STAMP = /(\.(?:js|css))\?v=[0-9a-f]+/g;
-function stampAssets() {
-  const dir = "docs/assets";
-  const files = readdirSync(dir).filter((f) => /\.(js|css)$/.test(f)).sort();
-  const texts = Object.fromEntries(files.map((f) => [f, readFileSync(`${dir}/${f}`, "utf8")]));
-  const hash = createHash("sha256");
-  for (const f of files) hash.update(f).update(texts[f].replace(STAMP, "$1"));
-  const v = hash.digest("hex").slice(0, 10);
-  for (const f of files) {
-    if (!f.endsWith(".js")) continue;
-    const out = texts[f].replace(/(from\s+"\.\/[\w-]+\.js)(?:\?v=[0-9a-f]+)?"/g, `$1?v=${v}"`);
-    if (out !== texts[f]) writeFileSync(`${dir}/${f}`, out);
-  }
-  return v;
-}
+// Asset URLs carry a hash of the assets (stampAssets), so a browser never mixes
+// a cached old script with a new page (GitHub Pages caches for ten minutes).
+// Math in \( … \) and \[ … \] is typeset with KaTeX here; every page ends with
+// the runnable code box (docs/assets/runbox.js, shared with the other docs).
 
 export const PAGES = [
   { name: "intro", file: "index.html", title: "Introduction" },
@@ -39,14 +27,19 @@ export const PAGES = [
 ];
 
 export function buildPages() {
-  const v = stampAssets();
-  const layout = readFileSync("docs-src/layout.html", "utf8").replace(/(assets\/[\w-]+\.(?:js|css))"/g, `$1?v=${v}"`);
+  const v = stampAssets("docs/assets");
+  const layout = readFileSync("docs-src/layout.html", "utf8");
+  const seeds = [];
   const pages = PAGES.filter((p) => p.name).map((p) => ({ ...p, file: p.file ?? `${p.name}.html` }));
   const fileOf = Object.fromEntries(pages.map((p) => [p.name, p.file]));
   for (const [i, p] of pages.entries()) {
     const src = readFileSync(`docs-src/pages/${p.name}.html`, "utf8");
     const wide = /<!-- wide: yes -->/.test(src) ? " wide" : "";
-    const body = src.replace(/<!-- wide: (yes|no) -->\n?/, "").replace(/href="#([a-z]+)"/g, (m, id) => (fileOf[id] ? `href="${fileOf[id]}"` : m));
+    const linked = src.replace(/<!-- wide: (yes|no) -->\n?/, "").replace(/href="#([a-z]+)"/g, (m, id) => (fileOf[id] ? `href="${fileOf[id]}"` : m));
+    const boxed = addRunbox(linked, { lib: "<code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code>" });
+    seeds.push({ page: p.name, seed: boxed.seed });
+    const math = renderMath(boxed.html);
+    const body = math.html;
     const options = pages.map((q) => `    <option value="${q.file}"${q === p ? " selected" : ""}>${q.title}</option>`).join("\n");
     const links = PAGES.map((q) => (q.group ? `    <div class="group">${q.group}</div>` : `    <a href="${fileOf[q.name]}"${q.name === p.name ? ' class="on" aria-current="page"' : ""}>${q.title}</a>`)).join("\n");
     const prev = pages[i - 1];
@@ -54,15 +47,33 @@ export function buildPages() {
     const pager = `${prev ? `<a class="prev" href="${prev.file}">← ${prev.title}</a>` : "<span></span>"}${next ? `<a class="next" href="${next.file}">${next.title} →</a>` : "<span></span>"}`;
     const html = layout
       .replace("{{title}}", p.title)
+      .replace("{{katex}}", math.count ? KATEX_LINK : "")
       .replace("{{options}}", options)
       .replace("{{links}}", links)
       .replace("{{wide}}", wide)
       .replace("{{name}}", p.name)
-      .replace("{{body}}", body.trimEnd())
+      .replace("{{body}}", () => body.trimEnd())
       .replace("{{pager}}", pager);
-    writeFileSync(`docs/${p.file}`, html);
+    writeFileSync(`docs/${p.file}`, stampLinks(html, v));
   }
-  return pages.length;
+  return { count: pages.length, seeds };
 }
 
-if (import.meta.main) console.log(`${buildPages()} pages written to docs/`);
+/** Run every page's code box against the library; returns the number that threw. */
+export async function checkSeeds(seeds, scope, { verbose = false } = {}) {
+  let failed = 0;
+  for (const { page, seed } of seeds) {
+    const res = await runCode(seed, scope);
+    if (res.error) {
+      failed++;
+      console.error(`✗ ${page}: ${res.error.name}: ${res.error.message}`);
+    } else if (verbose) {
+      console.log(`— ${page} (${res.ms.toFixed(0)} ms)`);
+      for (const pr of res.prints) console.log(`  ${pr.text}`);
+      if (res.hasValue) console.log(`  → ${res.type ? `${res.type} ` : ""}${res.text}`);
+    }
+  }
+  return failed;
+}
+
+if (import.meta.main) console.log(`${buildPages().count} pages written to docs/`);

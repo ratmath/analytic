@@ -5,7 +5,7 @@
 
   <h2>The fixed-point idea</h2>
   <p>Integrating both sides turns the equation into a fixed-point problem. The solution is the function y with</p>
-  <span class="math">y = Φ(y),   Φ(y)(t) = y₀ + ∫ from t₀ to t of F(s, y(s)) ds.</span>
+  \[ y = \Phi(y), \qquad \Phi(y)(t) = y_0 + \int_{t_0}^{t} F\bigl(s, y(s)\bigr)\,ds. \]
   <p>Picard iteration applies Φ repeatedly, starting from the constant y₀. Each application adds one correct Taylor coefficient. That gives the polynomial part of the enclosure. The proof comes from looking for a set that Φ maps into itself.</p>
 
   <h2>One validated step</h2>
@@ -41,3 +41,15 @@ S.describe();</code></pre>
 ode.solve({ f: ["y2", "-y1 + mu*(1 - y1^2)*y2"], y0: [2, 0], until: 1, params: { mu: 1 } });</code></pre>
   <p>Boxes have a weakness. A rotating flow turns each box, and the smallest box around a turned box is larger than the box was. Each step inherits that larger box, so over long spans the enclosure grows even when the true set of solutions does not. This is the wrapping effect, first described by Moore. Shorter spans, higher orders, or preconditioned steps (which track the box in rotated coordinates; not built yet) keep it in check.</p>
   <div data-demo="oscillator"></div>
+
+<template data-runbox>
+const sol = ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2", order: 10 });
+const S = sol.exact();
+PRINT("y(1/2) is in", S.final);
+PRINT("y(1/4) is in", S.at("1/4"));
+PRINT("steps:", S.steps.length);
+// a system: x″ = −x, so x = cos t
+const osc = ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 1 }).exact();
+PRINT("x(1), v(1) =", osc.final, "  cos 1 ≈", Math.cos(1));
+S.describe()
+</template>

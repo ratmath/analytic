@@ -110,3 +110,11 @@
     <tr><td>num(v), v(name), op(o, ...args), call(name, ...args)</td><td>build an AST by hand</td></tr>
     <tr><td>parsePiecewiseText(text)</td><td>[[region, rule], …] or null when the text is not piecewise</td></tr>
   </table></div>
+
+<template data-runbox>
+// Look something up in the tables above and try it here.
+const f = fn("x^2*exp(-x)");
+PRINT("f(1) =", f.value(1, { digits: 15 }).exact());
+PRINT("f' =", f.derivative().toString());
+f.range(R`0:5`, { digits: 6 }).exact()
+</template>

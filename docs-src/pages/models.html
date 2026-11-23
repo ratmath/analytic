@@ -2,13 +2,13 @@
 <div class="eyebrow">Idea</div>
   <h1>Taylor models</h1>
   <p>A Taylor model on a domain D = [a, b] with centre c is a pair (P, I): a polynomial P with exact rational coefficients and a rational interval I, such that</p>
-  <span class="math">f(x) − P(x − c) ∈ I   for every x in D.</span>
+  \[ f(x) - P(x - c) \in I \quad \text{for every } x \in D. \]
   <p>This is the basic object of validated numerics (Berz and Makino's Taylor models, building on Moore's interval analysis). It says more than a value does: it describes f on the whole domain, so ranges, integrals and compositions all come from it with the error already counted. Everything certified in this library is built from it.</p>
   <div data-demo="model"></div>
 
   <h2>A small example by hand</h2>
   <p>Take f(x) = eˣ on D = [0, 1/2] with centre c = 1/4 and order 2. Taylor's theorem with the Lagrange remainder says</p>
-  <span class="math">eˣ = e^c · (1 + t + t²/2) + e^ξ · t³/6,   t = x − c, ξ between c and x.</span>
+  \[ e^x = e^c\left(1 + t + \tfrac{t^2}{2}\right) + e^{\xi}\,\frac{t^3}{6}, \qquad t = x - c,\ \ \xi \text{ between } c \text{ and } x. \]
   <p>Here |t| ≤ 1/4, and e^ξ ≤ e^(1/2) &lt; 1.65, so the last term lies in [−0.0043, 0.0043]. The coefficient e^c is irrational, so the library encloses it, puts the midpoint of each coefficient into P, and adds the leftover radius times the range of its power of t to I. The result is a polynomial with exact rational coefficients and a remainder interval that together contain eˣ for every x in D.</p>
 
   <h2>Arithmetic on models</h2>
@@ -51,3 +51,15 @@ g.describe();     // domain, order, remainder width, rules used</code></pre>
 
   <h2>Derivatives</h2>
   <p>The remainder of a model says nothing about the derivative's error: f could wiggle inside the band P ± I with any slope. So <code>model.derivative()</code> only works for exact polynomials, and derivatives are taken from the formula instead (<a href="#expressions">symbolic d/dx</a>), then modelled afresh with their own remainder.</p>
+
+<template data-runbox>
+const D = Domain(R`0:1/2`);             // centre: the midpoint, 1/4
+const x = TM.x(D, { order: 12 });       // the identity model on D
+const g = exp(sin(x)).multiply(x);
+PRINT("first coefficients:", g.coefficients.slice(0, 4));
+PRINT("remainder:", g.remainder);
+PRINT("g(1/5) is in", g.at(R`1/5`));
+PRINT("range:", g.range());
+PRINT("integral over D:", g.integral());
+g.describe()
+</template>

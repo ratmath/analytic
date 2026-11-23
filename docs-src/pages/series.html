@@ -23,7 +23,7 @@ L.assumed;          // true: terms beyond the next 32 are assumed to keep altern
 L.describe();
 
 // e^x with Lagrange: on [0, 1/2] every derivative of e^x is below 2
-series(D, { coefficient: (k) => R`1/${factorial(k)}`, degree: 15, order: 15, rule: "lagrange", M: 2 });</code></pre>
+series(D, { coefficient: (k) => R`1/${fact(k)}`, degree: 15, order: 15, rule: "lagrange", M: 2 });</code></pre>
   <p>The alternating rule really is checked: on [−1/2, 1/2] the log(1 + x) series is refused, because for negative x every term is negative.</p>
 
   <h2>Worked check: log(1 + x) at 1/4</h2>
@@ -36,3 +36,15 @@ series(D, { coefficient: (k) => R`1/${factorial(k)}`, degree: 15, order: 15, rul
 
   <h2>Once you have the model</h2>
   <p>A series model is an ordinary Taylor model, so everything on the <a href="#models">Taylor models</a> page applies: compose it with exp or sin, multiply it by other models, take its range or integral. The assumption travels with it, and <code>describe()</code> on the final result still says what was assumed.</p>
+
+<template data-runbox>
+const D = Domain(R`0:1/2`, { centre: 0 });
+// log(1 + x) = x − x²/2 + x³/3 − …, an alternating series
+const L = series(D, { coefficient: (k) => (k === 0 ? R`0` : R`${k % 2 ? 1 : -1}/${k}`), degree: 20, order: 20, rule: "alternating" });
+PRINT("log(5/4) is in", L.at(R`1/4`), "  Math.log1p(0.25) =", Math.log1p(0.25));
+PRINT("assumed:", L.assumed);
+// e^x with a Lagrange bound: on [0, 1/2] every derivative of e^x is at most 2
+const fact = (k) => (k &lt;= 1 ? 1n : BigInt(k) * fact(k - 1));
+const E = series(D, { coefficient: (k) => R`1/${fact(k)}`, degree: 15, order: 15, rule: "lagrange", M: 2 });
+E.at(R`1/2`)
+</template>

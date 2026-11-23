@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=8b3495aa40">
+
+<link rel="stylesheet" href="assets/site.css?v=8691f0e9c3">
 </head>
 <body>
 <div class="shell">
@@ -103,10 +104,22 @@ fn("y*t", { variable: "t", params: { y: 2 } });   // a different variable name</
 
   <h2>Refusals</h2>
   <p>A formula that cannot be bounded on the domain is refused with an <code>AnalyticError</code> that has a <code>code</code> and a reason: <code>log</code> of a range that reaches 0, a divisor whose range contains 0, <code>sqrt</code> of something that may be negative, <code>exp</code> of something above 2¹⁶. The library never returns a bound it has not proven.</p>
+<section class="runbox" aria-label="Runnable code">
+  <div class="runbox-head"><strong>Try it</strong><span>Edit the code and run it with <code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code> in scope. The last line's value is shown; <code>PRINT(…)</code> adds lines, <code>TEX(…)</code> typesets math.</span></div>
+  <textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Code">PRINT(fn("x^3 + 2x - 1/x").derivative().toString());
+PRINT(format(differentiate(parse("atan(x^2)"), "x")));
+PRINT(format(differentiate(parse("sin(x)/x"), "x")));
+
+const f = fn("a*x^2 + b", { params: { a: "3/8", b: 1 } });
+PRINT("with a = 2, f(3) =", f.with({ a: 2 }).value(3).exact());
+fn("y*t", { variable: "t", params: { y: 2 } }).value(5).exact()</textarea>
+  <div class="runbox-bar"><button type="button" data-run>Run</button><button type="button" class="ghost" data-reset>Reset</button><span class="runbox-meta">Ctrl/⌘ + Enter runs</span></div>
+  <div class="runbox-out" aria-live="polite"></div>
+</section>
 <nav class="pager" aria-label="Previous and next page"><a class="prev" href="values.html">← Values to many digits</a><a class="next" href="ranges.html">Ranges and integrals →</a></nav>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=8b3495aa40"></script>
+<script type="module" src="assets/pages.js?v=8691f0e9c3"></script>
 </body>
 </html>
