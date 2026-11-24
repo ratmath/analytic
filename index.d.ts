@@ -189,6 +189,13 @@ export function num(value: RationalLike): Ast;
 export function v(name: string): Ast;
 export function op(op: string, ...args: Ast[]): Ast;
 export function call(name: string, ...args: Ast[]): Ast;
+/** Read a number, bigint, decimal or fraction string as an exact Rational ("0.1" is 1/10). */
+export function toRational(value: RationalLike | { numerator: bigint; denominator: bigint }): Rational;
+/** Function names the parser knows. */
+export const FUNCTIONS: Set<string>;
+export const CONSTANTS: Set<string>;
+/** erf in floating point (about 1e-15 accurate). */
+export function erfFloat(x: number): number;
 /** A certified interval for an expression with interval values for its variables. */
 export function encloseAst(ast: Ast, env: Record<string, RationalInterval | RationalLike>, bits?: number): RationalInterval;
 
