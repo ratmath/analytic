@@ -153,3 +153,17 @@ describe("simplify, taylor, limit", () => {
     expect(format(parse("max(x, 1)"))).toBe("max(x, 1)");
   });
 });
+
+describe("Taylor coefficients at removable points", () => {
+  test("x/(exp(x) - 1) gives the Bernoulli numbers over k!", () => {
+    const t = fn("x/(exp(x) - 1)").taylor(0, 8).map((v) => v.low.toString());
+    expect(t).toEqual(["1", "-1/2", "1/12", "0", "-1/720", "0", "1/30240", "0", "-1/1209600"]);
+  });
+  test("(1 - cos(x))/x^2 cancels a double zero", () => {
+    const t = fn("(1 - cos(x))/x^2").taylor(0, 4);
+    expect(t.map((v) => v.high.toString())).toEqual(["1/2", "0", "-1/24", "0", "1/720"]);
+  });
+  test("a real pole is still refused", () => {
+    expect(() => fn("cos(x)/x").taylor(0, 3)).toThrow();
+  });
+});

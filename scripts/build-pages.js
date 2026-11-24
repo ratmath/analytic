@@ -46,7 +46,8 @@ export function buildPages() {
     const next = pages[i + 1];
     const pager = `${prev ? `<a class="prev" href="${prev.file}">← ${prev.title}</a>` : "<span></span>"}${next ? `<a class="next" href="${next.file}">${next.title} →</a>` : "<span></span>"}`;
     const html = layout
-      .replace("{{title}}", p.title)
+      .replaceAll("{{title}}", p.title)
+      .replace("{{file}}", p.name === "intro" ? "" : `${p.name}.html`)
       .replace("{{katex}}", math.count ? KATEX_LINK : "")
       .replace("{{options}}", options)
       .replace("{{links}}", links)

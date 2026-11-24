@@ -1,7 +1,7 @@
 // Demos for the deeper topic pages: precision ladders, argument reduction,
 // interval parameters, the dependency problem, order convergence, systems
 // and uncertain starts for ODEs, and user series checked against built-ins.
-import { A, h, demo, plot, fmtIv, fmtF, widthOf, mono, COLORS, curveOf } from "./ui.js?v=cbeb5e37fa";
+import { A, h, demo, plot, fmtIv, fmtF, widthOf, mono, COLORS, curveOf } from "./ui.js?v=1664ee00aa";
 
 const { R, fn } = A;
 const num = (s) => (A.Rational.from ? A.Rational.from(String(s).trim()) : new A.Rational(String(s).trim()));

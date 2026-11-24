@@ -127,6 +127,8 @@ export class AnalyticFunction {
     if (!Number.isInteger(n) || n < 0 || n > 16) refuse("bad-order", "taylor needs an order between 0 and 16");
     const at = q(c);
     const bits = bitsForDigits(opts.digits ?? 20) + 16;
+    const quotient = removableQuotient(this, at, n, opts);
+    if (quotient) return quotient;
     const out = [];
     let g = this;
     let fact = 1n;
@@ -201,6 +203,47 @@ export class AnalyticFunction {
 }
 
 /** fn("exp(sin(x))*x", { variable, params }) */
+/**
+ * Taylor coefficients of N/D at a point where D vanishes: both series are
+ * expanded, the common power of (x − c) is cancelled (the leading zeros must
+ * be exact) and the series are divided. Null when the formula is not a
+ * quotient, D(c) ≠ 0 or the zeros of N do not cover those of D.
+ */
+function removableQuotient(f, at, n, opts) {
+  const a = f.ast;
+  if (!(a.type === "op" && a.op === "/")) return null;
+  const sub = (ast) => new AnalyticFunction(ast, { variable: f.variable, params: f.params });
+  const zero = (iv) => iv.low.equals(ZERO) && iv.high.equals(ZERO);
+  let den;
+  try {
+    den = sub(a.args[1]).taylor(at, Math.min(16, n + 4), opts);
+  } catch (e) {
+    if (e instanceof AnalyticError) return null;
+    throw e;
+  }
+  let m = 0;
+  while (m < den.length && zero(den[m])) m++;
+  if (m === 0 || m > 4 || n + m > 16) return null;
+  let numr;
+  try {
+    numr = sub(a.args[0]).taylor(at, n + m, opts);
+  } catch (e) {
+    if (e instanceof AnalyticError) return null;
+    throw e;
+  }
+  if (!numr.slice(0, m).every(zero)) return null;
+  const N = numr.slice(m).map((v) => Iv.from(v));
+  const D = den.slice(m, m + n + 1).map((v) => Iv.from(v));
+  if (D[0].containsZero()) return null;
+  const out = [];
+  for (let k = 0; k <= n; k++) {
+    let acc = N[k];
+    for (let j = 1; j <= k; j++) acc = acc.sub(D[j].mul(out[k - j]));
+    out.push(acc.div(D[0]));
+  }
+  return out.map((v) => v.toRationalInterval());
+}
+
 export function fn(expression, opts) {
   if (expression instanceof AnalyticFunction || expression instanceof PiecewiseFunction) return expression;
   if (typeof expression === "string" || Array.isArray(expression)) {
