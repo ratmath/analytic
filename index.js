@@ -5,7 +5,7 @@ export { series } from "./src/series.js";
 export { enclose, constants } from "./src/enclose.js";
 export { createScope } from "./src/scope.js";
 export { bitsForDigits } from "./src/scope.js";
-export { Refinement, live } from "./src/refine.js";
+export { Refinement, live } from "@ratmath/core/refine";
 export { fn, AnalyticFunction } from "./src/fn.js";
 export { parse, format, derivative as differentiate, simplify, compileFloat, modelOf, freeVariables, num, v, op, call, toRational, FUNCTIONS, CONSTANTS, erfFloat } from "./src/expr.js";
 export { ode } from "./src/ode.js";

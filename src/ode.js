@@ -25,7 +25,7 @@
 // c′ + B′·r′ with a frame B′ from a QR factorisation of J(t1)·B, which keeps
 // rotating systems from wrapping. Contracting problems now contract.
 import { Rational } from "@ratmath/core";
-import { Refinement } from "./refine.js";
+import { Refinement } from "@ratmath/core/refine";
 import { Iv } from "./interval.js";
 import { TaylorModel, Domain, DEFAULTS } from "./model.js";
 import { AnalyticError, refuse } from "./errors.js";

@@ -27,7 +27,7 @@
 //   inflections: { kind: "inflection" | "possible", at?, lo, hi, value, unique? }
 // `value` is a RationalInterval enclosing f there (a point when exact).
 import { Rational, RationalInterval } from "@ratmath/core";
-import { Refinement } from "./refine.js";
+import { Refinement } from "@ratmath/core/refine";
 import { Iv } from "./interval.js";
 import { AnalyticError } from "./errors.js";
 import { ZERO, ONE, TWO, lt, le, gt, ge, isZero, sign, min, max, roundDyadic, bitLen, toQ } from "./rat.js";

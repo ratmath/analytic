@@ -34,6 +34,11 @@
 - Docs pages link to GitHub, npm and the sibling libraries and carry
   descriptions for search and link previews.
 
+### Changed
+
+- `Refinement` and `live` now come from `@ratmath/core/refine` (Core 0.10.0),
+  one class shared by every RatMath library. The exports here are unchanged.
+
 ## 0.1.0
 
 First version: Taylor models, elementary functions, expressions, certified

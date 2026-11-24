@@ -3,7 +3,7 @@
 // Refinement: `quick` is a Float64 answer computed at once, and the exact
 // stage is a certified RationalInterval at the requested precision.
 import { Rational } from "@ratmath/core";
-import { Refinement } from "./refine.js";
+import { Refinement } from "@ratmath/core/refine";
 import { Iv } from "./interval.js";
 import { TaylorModel, Domain, DEFAULTS } from "./model.js";
 import { AnalyticError, refuse } from "./errors.js";

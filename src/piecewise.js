@@ -15,7 +15,7 @@
 // Rules may use the integer variable too: "x - n if n:x:!n+1" is the
 // sawtooth, "(-1)^n if n:x:!n+1" a square wave.
 import { Rational, RationalInterval, Region as CoreRegion } from "@ratmath/core";
-import { Refinement } from "./refine.js";
+import { Refinement } from "@ratmath/core/refine";
 import { Iv } from "./interval.js";
 import { refuse, AnalyticError } from "./errors.js";
 import { ZERO, ONE, lt, isZero, toQ } from "./rat.js";

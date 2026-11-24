@@ -154,9 +154,8 @@ worker.
 ## Fast first, certified last
 
 Every question about a function given as a formula returns a `Refinement`,
-the same class `@ratmath/linalg` and `@ratmath/graphics` use (`src/refine.js`,
-copied verbatim in each; keep them in sync), so one `live()` loop drives all
-three libraries:
+the same class `@ratmath/linalg` and `@ratmath/graphics` use (it lives in
+`@ratmath/core/refine`), so one `live()` loop drives all three libraries:
 
 | member | what it gives |
 | --- | --- |
