@@ -44,7 +44,7 @@ describe("symbolic derivative", () => {
   }
   test("derivatives are simplified", () => {
     expect(fn("x^3 + 2x - 1/x").derivative().toString()).toBe("3*x^2 + 2 + 1/x^2");
-    expect(fn("a*x^2", { params: { a: 3 } }).derivative().toString()).toBe("a*(2*x)");
+    expect(fn("a*x^2", { params: { a: 3 } }).derivative().toString()).toBe("2*a*x");
     expect(fn("5").derivative().toString()).toBe("0");
   });
   test("d/dx of a certified model: derivative's model encloses the derivative", () => {

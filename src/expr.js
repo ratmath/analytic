@@ -60,8 +60,9 @@ function parseDecimalString(s) {
 
 export const FUNCTIONS = new Set([
   "sin", "cos", "tan", "exp", "ln", "log", "sqrt", "abs", "min", "max",
-  "atan", "log1p", "sinh", "cosh", "tanh",
+  "atan", "log1p", "sinh", "cosh", "tanh", "asin", "acos", "cbrt", "erf",
 ]);
+const ALIASES = { arcsin: "asin", arccos: "acos", arctan: "atan" };
 export const CONSTANTS = new Set(["pi", "e"]);
 
 /**
@@ -130,6 +131,11 @@ export function parse(text) {
       return e;
     }
     if (k.t === "name") {
+      if (ALIASES[k.v]) k.v = ALIASES[k.v];
+      // "sinx", "lnx": a function name run together with x
+      if (!FUNCTIONS.has(k.v) && k.v.endsWith("x") && FUNCTIONS.has(k.v.slice(0, -1)) && !(peek() && peek().t === "(")) {
+        return call(k.v.slice(0, -1), v("x"));
+      }
       if (FUNCTIONS.has(k.v)) {
         if (peek() && peek().t === "(") {
           next();
@@ -163,6 +169,9 @@ function tokenize(text) {
     const m = re.exec(text);
     if (!m) throw new SyntaxError(`cannot read ${JSON.stringify(text.slice(pos))}`);
     const at = m.index + (m[0].length - (m[1] ?? m[2] ?? m[3]).length);
+    if (m[1] && /^[.\d]/.test(text.slice(re.lastIndex)) && /\./.test(m[1])) {
+      throw new SyntaxError(`a number with two decimal points at ${at} in ${text}`);
+    }
     if (m[1]) out.push({ t: "num", v: m[1], pos: at });
     else if (m[2]) out.push({ t: "name", v: m[2], pos: at });
     else out.push({ t: m[3] === "**" ? "^" : m[3], pos: at });
@@ -258,10 +267,31 @@ export function format(ast) {
 
 // ---- float compiler ------------------------------------------------------------
 
+/** erf on doubles: the power series below 3, the continued fraction for erfc beyond. */
+export function erfFloat(x) {
+  const a = Math.abs(x);
+  let r;
+  if (a < 3) {
+    let term = a;
+    let sum = a;
+    for (let k = 1; k < 120; k++) {
+      term *= (-a * a) / k;
+      sum += term / (2 * k + 1);
+    }
+    r = (2 / Math.sqrt(Math.PI)) * sum;
+  } else {
+    let f = 0;
+    for (let k = 60; k >= 1; k--) f = k / 2 / (a + f);
+    r = 1 - Math.exp(-a * a) / Math.sqrt(Math.PI) / (a + f);
+  }
+  return x < 0 ? -r : r;
+}
+
 const FLOAT_FNS = {
   sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, ln: Math.log, log: Math.log,
   sqrt: Math.sqrt, abs: Math.abs, atan: Math.atan, log1p: Math.log1p,
   sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
+  asin: Math.asin, acos: Math.acos, cbrt: Math.cbrt, erf: erfFloat,
 };
 
 /** Compile to a closure over doubles: (env) => number, env maps names to numbers. */
@@ -292,7 +322,19 @@ export function compileFloat(ast) {
           case "*": return (e) => a(e) * b(e);
           case "/": return (e) => a(e) / b(e);
           case "neg": return (e) => -a(e);
-          case "^": return (e) => Math.pow(a(e), b(e));
+          case "^": {
+            // an odd root of a negative base is real: (−8)^(1/3) = −2, where Math.pow gives NaN
+            const q = constantRational(n.args[1]);
+            if (q !== null && q.denominator !== 1n && q.denominator % 2n === 1n) {
+              const ex = q.toNumber();
+              const sgn = q.numerator % 2n === 0n ? 1 : -1;
+              return (e) => {
+                const x = a(e);
+                return x < 0 ? sgn * Math.pow(-x, ex) : Math.pow(x, ex);
+              };
+            }
+            return (e) => Math.pow(a(e), b(e));
+          }
         }
         break;
       }
@@ -462,7 +504,7 @@ export const S = {
 
 const depends = (n, name) => freeVariables(n).has(name);
 
-const TOTAL_CALLS = new Set(["sin", "cos", "exp", "atan", "sinh", "cosh", "tanh", "abs", "min", "max"]);
+const TOTAL_CALLS = new Set(["sin", "cos", "exp", "atan", "sinh", "cosh", "tanh", "abs", "min", "max", "cbrt", "erf"]);
 
 /** True when the tree is defined for every real value of its variables (no division, log, root or tan). */
 export function isTotal(n) {
@@ -479,36 +521,151 @@ export function isTotal(n) {
 const sameTree = (a, b) => format(a) === format(b);
 
 /**
- * Light algebraic clean-up: constants folded, 0 and 1 dropped, u − u and
- * 0·u reduced to 0 when u is defined everywhere (so no domain is lost), u/u
- * left alone (it is undefined where u = 0), like factors and terms merged
- * (u + u = 2u, u·u = u^2, x/x^2 stays).
+ * Algebraic clean-up that never changes where a formula is defined: constants
+ * folded, 0 and 1 dropped, products flattened with like factors merged
+ * (3·(2x)·x = 6x^2), sums flattened with like terms merged (2u + 3u = 5u,
+ * u − u = 0 only when u is defined everywhere). Quotients keep their
+ * denominators: u/u stays, since it is undefined where u = 0.
  */
 export function simplify(ast) {
+  const isPosInt = (e) => e.type === "num" && e.value.denominator === 1n && e.value.numerator > 0n;
+  /** [coefficient, core tree or null] of a simplified term. */
+  const split = (t) => {
+    if (t.type === "num") return [t.value, null];
+    if (t.type === "op" && t.op === "neg") {
+      const [c, core] = split(t.args[0]);
+      return [c.negate(), core];
+    }
+    if (t.type === "op" && t.op === "*") {
+      // products are built left to right with the number first: ((2·a)·x)
+      const fs = [];
+      const flat = (u) => (u.type === "op" && u.op === "*" ? u.args.forEach(flat) : fs.push(u));
+      flat(t);
+      if (fs[0].type === "num" && fs.length > 1) return [fs[0].value, fs.slice(1).reduce((acc, f) => op("*", acc, f))];
+    }
+    return [ONE, t];
+  };
+  /** c·rest as a left-to-right product with the number first, so it prints as 2*a*x. */
+  const withCoef = (c, rest) => {
+    if (isZero(c.subtract(ONE))) return rest;
+    if (isZero(c.add(ONE))) return op("neg", rest);
+    const fs = [];
+    const flat = (u) => (u.type === "op" && u.op === "*" ? u.args.forEach(flat) : fs.push(u));
+    flat(rest);
+    return fs.reduce((acc, f) => op("*", acc, f), num(c));
+  };
+  const product = (n) => {
+    let c = ONE;
+    const fs = []; // { base, k }
+    let keepZero = false;
+    const push = (base, k) => {
+      const hit = fs.find((f) => sameTree(f.base, base));
+      if (hit) hit.k += k;
+      else fs.push({ base, k });
+    };
+    const walk = (t) => {
+      if (t.type === "op" && t.op === "*") return t.args.forEach(walk);
+      if (t.type === "op" && t.op === "neg") {
+        c = c.negate();
+        return walk(t.args[0]);
+      }
+      const g = go(t);
+      if (g.type === "num") c = c.multiply(g.value);
+      else if (g.type === "op" && (g.op === "*" || g.op === "neg")) walk(g);
+      else if (g.type === "op" && g.op === "^" && isPosInt(g.args[1]) && g.args[1].value.numerator < 1000n) push(g.args[0], Number(g.args[1].value.numerator));
+      else push(g, 1);
+    };
+    n.args.forEach(walk);
+    let rest = null;
+    for (const f of fs) {
+      const t = f.k === 1 ? f.base : op("^", f.base, num(BigInt(f.k)));
+      rest = rest ? op("*", rest, t) : t;
+      if (!isTotal(f.base)) keepZero = true;
+    }
+    if (!rest) return num(c);
+    if (isZero(c)) return keepZero ? op("*", ZN(), rest) : ZN();
+    return withCoef(c, rest);
+  };
+  const sum = (n) => {
+    const terms = []; // { c, core }
+    let constant = ZERO;
+    const walk = (t, sgn) => {
+      if (t.type === "op" && t.op === "+") {
+        walk(t.args[0], sgn);
+        return walk(t.args[1], sgn);
+      }
+      if (t.type === "op" && t.op === "-") {
+        walk(t.args[0], sgn);
+        return walk(t.args[1], -sgn);
+      }
+      if (t.type === "op" && t.op === "neg") return walk(t.args[0], -sgn);
+      const g = go(t);
+      if (g.type === "op" && (g.op === "+" || g.op === "-")) return walk(g, sgn);
+      let [c, core] = split(g);
+      if (sgn < 0) c = c.negate();
+      if (core === null) {
+        if (!terms.some((x) => x.core === null)) terms.push({ c: ZERO, core: null }); // the constant keeps its place
+        constant = constant.add(c);
+      } else {
+        const hit = terms.find((x) => x.core !== null && sameTree(x.core, core));
+        if (hit) hit.c = hit.c.add(c);
+        else terms.push({ c, core });
+      }
+    };
+    walk(n, 1);
+    let out = null;
+    for (const term of terms) {
+      const core = term.core;
+      const c = core === null ? constant : term.c;
+      if (core === null) {
+        if (isZero(c)) continue;
+        const mag = num(c.abs());
+        if (!out) out = num(c);
+        else out = c.numerator < 0n ? op("-", out, mag) : op("+", out, mag);
+        continue;
+      }
+      if (isZero(c)) {
+        if (isTotal(core)) continue;
+        const z = op("*", ZN(), core);
+        out = out ? op("+", out, z) : z;
+        continue;
+      }
+      const mag = withCoef(c.abs(), core);
+      if (!out) out = withCoef(c, core);
+      else out = c.numerator < 0n ? op("-", out, mag) : op("+", out, mag);
+    }
+    return out ?? ZN();
+  };
   const go = (n) => {
     if (n.type !== "op" && n.type !== "call") return n;
-    const a = n.args.map(go);
-    if (n.type === "call") return call(n.name, ...a);
+    if (n.type === "call") return call(n.name, ...n.args.map(go));
     switch (n.op) {
       case "+":
-        if (sameTree(a[0], a[1])) return S.mul(num(2n), a[0]);
-        if (a[1].type === "op" && a[1].op === "neg" && sameTree(a[0], a[1].args[0]) && isTotal(a[0])) return ZN();
-        return S.add(a[0], a[1]);
-      case "-":
-        if (sameTree(a[0], a[1]) && isTotal(a[0])) return ZN();
-        return S.sub(a[0], a[1]);
-      case "neg": return S.neg(a[0]);
-      case "*":
-        if ((isNum(a[0], 0) && !isTotal(a[1])) || (isNum(a[1], 0) && !isTotal(a[0]))) return op("*", a[0], a[1]);
-        if (sameTree(a[0], a[1])) return S.pow(a[0], num(2n));
-        return S.mul(a[0], a[1]);
-      case "/":
-        if (isNum(a[0], 0) && !isTotal(a[1])) return op("/", a[0], a[1]);
-        return S.div(a[0], a[1]);
-      case "^":
-        if (isNum(a[1], 0)) return op("^", a[0], a[1]); // 0^0 is refused elsewhere
-        return S.pow(a[0], a[1]);
-      default: return op(n.op, ...a);
+      case "-": return sum(n);
+      case "*": return product(n);
+      case "neg": return product(op("*", num(-1n), n.args[0]));
+      case "/": {
+        const a = go(n.args[0]);
+        const b = go(n.args[1]);
+        if (isNum(a, 0) && !isTotal(b)) return op("/", a, b);
+        // numeric factors move out front: (6u)/(3v) = 2·(u/v)
+        const [ca, ua] = split(a);
+        const [cb, ub] = split(b);
+        if (isZero(cb)) return op("/", a, b);
+        const c = ca.divide(cb);
+        const q = ub === null ? (ua === null ? null : ua) : op("/", ua ?? ON(), ub);
+        if (q === null) return num(c);
+        if (ua === null && ub !== null) return S.div(num(c), ub);
+        return S.mul(num(c), q);
+      }
+      case "^": {
+        const a = go(n.args[0]);
+        const b = go(n.args[1]);
+        if (isNum(b, 0)) return op("^", a, b); // 0^0 is refused elsewhere
+        if (a.type === "num" && isPosInt(b) && b.value.numerator <= 64n) return num(a.value.pow(Number(b.value.numerator)));
+        return S.pow(a, b);
+      }
+      default: return op(n.op, ...n.args.map(go));
     }
   };
   return go(toAst(ast));
@@ -559,6 +716,10 @@ export function derivative(ast, name = "x") {
           case "log1p": return S.div(da, S.add(ON(), a));
           case "sqrt": return S.div(da, S.mul(two(), n));
           case "atan": return S.div(da, S.add(ON(), S.pow(a, two())));
+          case "asin": return S.div(da, call("sqrt", S.sub(ON(), S.pow(a, two()))));
+          case "acos": return S.neg(S.div(da, call("sqrt", S.sub(ON(), S.pow(a, two())))));
+          case "cbrt": return S.div(da, S.mul(num(3n), S.pow(n, two())));
+          case "erf": return S.mul(S.div(S.mul(two(), call("exp", S.neg(S.pow(a, two())))), call("sqrt", { type: "const", name: "pi" })), da);
           case "sinh": return S.mul(call("cosh", a), da);
           case "cosh": return S.mul(call("sinh", a), da);
           case "tanh": return S.div(da, S.pow(call("cosh", a), two()));

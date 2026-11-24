@@ -228,6 +228,43 @@ function removableEval(rem, m, s) {
   return result;
 }
 
+/**
+ * A bound for f on boxes inside [a, b] that needs no smoothness: plain
+ * interval evaluation, and at a removable point of a quotient (sin(x)/x at 0)
+ * the L'Hôpital enclosure above. Returns (X) => Iv; it throws an
+ * AnalyticError where f cannot be bounded (a pole, or outside the domain).
+ * Ranges and integrals fall back to it on pieces where no Taylor model exists
+ * (abs across 0, sqrt from 0, a model too wide to be useful).
+ */
+export function boxBounder(F, a, b, bits) {
+  const params = evalParams(F.params);
+  const env = {};
+  for (const [k, v] of Object.entries(params)) env[k] = Iv.from(v);
+  const s = { F, a, b, tol: b.subtract(a).divide(new Rational(1n << 30n)), bits, env, holes: [], removable: [] };
+  const evals = [];
+  if (lt(a, b) && Object.values(params).every((v) => v instanceof Rational)) {
+    try {
+      findRemovable(s, params);
+      for (const rem of s.removable) evals.push({ c: rem.c, f: removableEval(rem, 0, s) });
+    } catch (e) {
+      if (!(e instanceof AnalyticError)) throw e;
+    }
+  }
+  return (X) => {
+    try {
+      return encloseAst(F.ast, { ...env, [F.variable]: X }, bits);
+    } catch (e) {
+      if (!(e instanceof AnalyticError)) throw e;
+      for (const r of evals) {
+        if (!r.f || lt(r.c, X.lo) || gt(r.c, X.hi)) continue;
+        const y = r.f(X);
+        if (y) return y;
+      }
+      throw e;
+    }
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Rational-function engine
 
@@ -704,7 +741,10 @@ function zeroCore(ast) {
   let power = ONE; // f ≈ core^power near a zero (sqrt: 1/2)
   let even = false; // f keeps its sign across zeros of the core
   for (;;) {
-    if (ast.type === "call" && (ast.name === "sqrt" || ast.name === "abs") && ast.args.length === 1) {
+    if (ast.type === "call" && ast.name === "cbrt" && ast.args.length === 1) {
+      power = power.multiply(new Rational(1n, 3n));
+      ast = ast.args[0];
+    } else if (ast.type === "call" && (ast.name === "sqrt" || ast.name === "abs") && ast.args.length === 1) {
       if (ast.name === "sqrt") power = power.multiply(new Rational(1n, 2n));
       even = true;
       ast = ast.args[0];

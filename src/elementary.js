@@ -10,7 +10,7 @@
 import { Rational } from "@ratmath/core";
 import { Iv, IV_ZERO } from "./interval.js";
 import { ZERO, ONE, TWO, HALF, rat, lt, le, gt, eq, isZero, factorial, roundDyadic, log2Approx, max } from "./rat.js";
-import { expPoint, sinCosPoint, logPoint, atanPoint, sqrtPoint, piIv } from "./points.js";
+import { expPoint, sinCosPoint, logPoint, atanPoint, sqrtPoint, piIv, asinPoint, rootPoint, erfPoint } from "./points.js";
 import { refuse } from "./errors.js";
 import { TaylorModel } from "./model.js";
 import { magBound } from "./poly.js";
@@ -110,7 +110,7 @@ function trigSpec(phase) {
 
 function logSpec(c0, n, X, bits) {
   if (le(X.lo, ZERO)) {
-    refuse("domain", `log needs a positive argument, but the argument's range ${X} reaches ${X.lo}`, { range: X.toRationalInterval() });
+    refuse("domain", `log needs a positive argument, but the argument's range is ${X}`, { range: X.toRationalInterval() });
   }
   const coeffs = [logPoint(c0, bits + 8)];
   let p = ONE;
@@ -146,11 +146,94 @@ function atanSpec(c0, n, X, bits) {
   return { coeffs, lagrange: Iv.sym(den.reciprocal()), rule: "Lagrange, |atan^(k)| ≤ (k−1)!/(1+x²)^(k/2)" };
 }
 
+// ------------------------------------------------------------------ asin
+
+/** r_k with (1 − x²)^(−1/2) = S·Σ r_k t^k about c (S = 1/√(1 − c²)), from (1 − x²)w′ = x·w. */
+function invSqrtRatios(c, n) {
+  const A = ONE.subtract(c.multiply(c));
+  const B = TWO.multiply(c);
+  const r = [ONE];
+  for (let k = 0; k < n; k++) {
+    let v = c.add(B.multiply(new Rational(BigInt(k)))).multiply(r[k]);
+    if (k >= 1) v = v.add(r[k - 1].multiply(new Rational(BigInt(k))));
+    r.push(v.divide(A.multiply(new Rational(BigInt(k + 1)))));
+  }
+  return r;
+}
+
+function asinSpec(c0, n, X, bits) {
+  const M = X.mag;
+  if (gt(M, ONE)) refuse("domain", `asin and acos need an argument in [-1, 1], but the argument's range is ${X}`, { range: X.toRationalInterval() });
+  if (eq(M, ONE)) refuse("not-smooth", `asin and acos are not smooth at ±1, and the argument's range ${X} reaches it; split the domain there`, { range: X.toRationalInterval() });
+  const S = sqrtPoint(ONE.subtract(c0.multiply(c0)), bits + 8).recip();
+  const r = invSqrtRatios(c0, n);
+  const coeffs = [asinPoint(c0, bits + 8)];
+  for (let k = 1; k <= n; k++) coeffs.push(S.scale(r[k - 1].divide(new Rational(BigInt(k)))));
+  // asin's series at 0 has non-negative coefficients, so |asin^(k)(ξ)| ≤ asin^(k)(M) for |ξ| ≤ M:
+  // the (n+1)-th Taylor coefficient about M bounds the Lagrange factor
+  const SM = sqrtPoint(ONE.subtract(M.multiply(M)), 40).recip();
+  const top = SM.hi.multiply(invSqrtRatios(M, n)[n]).divide(new Rational(BigInt(n + 1)));
+  return { coeffs, lagrange: Iv.sym(top), rule: "Lagrange, |asin^(k)(ξ)| ≤ asin^(k)(max |argument|)" };
+}
+
+// ------------------------------------------------------------------ erf
+
+function erfSpec(c0, n, X, bits) {
+  // erf′(x) = (2/√π)·e^(−x²). With e^(−(c+t)²) = E·Σ g_k t^k (E = e^(−c²)), g′ = −2(c + t)·g gives
+  //   (k+1)·g_(k+1) = −2c·g_k − 2·g_(k−1),   g_0 = 1.
+  const pi = piIv(bits + 16);
+  const scale = new Iv(sqrtPoint(pi.lo, bits + 16).lo, sqrtPoint(pi.hi, bits + 16).hi).recip().scale(TWO).mul(expPoint(c0.multiply(c0).negate(), bits + 16));
+  const g = [ONE];
+  for (let k = 0; k < n; k++) {
+    let v = TWO.multiply(c0).multiply(g[k]).negate();
+    if (k >= 1) v = v.subtract(TWO.multiply(g[k - 1]));
+    g.push(v.divide(new Rational(BigInt(k + 1))));
+  }
+  const coeffs = [erfPoint(c0, bits + 8)];
+  for (let k = 1; k <= n; k++) coeffs.push(scale.scale(g[k - 1].divide(new Rational(BigInt(k)))));
+  // erf^(n+1)(ξ) = (2/√π)·(−1)^n·H_n(ξ)·e^(−ξ²) and |H_n(ξ)|·e^(−ξ²/2) ≤ 1.09·√(2^n·n!) (Cramér),
+  // so |erf^(n+1)(ξ)|/(n+1)! ≤ 1.24·√(2^n·n!)/(n+1)!   (2/√π·1.09 < 1.24)
+  const sq = sqrtPoint(new Rational((1n << BigInt(n)) * factorial(n)), 40).hi;
+  const top = sq.multiply(new Rational(124n, 100n)).divide(new Rational(factorial(n + 1)));
+  return { coeffs, lagrange: Iv.sym(top), rule: "Lagrange, Cramér's bound on Hermite functions" };
+}
+
+// ------------------------------------------------------------------ x^q, q rational
+
+/** ξ^(num/den) for ξ > 0 as an interval. */
+function ratPow(x, num, den, bits) {
+  const root = den === 1 ? Iv.point(x) : rootPoint(x, den, bits);
+  return num >= 0 ? root.pow(num) : root.pow(-num).recip();
+}
+
+function powSpec(q) {
+  const num = Number(q.numerator);
+  const den = Number(q.denominator);
+  return (c0, n, X, bits) => {
+    if (le(X.lo, ZERO)) {
+      refuse("not-smooth", `a fractional power is not smooth where its base is 0: the base's range ${X} reaches 0; split the domain there`, { range: X.toRationalInterval() });
+    }
+    const S = ratPow(c0, num, den, bits + 8);
+    // binom(q, k)
+    const bin = [ONE];
+    for (let k = 1; k <= n + 1; k++) bin.push(bin[k - 1].multiply(q.subtract(new Rational(BigInt(k - 1)))).divide(new Rational(BigInt(k))));
+    const coeffs = [];
+    let p = ONE;
+    for (let k = 0; k <= n; k++) {
+      coeffs.push(S.scale(bin[k].divide(p)));
+      p = p.multiply(c0);
+    }
+    // binom(q, n+1)·ξ^(q − n − 1) is monotone in ξ > 0: its range is spanned by the ends of X
+    const at = (x) => ratPow(x, num, den, 40).scale(x.pow(n + 1).reciprocal());
+    return { coeffs, lagrange: at(X.lo).hull(at(X.hi)).scale(bin[n + 1]), rule: "Lagrange, base range bounded away from 0" };
+  };
+}
+
 // ------------------------------------------------------------------ sqrt
 
 function sqrtSpec(c0, n, X, bits) {
   if (le(X.lo, ZERO)) {
-    refuse("domain", `sqrt models need the argument's range to stay above 0, but it reaches ${X.lo}`, { range: X.toRationalInterval() });
+    refuse("domain", `sqrt models need the argument's range to stay above 0, but it is ${X}`, { range: X.toRationalInterval() });
   }
   const S = sqrtPoint(c0, bits + 8);
   // binom(1/2, k)
@@ -204,13 +287,35 @@ export const tanh = (g) => {
   const ei = exp(g.negate());
   return e.subtract(ei).divide(e.add(ei)); // cosh ≥ 1 keeps the divisor away from 0
 };
-/** g^a for rational a via exp(a·log g) (integers use exact powers). */
+const settingsOf = (g) => ({ order: g.order, bits: g.bits });
+
+export const asin = (g) => compose(g, "asin", asinSpec);
+export const erf = (g) => compose(g, "erf", erfSpec);
+export const acos = (g) => asin(g).negate().add(TaylorModel.constant(g.domain, piIv(g.bits + 8).scale(HALF).toRationalInterval(), settingsOf(g)));
+
+/**
+ * g^a for rational a. Integers use exact powers. Otherwise exp(a·log g) where
+ * g > 0; where g < 0 and a has an odd denominator the real root is used:
+ * (−8)^(1/3) = −2. Across g = 0 the power is not smooth and is refused.
+ */
 export function power(g, a) {
   const q = a instanceof Rational ? a : new Rational(BigInt(a));
   if (q.denominator === 1n) return g.pow(Number(q.numerator));
   if (eq(q, HALF)) return sqrt(g);
-  return exp(log(g).multiply(q));
+  const small = q.denominator <= 64n && q.numerator <= 64n && q.numerator >= -64n;
+  const pos = (m) => (small ? compose(m, `power ${q}`, powSpec(q)) : exp(log(m).multiply(q)));
+  const r = g.bound(4);
+  if (gt(r.lo, ZERO)) return pos(g);
+  if (lt(r.hi, ZERO)) {
+    if (q.denominator % 2n === 0n) refuse("domain", `a power with an even root needs a non-negative base, but the base's range is ${r}`);
+    const m = pos(g.negate());
+    return q.numerator % 2n === 0n ? m : m.negate();
+  }
+  if (r.isPoint && gt(q, ZERO)) return TaylorModel.constant(g.domain, ZERO, settingsOf(g));
+  if (lt(r.lo, ZERO) && q.denominator % 2n === 0n) refuse("domain", `a power with an even root needs a non-negative base, but the base's range is ${r}`);
+  return refuse("not-smooth", `a fractional power is not smooth where its base is 0: the base's range ${r} contains 0; split the domain there`);
 }
+export const cbrt = (g) => power(g, new Rational(1n, 3n));
 export { piIv };
 
 function poly_hb(m) {

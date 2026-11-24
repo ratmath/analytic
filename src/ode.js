@@ -11,17 +11,26 @@
 //      y(t) − P(t) ∈ I for every t in T. Then shrink I by re-applying Φ.
 //   3. If no such I is found, halve h.
 //
-// Steps chain: the enclosure of y(t0 + h) is the next step's Y0. Systems are
-// handled componentwise without preconditioning, so enclosures of rotating
-// systems grow over long spans (the wrapping effect); shorten spans or raise
-// the order to keep them tight.
+// Steps chain, and how they chain decides whether digits survive. Handing the
+// box y(t0 + h) to the next step as its Y0 forgets that every solution in the
+// box moves together: the width can then only grow, even for y′ = −y. So for
+// formula right-hand sides each step also tracks the dependence on the initial
+// value (the mean-value form used by Lohner's method):
+//
+//   y(t; y0) ∈ y(t; c) + J(t)·(y0 − c),    J(t) ⊇ ∂y(t)/∂y0 over the whole box,
+//
+// where y(t; c) is a validated step from the single point c (tight: only the
+// truncation error) and J comes from the variational equation J′ = F_y(t, y)·J,
+// J(t0) = I, solved together with y over the box. The set at t1 is kept as
+// c′ + B′·r′ with a frame B′ from a QR factorisation of J(t1)·B, which keeps
+// rotating systems from wrapping. Contracting problems now contract.
 import { Rational } from "@ratmath/core";
 import { Refinement } from "./refine.js";
 import { Iv } from "./interval.js";
 import { TaylorModel, Domain, DEFAULTS } from "./model.js";
 import { AnalyticError, refuse } from "./errors.js";
-import { ZERO, ONE, TWO, toQ, lt, le, gt, max } from "./rat.js";
-import { toAst, compileFloat, floatEnv, modelOf, toRational, freeVariables } from "./expr.js";
+import { ZERO, ONE, TWO, toQ, lt, le, gt, max, roundDyadic } from "./rat.js";
+import { toAst, compileFloat, floatEnv, modelOf, toRational, freeVariables, derivative as dAst } from "./expr.js";
 
 const q = (v) => (typeof v === "string" || (typeof v === "number" && !Number.isInteger(v)) ? toRational(v) : toQ(v));
 
@@ -46,6 +55,7 @@ function problem(spec) {
 
   let modelF;
   let floatF = null;
+  let variational = null;
   if (typeof spec.f === "function") {
     modelF = (t, ys) => {
       const out = spec.f(t, system ? ys : ys[0]);
@@ -65,6 +75,30 @@ function problem(spec) {
       vars.forEach((name, i) => (env[name] = ys[i]));
       return fs.map((ast) => modelOf(ast, env, t));
     };
+    // the variational system (y, J) with J′ = F_y(t, y)·J, when every partial derivative has a formula
+    try {
+      const dF = fs.map((ast) => vars.map((name) => dAst(ast, name)));
+      variational = (t, all) => {
+        const ys = all.slice(0, n);
+        const env = { ...params, [time]: t };
+        vars.forEach((name, i) => (env[name] = ys[i]));
+        const A = dF.map((row) => row.map((ast) => modelOf(ast, env, t)));
+        const out = fs.map((ast) => modelOf(ast, env, t));
+        for (let i = 0; i < n; i++) {
+          for (let k = 0; k < n; k++) {
+            let acc = null;
+            for (let j = 0; j < n; j++) {
+              const term = lift(t.domain, A[i][j], { order: t.order, bits: t.bits }).multiply(all[n + j * n + k]);
+              acc = acc ? acc.add(term) : term;
+            }
+            out.push(acc);
+          }
+        }
+        return out;
+      };
+    } catch (e) {
+      if (!(e instanceof AnalyticError)) throw e;
+    }
     const compiled = fs.map(compileFloat);
     const fenv = floatEnv(spec.params ?? {});
     floatF = (t, ys) => {
@@ -73,7 +107,7 @@ function problem(spec) {
       return compiled.map((g) => g(env));
     };
   }
-  return { system, n, y0, vars, time, modelF, floatF };
+  return { system, n, y0, vars, time, modelF, floatF, variational };
 }
 
 const lift = (D, val, s) => (val instanceof TaylorModel ? val : TaylorModel.constant(D, val, s));
@@ -143,6 +177,125 @@ function inflate(iv, factor, tiny) {
   return new Iv(m.subtract(r), m.add(r));
 }
 
+// ---- sets as centre + frame·box (Lohner's representation) -----------------------
+
+const ivZero = () => Iv.point(ZERO);
+/** Hull of c + B·r, componentwise. */
+function boxOf(set) {
+  return set.c.map((ci, i) => set.B[i].reduce((acc, b, k) => acc.add(set.r[k].scale(b)), Iv.point(ci)));
+}
+/** Exact inverse of a rational matrix, or null when singular. */
+function inverse(M) {
+  const n = M.length;
+  const A = M.map((row, i) => [...row, ...row.map((_, j) => (i === j ? ONE : ZERO))]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let i = c + 1; i < n; i++) if (gt(A[i][c].abs(), A[p][c].abs())) p = i;
+    if (A[p][c].numerator === 0n) return null;
+    [A[c], A[p]] = [A[p], A[c]];
+    const inv = A[c][c].reciprocal();
+    A[c] = A[c].map((x) => x.multiply(inv));
+    for (let i = 0; i < n; i++) {
+      if (i === c || A[i][c].numerator === 0n) continue;
+      const f = A[i][c];
+      A[i] = A[i].map((x, j) => x.subtract(f.multiply(A[c][j])));
+    }
+  }
+  return A.map((row) => row.slice(n));
+}
+const dyadic = (x) => new Rational(BigInt(Math.round(x * 2 ** 30)), 1n << 30n);
+/**
+ * A frame for the interval matrix M (≈ J·B): the orthogonal factor of a float
+ * QR of its midpoint, longest column first. It is only a choice of
+ * coordinates, so floats are fine here; everything proved with it is exact.
+ */
+function frameFor(M, r) {
+  const n = M.length;
+  if (n === 1) return [[ONE]];
+  const cols = [];
+  for (let k = 0; k < n; k++) {
+    const v = M.map((row) => row[k].mid.toNumber() * Math.max(r[k].mag.toNumber(), 1e-300));
+    cols.push(v);
+  }
+  cols.sort((a, b) => Math.hypot(...b) - Math.hypot(...a));
+  const Q = [];
+  for (const v0 of cols) {
+    const v = v0.slice();
+    for (const u of Q) {
+      const d = u.reduce((acc, x, i) => acc + x * v[i], 0);
+      for (let i = 0; i < n; i++) v[i] -= d * u[i];
+    }
+    const len = Math.hypot(...v);
+    if (!(len > 1e-12 * Math.hypot(...v0)) || !Number.isFinite(len)) continue;
+    Q.push(v.map((x) => x / len));
+  }
+  // complete with unit vectors if the columns were dependent
+  for (let e = 0; Q.length < n && e < n; e++) {
+    const v = Array.from({ length: n }, (_, i) => (i === e ? 1 : 0));
+    for (const u of Q) {
+      const d = u[e];
+      for (let i = 0; i < n; i++) v[i] -= d * u[i];
+    }
+    const len = Math.hypot(...v);
+    if (len > 1e-6) Q.push(v.map((x) => x / len));
+  }
+  if (Q.length < n) return null;
+  // columns of the frame are the vectors of Q
+  return Array.from({ length: n }, (_, i) => Q.map((u) => dyadic(u[i])));
+}
+
+/**
+ * A step that tracks the dependence on the initial value. `set` is
+ * { c, B, r }: the initial values c + B·r. Returns the step with its wide
+ * models, the point solution, J, and the set at t1; or null.
+ */
+function tightStep(pb, t0, h, set, opts) {
+  // the point solution is cheap and decides the step size; the wide solve
+  // for J runs only once the step is accepted (complete())
+  const n = pb.n;
+  const point = tryStep(pb, t0, h, set.c.map((x) => Iv.point(x)), opts);
+  if (!point) return null;
+  const t1 = t0.add(h);
+  let excess = ZERO;
+  point.models.forEach((m) => (excess = max(excess, m.rem.width)));
+  const complete = () => {
+    const Y = boxOf(set);
+    const eye = [];
+    for (let i = 0; i < n; i++) for (let k = 0; k < n; k++) eye.push(Iv.point(i === k ? ONE : ZERO));
+    const wide = tryStep({ modelF: pb.variational }, t0, h, [...Y, ...eye], opts);
+    if (!wide) return null;
+    const Jt = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, k) => Iv.from(wide.models[n + i * n + k].at(t1))));
+    const yc = point.models.map((m) => Iv.from(m.at(t1)));
+    const c1 = yc.map((v) => roundDyadic(v.mid, opts.bits));
+    const z = yc.map((v, i) => v.sub(c1[i]));
+    // M = J(t1)·B
+    const M = Jt.map((row) => set.B[0].map((_, k) => row.reduce((acc, a, j) => acc.add(a.scale(set.B[j][k])), ivZero())));
+    let B1 = frameFor(M, set.r);
+    let inv = B1 && inverse(B1);
+    if (!inv) {
+      B1 = c1.map((_, i) => c1.map((_, k) => (i === k ? ONE : ZERO)));
+      inv = B1;
+    }
+    // r′ = (B′⁻¹·M)·r + B′⁻¹·z
+    const r1 = inv.map((row) => {
+      let acc = ivZero();
+      for (let k = 0; k < n; k++) {
+        let m = ivZero();
+        for (let j = 0; j < n; j++) m = m.add(M[j][k].scale(row[j]));
+        acc = acc.add(m.mul(set.r[k]));
+      }
+      for (let j = 0; j < n; j++) acc = acc.add(z[j].scale(row[j]));
+      return acc.roundOut(opts.bits);
+    });
+    return {
+      t0, t1, models: wide.models.slice(0, n), excess,
+      tight: { point: point.models, J: wide.models.slice(n), B: set.B, r: set.r },
+      next: { c: c1, B: B1, r: r1 },
+    };
+  };
+  return { t0, t1, excess, complete };
+}
+
 class ODESolution {
   constructor(pb, steps, complete, reason) {
     this.steps = steps; // [{ t0, t1, models }]
@@ -150,23 +303,45 @@ class ODESolution {
     this.reason = reason;
     this.system = pb.system;
     this.vars = pb.vars;
+    // a backward solve runs in s = start − t; `steps` are then in s
+    this.reversedFrom = pb.reverse ?? null;
     Object.freeze(this);
   }
-  get t0() {
-    return this.steps[0]?.t0;
+  #time(sv) {
+    return this.reversedFrom === null || sv === undefined ? sv : this.reversedFrom.subtract(sv);
   }
+  /** Where the solve started. */
+  get t0() {
+    return this.#time(this.steps[0]?.t0);
+  }
+  /** How far it got (below t0 for a backward solve). */
   get t1() {
-    return this.steps.at(-1)?.t1;
+    return this.#time(this.steps.at(-1)?.t1);
   }
   /** Certified enclosure(s) of y(t) for t in the solved span. */
   at(t) {
-    const T = Iv.from(typeof t === "string" || typeof t === "number" ? q(t) : t);
+    let T = Iv.from(typeof t === "string" || typeof t === "number" ? q(t) : t);
+    if (this.reversedFrom !== null) T = new Iv(this.reversedFrom.subtract(T.hi), this.reversedFrom.subtract(T.lo));
     const parts = this.steps.filter((s) => le(s.t0, T.hi) && le(T.lo, s.t1));
-    if (!parts.length) refuse("outside-domain", `t = ${T} is outside the solved span`);
+    if (!parts.length) refuse("outside-domain", `t = ${typeof t === "object" ? Iv.from(t) : t} is outside the solved span`);
     let acc = null;
     for (const s of parts) {
       const sub = new Iv(max(T.lo, s.t0), lt(T.hi, s.t1) ? T.hi : s.t1);
-      const vals = s.models.map((m) => Iv.from(m.at(sub)));
+      let vals = s.models.map((m) => Iv.from(m.at(sub)));
+      if (s.tight) {
+        // y(t) ∈ y(t; c) + (J(t)·B)·r, intersected with the direct enclosure
+        const { point, J, B, r } = s.tight;
+        const n = point.length;
+        vals = vals.map((wide, i) => {
+          let acc = Iv.from(point[i].at(sub));
+          for (let k = 0; k < n; k++) {
+            let m = Iv.point(ZERO);
+            for (let j = 0; j < n; j++) m = m.add(Iv.from(J[i * n + j].at(sub)).scale(B[j][k]));
+            acc = acc.add(m.mul(r[k]));
+          }
+          return acc.intersect(wide) ?? acc;
+        });
+      }
       acc = acc ? acc.map((a, i) => a.hull(vals[i])) : vals;
     }
     const out = acc.map((a) => a.toRationalInterval());
@@ -199,6 +374,12 @@ function* solveStages(pb, opts) {
   const maxTightenings = opts.maxTightenings ?? 8;
   let t = t0;
   let Y = pb.y0;
+  // the set of initial values as centre + frame·box, when the variational equation is available
+  let set = null;
+  if (pb.variational && opts.track !== false) {
+    const c = pb.y0.map((v) => v.mid);
+    set = { c, B: c.map((_, i) => c.map((_, k) => (i === k ? ONE : ZERO))), r: pb.y0.map((v, i) => v.sub(c[i])) };
+  }
   const steps = [];
   const span = until.subtract(t0);
   while (lt(t, until)) {
@@ -206,12 +387,14 @@ function* solveStages(pb, opts) {
       return { value: new ODESolution(pb, steps, false, `budget hit: ${maxSteps} steps`), via: "validated Picard steps (budget hit)" };
     }
     if (gt(t.add(h), until)) h = until.subtract(t);
-    let step = tryStep(pb, t, h, Y, { order, bits });
+    let step = set ? tightStep(pb, t, h, set, { order, bits }) : tryStep(pb, t, h, Y, { order, bits });
     if (step) {
       // Width this step adds beyond what it inherited, per unit time. Halving
       // h shrinks the truncation part fast; the part inherited from Y0 grows
       // at a rate halving cannot change, so stop halving once it stops paying.
-      step.rate = excessRate(step, Y);
+      // (With the initial value tracked, the step's own error is the width of
+      // the point solution's remainder.)
+      step.rate = set ? step.excess.divide(h) : excessRate(step, Y);
       if (!le(step.excess, tol)) {
         if (loose && gt(step.rate.multiply(TWO), loose.rate)) {
           step = loose; // halving did not help: keep the longer step
@@ -233,19 +416,35 @@ function* solveStages(pb, opts) {
       }
       continue;
     }
+    if (step.complete) {
+      const full = step.complete();
+      if (!full) {
+        // the box of initial values is too wide for this step length: shorten it
+        h = step.t1.subtract(step.t0).divide(TWO);
+        loose = null;
+        if (lt(h, minStep)) {
+          return { value: new ODESolution(pb, steps, false, `no enclosure with step ≥ ${minStep} at t = ${t}`), via: "validated Picard steps (stopped early)" };
+        }
+        continue;
+      }
+      step = full;
+    }
     loose = null;
     tightenings = 0;
     h = step.t1.subtract(step.t0);
-    steps.push({ t0: step.t0, t1: step.t1, models: step.models });
+    steps.push({ t0: step.t0, t1: step.t1, models: step.models, tight: step.tight });
     t = step.t1;
-    Y = step.models.map((m) => Iv.from(m.at(step.t1)));
+    if (set) {
+      set = step.next;
+      Y = boxOf(set);
+    } else Y = step.models.map((m) => Iv.from(m.at(step.t1)));
     const done = Math.round(1000 * t.subtract(t0).divide(span).toNumber());
     yield { done, of: 1000, step: `t = ${t}`, partial: new ODESolution(pb, steps.slice(), false, "in progress") };
     // try a longer step next time, capped at the first one
     h = h.multiply(TWO);
     if (gt(h, h0)) h = h0;
   }
-  return { value: new ODESolution(pb, steps, true), via: `${steps.length} validated Picard steps (Taylor models, order ${order})` };
+  return { value: new ODESolution(pb, steps, true), via: `${steps.length} validated Picard steps (Taylor models, order ${order}${set ? ", initial value tracked" : ""})` };
 }
 
 /** Classical RK4 on doubles, for previews. */
@@ -279,7 +478,26 @@ function rk4(pb, t0, t1, steps) {
  * certified enclosures (.at(t), .final, .steps, .complete).
  */
 export function solve(spec) {
-  const pb = problem(spec);
+  let pb = problem(spec);
+  const start = q(spec.t0 ?? 0);
+  if (lt(q(spec.until), start)) {
+    // backward in time: with s = start − t, dy/ds = −F(start − s, y)
+    const fwd = pb;
+    const flip = (run) => (sv, ys) => {
+      const st = { order: sv.order, bits: sv.bits };
+      return run(sv.negate().add(start), ys).map((m) => lift(sv.domain, m, st).negate());
+    };
+    pb = { ...fwd, modelF: flip(fwd.modelF), variational: fwd.variational && flip(fwd.variational), reverse: start };
+    return new Refinement(
+      () => {
+        if (!fwd.floatF) return { value: null, trust: "unsure" };
+        const value = rk4(fwd, start.toNumber(), q(spec.until).toNumber(), spec.previewSteps ?? 200);
+        const ys = fwd.system ? value.y : [value.y];
+        return { value, trust: ys.every((a) => a.every(Number.isFinite)) ? "good" : "unsure" };
+      },
+      () => solveStages(pb, { ...spec, t0: 0, until: start.subtract(q(spec.until)) }),
+    );
+  }
   return new Refinement(
     () => {
       if (!pb.floatF) return { value: null, trust: "unsure" };

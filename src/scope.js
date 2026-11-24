@@ -13,7 +13,7 @@ import { fn } from "./fn.js";
 import { ode } from "./ode.js";
 import { zeros, poles, extrema, inflections } from "./roots.js";
 
-const NAMES = ["exp", "log", "log1p", "sqrt", "sin", "cos", "tan", "atan", "sinh", "cosh", "tanh"];
+const NAMES = ["exp", "log", "log1p", "sqrt", "sin", "cos", "tan", "atan", "asin", "acos", "cbrt", "erf", "sinh", "cosh", "tanh"];
 
 /** Bits needed for `digits` correct decimal digits, with guard bits. */
 export function bitsForDigits(digits) {

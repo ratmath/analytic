@@ -8,10 +8,12 @@ import { Iv } from "./interval.js";
 import { TaylorModel, Domain, DEFAULTS } from "./model.js";
 import { AnalyticError, refuse } from "./errors.js";
 import { ONE, TWO, ZERO, toQ, lt, le, max, min, isZero, log2Approx } from "./rat.js";
-import { toAst, format, compileFloat, floatEnv, modelOf, derivative, freeVariables, toRational } from "./expr.js";
+import { toAst, format, compileFloat, floatEnv, modelOf, derivative, simplify, freeVariables, toRational } from "./expr.js";
 import { bitsForDigits } from "./scope.js";
 import { PiecewiseFunction, parsePiecewiseText } from "./piecewise.js";
 import { cancelHoles } from "./holes.js";
+import { encloseAst } from "./ieval.js";
+import { boxBounder } from "./roots.js";
 
 const q = (v) => (typeof v === "string" ? toRational(v) : typeof v === "number" && !Number.isInteger(v) ? toRational(v) : toQ(v));
 const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
@@ -65,7 +67,7 @@ export class AnalyticFunction {
 
   /** Symbolic derivative d/d(variable), as a new AnalyticFunction. */
   derivative() {
-    return new AnalyticFunction(derivative(this.ast, this.variable), { variable: this.variable, params: this.params });
+    return new AnalyticFunction(simplify(derivative(this.ast, this.variable)), { variable: this.variable, params: this.params });
   }
 
   /**
@@ -114,6 +116,51 @@ export class AnalyticFunction {
       },
       () => valueStages(this, X, digits, opts.maxBits ?? 8192),
     );
+  }
+
+  /**
+   * Taylor coefficients a_0 … a_n of f about the rational point c, each a
+   * certified interval: a_k = f^(k)(c)/k!. Exact points for rational-only
+   * formulas. The derivatives are symbolic, so n is limited to 16.
+   */
+  taylor(c, n = 6, opts = {}) {
+    if (!Number.isInteger(n) || n < 0 || n > 16) refuse("bad-order", "taylor needs an order between 0 and 16");
+    const at = q(c);
+    const bits = bitsForDigits(opts.digits ?? 20) + 16;
+    const out = [];
+    let g = this;
+    let fact = 1n;
+    for (let k = 0; k <= n; k++) {
+      if (k > 0) {
+        g = g.derivative();
+        fact *= BigInt(k);
+      }
+      let v = pointValue(g, at, bits);
+      if (!v) {
+        try {
+          v = Iv.from(g.limit(at, opts));
+        } catch (e) {
+          if (!(e instanceof AnalyticError)) throw e;
+          refuse(e.code, `taylor: the derivative of order ${k} cannot be evaluated at ${at} (${e.message})`);
+        }
+      }
+      out.push(v.scale(new Rational(1n, fact)).toRationalInterval());
+    }
+    return out;
+  }
+
+  /**
+   * The limit of f at the rational point c, as a certified interval: the
+   * value where f is defined (every function here is continuous on its
+   * domain), and at a removable point of a quotient (sin(x)/x at 0) the
+   * L'Hôpital enclosure. Refuses at poles and outside the domain.
+   */
+  limit(c, opts = {}) {
+    const at = q(c);
+    const bits = bitsForDigits(opts.digits ?? 20) + 16;
+    const direct = pointValue(this, at, bits);
+    if (direct) return direct.toRationalInterval();
+    return boxBounder(this, at.subtract(ONE), at.add(ONE), bits)(Iv.point(at)).toRationalInterval();
   }
 
   /** Range over an interval: sampled preview, then a certified enclosure. */
@@ -172,16 +219,17 @@ function* valueStages(f, X, digits, maxBits) {
   const zeroBits = Math.min(maxBits, 16 * bits);
   const D = Domain(X);
   for (let attempt = 1; ; attempt++) {
-    let m;
+    let r;
     try {
-      m = f.model(D, { order: X.isPoint ? 0 : 8, bits });
+      // a point needs no Taylor model: interval evaluation is exact about ends of domains (sqrt(0), asin(1))
+      r = X.isPoint ? pointValue(f, X.lo, bits) : null;
+      r ??= Iv.from(f.model(D, { order: X.isPoint ? 0 : 8, bits }).range());
     } catch (e) {
       // an argument that only seems to leave a domain because of coarse rounding: sharpen and retry
       if (!(e instanceof AnalyticError) || !X.isPoint || bits >= Math.min(maxBits, 1024)) throw e;
       bits *= 2;
       continue;
     }
-    const r = Iv.from(m.range());
     const narrow = valueNarrow(r, digits);
     // a value that may be 0 is accepted once it is absolutely tiny at a generous precision
     const zeroish = !narrow && r.containsZero() && bits >= zeroBits && le(r.width, targetWidth(r, digits));
@@ -191,6 +239,19 @@ function* valueStages(f, X, digits, maxBits) {
     }
     yield { done: attempt, of: attempt + 1, step: `bits ${bits}`, partial: r.toRationalInterval() };
     bits *= 2;
+  }
+}
+
+/** f at a rational point by interval evaluation, or null where that cannot be done (a removable point). */
+function pointValue(f, x, bits) {
+  const env = {};
+  for (const [k, val] of Object.entries(evalParams(f.params))) env[k] = Iv.from(val);
+  env[f.variable] = Iv.point(x);
+  try {
+    return encloseAst(f.ast, env, bits + 8);
+  } catch (e) {
+    if (!(e instanceof AnalyticError)) throw e;
+    return null;
   }
 }
 
@@ -204,11 +265,29 @@ function* rangeStages(f, I, opts) {
   const order = opts.order ?? 8;
   const bits = opts.bits ?? Math.max(64, bitsForDigits(digits) + 24);
   const maxPieces = opts.maxPieces ?? 256;
+  let bounder = null;
+  let rough = 0;
   const piece = (lo, hi) => {
-    const m = f.model(Domain(new Iv(lo, hi)), { order, bits });
-    const outer = m.bound(4);
-    const c = Iv.from(m.at(m.domain.centre));
-    return { lo, hi, outer, c };
+    try {
+      const m = f.model(Domain(new Iv(lo, hi)), { order, bits });
+      const outer = m.bound(4);
+      const c = Iv.from(m.at(m.domain.centre));
+      return { lo, hi, outer, c };
+    } catch (e) {
+      if (!(e instanceof AnalyticError)) throw e;
+      // no Taylor model here (abs across 0, sqrt from 0, a model too wide): bound by intervals and let bisection close in
+      bounder ??= boxBounder(f, I.lo, I.hi, bits);
+      const outer = bounder(new Iv(lo, hi));
+      let c;
+      try {
+        c = bounder(Iv.point(lo.add(hi).divide(TWO)));
+      } catch (e2) {
+        if (!(e2 instanceof AnalyticError)) throw e2;
+        c = new Iv(outer.hi, outer.lo); // no inner information from this piece
+      }
+      rough++;
+      return { lo, hi, outer, c, rough: true };
+    }
   };
   let pieces = [piece(I.lo, I.hi)];
   for (let round = 1; ; round++) {
@@ -226,7 +305,8 @@ function* rangeStages(f, I, opts) {
     const done = le(gapHi, tol) && le(gapLo, tol);
     if (done || pieces.length >= maxPieces) {
       const note = done ? "" : `, budget hit at ${maxPieces} pieces`;
-      return { value: outer.toRationalInterval(), via: `Taylor models (order ${order}) on ${pieces.length} piece${pieces.length > 1 ? "s" : ""}${note}` };
+      const how = pieces.some((p) => p.rough) ? ", interval bounds where the function is not smooth" : "";
+      return { value: outer.toRationalInterval(), via: `Taylor models (order ${order}) on ${pieces.length} piece${pieces.length > 1 ? "s" : ""}${how}${note}` };
     }
     yield { done: pieces.length, of: maxPieces, step: `pieces ${pieces.length}`, partial: outer.toRationalInterval() };
     const split = new Set();
@@ -253,14 +333,29 @@ function* integralStages(f, A, B, opts) {
   const [lo, hi, sgn] = lt(A, B) ? [A, B, ONE] : [B, A, ONE.negate()];
   // Each piece is refined on its own until its share of the width budget is met.
   let pieces = [{ lo, hi }];
-  const enclose = (p) => (p.iv ??= Iv.from(f.model(Domain(new Iv(p.lo, p.hi)), { order, bits }).integral()));
+  let bounder = null;
+  let rough = false;
+  const enclose = (p) => {
+    if (p.iv) return p.iv;
+    try {
+      p.iv = Iv.from(f.model(Domain(new Iv(p.lo, p.hi)), { order, bits }).integral());
+    } catch (e) {
+      if (!(e instanceof AnalyticError)) throw e;
+      // no Taylor model on this piece: (width)·(range) still encloses its integral, and bisection shrinks the piece
+      bounder ??= boxBounder(f, lo, hi, bits);
+      p.iv = bounder(new Iv(p.lo, p.hi)).scale(p.hi.subtract(p.lo));
+      rough = true;
+    }
+    return p.iv;
+  };
   for (let round = 1; ; round++) {
     let total = Iv.point(ZERO);
     for (const p of pieces) total = total.add(enclose(p));
     const tol = targetWidth(total, digits);
     if (le(total.width, tol) || pieces.length >= maxPieces) {
       const note = le(total.width, tol) ? "" : `, budget hit at ${maxPieces} pieces`;
-      return { value: total.scale(sgn).toRationalInterval(), via: `Taylor models (order ${order}) on ${pieces.length} piece${pieces.length > 1 ? "s" : ""}${note}` };
+      const how = rough ? ", interval bounds where the function is not smooth" : "";
+      return { value: total.scale(sgn).toRationalInterval(), via: `Taylor models (order ${order}) on ${pieces.length} piece${pieces.length > 1 ? "s" : ""}${how}${note}` };
     }
     yield { done: pieces.length, of: maxPieces, step: `pieces ${pieces.length}`, partial: total.scale(sgn).toRationalInterval() };
     const len = hi.subtract(lo);
