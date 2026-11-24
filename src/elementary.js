@@ -34,7 +34,9 @@ function compose(g, name, spec) {
   // Powers of h are kept to degree 2n and the sum is truncated once at the
   // end, so the high-degree parts of the separate powers can cancel.
   const h = new TaylorModel({ domain: g.domain, coeffs: hCoeffs, rem: g.rem, order: 2 * n, bits, notes: g.notes, assumed: g.assumed });
-  const Rh = h.bound(2).hull(IV_ZERO); // ξ lies between c0 and c0 + h
+  // ξ lies between c0 and c0 + h; an h that is exactly 0 (a point value) needs no rounding
+  const hZero = hCoeffs.every(isZero) && g.rem.isPoint && isZero(g.rem.lo);
+  const Rh = hZero ? IV_ZERO : h.bound(2).hull(IV_ZERO);
   const X = Rh.add(c0);
   const { coeffs, lagrange, rule } = spec(c0, n, X, bits);
 

@@ -7,7 +7,7 @@ import { Refinement } from "./refine.js";
 import { Iv } from "./interval.js";
 import { TaylorModel, Domain, DEFAULTS } from "./model.js";
 import { AnalyticError, refuse } from "./errors.js";
-import { ONE, TWO, ZERO, toQ, lt, le, max, min } from "./rat.js";
+import { ONE, TWO, ZERO, toQ, lt, le, max, min, isZero, log2Approx } from "./rat.js";
 import { toAst, format, compileFloat, floatEnv, modelOf, derivative, freeVariables, toRational } from "./expr.js";
 import { bitsForDigits } from "./scope.js";
 import { PiecewiseFunction, parsePiecewiseText } from "./piecewise.js";
@@ -20,6 +20,17 @@ const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
 function targetWidth(iv, digits) {
   const scale = max(ONE, iv.mag);
   return scale.multiply(tenTo(digits));
+}
+
+/**
+ * Target for a single value: `digits` significant digits. An enclosure that
+ * still contains 0 has no significant digit yet, so it is never narrow enough
+ * (the caller stops at its bit budget; a value that is exactly 0 ends there).
+ */
+function valueNarrow(iv, digits) {
+  if (iv.isPoint) return true;
+  if (iv.containsZero()) return false;
+  return le(iv.width, iv.mig.multiply(tenTo(digits)));
 }
 
 export function evalParams(p) {
@@ -156,12 +167,26 @@ export function fn(expression, opts) {
 
 function* valueStages(f, X, digits, maxBits) {
   let bits = Math.max(64, bitsForDigits(digits) + 16);
+  // a point very close to 0 (10^-300) needs its own leading digits kept, or it rounds to an interval around 0
+  if (X.isPoint && !isZero(X.lo) && lt(X.lo.abs(), ONE)) bits = Math.min(maxBits, bits + Math.max(0, -log2Approx(X.lo.abs())));
+  const zeroBits = Math.min(maxBits, 16 * bits);
   const D = Domain(X);
   for (let attempt = 1; ; attempt++) {
-    const m = f.model(D, { order: X.isPoint ? 0 : 8, bits });
+    let m;
+    try {
+      m = f.model(D, { order: X.isPoint ? 0 : 8, bits });
+    } catch (e) {
+      // an argument that only seems to leave a domain because of coarse rounding: sharpen and retry
+      if (!(e instanceof AnalyticError) || !X.isPoint || bits >= Math.min(maxBits, 1024)) throw e;
+      bits *= 2;
+      continue;
+    }
     const r = Iv.from(m.range());
-    if (le(r.width, targetWidth(r, digits)) || bits >= maxBits) {
-      const note = le(r.width, targetWidth(r, digits)) ? "" : ` (budget hit: ${maxBits} bits)`;
+    const narrow = valueNarrow(r, digits);
+    // a value that may be 0 is accepted once it is absolutely tiny at a generous precision
+    const zeroish = !narrow && r.containsZero() && bits >= zeroBits && le(r.width, targetWidth(r, digits));
+    if (narrow || zeroish || bits >= maxBits) {
+      const note = narrow ? "" : zeroish ? " (cannot be told apart from 0; digits are absolute)" : ` (budget hit: ${maxBits} bits)`;
       return { value: r.toRationalInterval(), via: `${r.isPoint ? "exact rational arithmetic" : `certified enclosure at ${bits} bits`}${note}` };
     }
     yield { done: attempt, of: attempt + 1, step: `bits ${bits}`, partial: r.toRationalInterval() };

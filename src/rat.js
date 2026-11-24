@@ -81,7 +81,9 @@ export function ceilDyadic(q, bits) {
 
 /** Nearest-ish dyadic with denominator 2^bits (floor of q + 1/2 ulp). */
 export function roundDyadic(q, bits) {
-  return floorDyadic(q.add(new Rational(1n, 1n << BigInt(bits + 1))), bits);
+  // bits < 0 rounds to a multiple of 2^-bits (numbers too large to need a fraction)
+  const half = bits >= 0 ? new Rational(1n, 1n << BigInt(bits + 1)) : new Rational(1n << BigInt(-bits - 1));
+  return floorDyadic(q.add(half), bits);
 }
 
 export function factorial(n) {

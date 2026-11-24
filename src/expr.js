@@ -462,6 +462,58 @@ export const S = {
 
 const depends = (n, name) => freeVariables(n).has(name);
 
+const TOTAL_CALLS = new Set(["sin", "cos", "exp", "atan", "sinh", "cosh", "tanh", "abs", "min", "max"]);
+
+/** True when the tree is defined for every real value of its variables (no division, log, root or tan). */
+export function isTotal(n) {
+  if (n.type === "num" || n.type === "var" || n.type === "const") return true;
+  if (n.type === "call") return TOTAL_CALLS.has(n.name) && n.args.every(isTotal);
+  if (n.op === "/") return false;
+  if (n.op === "^") {
+    const e = n.args[1];
+    return e.type === "num" && e.value.denominator === 1n && e.value.numerator > 0n && isTotal(n.args[0]);
+  }
+  return n.args.every(isTotal);
+}
+
+const sameTree = (a, b) => format(a) === format(b);
+
+/**
+ * Light algebraic clean-up: constants folded, 0 and 1 dropped, u − u and
+ * 0·u reduced to 0 when u is defined everywhere (so no domain is lost), u/u
+ * left alone (it is undefined where u = 0), like factors and terms merged
+ * (u + u = 2u, u·u = u^2, x/x^2 stays).
+ */
+export function simplify(ast) {
+  const go = (n) => {
+    if (n.type !== "op" && n.type !== "call") return n;
+    const a = n.args.map(go);
+    if (n.type === "call") return call(n.name, ...a);
+    switch (n.op) {
+      case "+":
+        if (sameTree(a[0], a[1])) return S.mul(num(2n), a[0]);
+        if (a[1].type === "op" && a[1].op === "neg" && sameTree(a[0], a[1].args[0]) && isTotal(a[0])) return ZN();
+        return S.add(a[0], a[1]);
+      case "-":
+        if (sameTree(a[0], a[1]) && isTotal(a[0])) return ZN();
+        return S.sub(a[0], a[1]);
+      case "neg": return S.neg(a[0]);
+      case "*":
+        if ((isNum(a[0], 0) && !isTotal(a[1])) || (isNum(a[1], 0) && !isTotal(a[0]))) return op("*", a[0], a[1]);
+        if (sameTree(a[0], a[1])) return S.pow(a[0], num(2n));
+        return S.mul(a[0], a[1]);
+      case "/":
+        if (isNum(a[0], 0) && !isTotal(a[1])) return op("/", a[0], a[1]);
+        return S.div(a[0], a[1]);
+      case "^":
+        if (isNum(a[1], 0)) return op("^", a[0], a[1]); // 0^0 is refused elsewhere
+        return S.pow(a[0], a[1]);
+      default: return op(n.op, ...a);
+    }
+  };
+  return go(toAst(ast));
+}
+
 /** d/d(name) of the tree, as a new tree. */
 export function derivative(ast, name = "x") {
   const d = (n) => {

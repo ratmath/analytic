@@ -87,14 +87,18 @@ function atanSmall(x, wp) {
   );
 }
 
-let piCache = null;
+// π and ln 2 are kept per precision: handing a longer value to a short
+// computation would make every later product carry the extra digits.
+const piCache = new Map();
 export function piIv(bits = 96) {
-  if (piCache && piCache.bits >= bits) return piCache.iv;
+  let iv = piCache.get(bits);
+  if (iv) return iv;
   const wp = bits + 12;
   const a = atanSmall(rat(1, 5), wp).scale(rat(16));
   const b = atanSmall(rat(1, 239), wp).scale(rat(4));
-  const iv = a.sub(b).roundOut(bits + 4);
-  piCache = { bits, iv };
+  iv = a.sub(b).roundOut(bits + 4);
+  if (piCache.size > 64) piCache.clear();
+  piCache.set(bits, iv);
   return iv;
 }
 
@@ -117,27 +121,37 @@ export function atanPoint(q, bits = 96) {
 
 // ---------------------------------------------------------------- log
 
-/** 2·atanh(z) for |z| ≤ 1/3: 2Σ z^{2j+1}/(2j+1), tail ≤ 2|t_N|·(2N+1)... bounded geometrically. */
+/**
+ * 2·atanh(z) for |z| ≤ 1/3: 2Σ z^{2j+1}/(2j+1). The running power is kept
+ * rounded to wp+16 bits (exact powers double in length every term): its error
+ * stays below (9/8)·2^-(wp+16), so the N < 2^15 terms are off by less than
+ * 2^-wp in total, which is added to the enclosure with the geometric tail.
+ */
 function twoAtanh(z, wp) {
   const z2 = z.multiply(z);
   const q = ONE.subtract(z2); // tail ratio bound: |t_{k+1}/t_k| ≤ z²
+  const slack = pow2(-(wp + 14));
   let p = z;
-  return sumSeries(
+  const iv = sumSeries(
     z,
     (_t, k) => {
-      p = p.multiply(z2);
+      p = roundDyadic(p.multiply(z2), wp + 16);
       return p.divide(new Rational(BigInt(2 * k + 1)));
     },
-    (k, t) => (k === 0 ? null : t.abs().divide(q)),
+    (k, t) => (k === 0 ? null : t.abs().add(slack).divide(q)),
     wp,
-  ).scale(TWO);
+  );
+  const e = pow2(-wp);
+  return iv.add(new Iv(e.negate(), e)).scale(TWO);
 }
 
-let ln2Cache = null;
+const ln2Cache = new Map();
 function ln2Iv(bits) {
-  if (ln2Cache && ln2Cache.bits >= bits) return ln2Cache.iv;
-  const iv = twoAtanh(rat(1, 3), bits + 8).roundOut(bits + 4);
-  ln2Cache = { bits, iv };
+  let iv = ln2Cache.get(bits);
+  if (iv) return iv;
+  iv = twoAtanh(rat(1, 3), bits + 8).roundOut(bits + 4);
+  if (ln2Cache.size > 64) ln2Cache.clear();
+  ln2Cache.set(bits, iv);
   return iv;
 }
 
@@ -154,7 +168,18 @@ export function logPoint(q, bits = 96) {
     k -= 1;
   }
   const wp = bits + 8 + bitLen(BigInt(Math.abs(k)));
-  let iv = twoAtanh(m.subtract(ONE).divide(m.add(ONE)), wp);
+  let z = m.subtract(ONE).divide(m.add(ONE));
+  let pad = null;
+  if (bitLen(z.denominator) > wp + 8) {
+    // a long denominator (log of 10^-300) makes exact powers of z explode:
+    // use a dyadic z′ with |z − z′| ≤ 2^-(wp+8). On |z| ≤ 1/3 the derivative
+    // of 2·atanh is 2/(1 − z²) ≤ 9/4, so the result moves by at most 3·2^-(wp+8).
+    z = roundDyadic(z, wp + 8);
+    const e = new Rational(3n, 1n << BigInt(wp + 8));
+    pad = new Iv(e.negate(), e);
+  }
+  let iv = twoAtanh(z, wp);
+  if (pad) iv = iv.add(pad);
   if (k !== 0) iv = iv.add(ln2Iv(wp).scale(rat(k)));
   return iv.roundOut(bits + 4);
 }

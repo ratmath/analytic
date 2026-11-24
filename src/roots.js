@@ -32,7 +32,7 @@ import { Iv } from "./interval.js";
 import { AnalyticError } from "./errors.js";
 import { ZERO, ONE, TWO, lt, le, gt, ge, isZero, sign, min, max, roundDyadic, bitLen, toQ } from "./rat.js";
 import { fn, evalParams } from "./fn.js";
-import { derivative as dAst, compileFloat, floatEnv, toRational, S } from "./expr.js";
+import { derivative as dAst, compileFloat, floatEnv, toRational, S, simplify } from "./expr.js";
 import { encloseAst } from "./ieval.js";
 import * as RP from "./rpoly.js";
 import { cancelHoles } from "./holes.js";
@@ -65,6 +65,7 @@ const middle = (lo, hi) => {
 };
 const ri = (iv) => iv.toRationalInterval();
 const record = (r) => Object.freeze(r);
+const isNumZero = (n) => n.type === "num" && isZero(n.value);
 
 function setup(f, interval, opts) {
   let F = fn(f, { variable: opts.variable, params: opts.params });
@@ -339,7 +340,13 @@ function placeOf(r) {
   return r.at ? { at: r.at, lo: r.at, hi: r.at } : { lo: r.lo, hi: r.hi };
 }
 
+/** The record for a function that is 0 at every point of [a, b] where it is defined. */
+function* everywhereZero(s) {
+  return { value: [record({ kind: "everywhere", lo: s.a, hi: s.b })], via: "f is identically zero wherever it is defined" };
+}
+
 function* rationalZeros(s) {
+  if (RP.isZeroPoly(s.rf.num)) return yield* everywhereZero(s);
   const { roots } = rationalFeatures(s.rf, s.a, s.b, s.tol);
   yield { done: 1, of: 1, step: "isolated" };
   const out = [];
@@ -367,6 +374,12 @@ function* rationalCritical(s, kind) {
   const k = kind === "extrema" ? 1 : 2;
   for (let i = 0; i < k; i++) d = rfDerivative(d);
   const base = reduce(s.rf);
+  if (kind === "extrema" && RP.isZeroPoly(d.num)) {
+    // f′ ≡ 0: f is constant, so every point is at once a maximum and a minimum
+    const value = ri(Iv.point(RP.evaluate(base.Nr, s.a.add(s.b).divide(TWO)).divide(RP.evaluate(base.Dr, s.a.add(s.b).divide(TWO)))));
+    return { value: [record({ kind: "constant", lo: s.a, hi: s.b, value })], via: "f is constant" };
+  }
+  if (RP.isZeroPoly(d.num)) return { value: [], via: "f″ is identically zero" };
   const { roots } = rationalFeatures(d, s.a, s.b, s.tol);
   yield { done: 1, of: 1, step: "isolated" };
   const out = [];
@@ -467,7 +480,7 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
     out.push(rec);
   };
   // Krawczyk iteration on X with f′ ≠ 0: returns "none", a narrowed unique Iv, or null (undecided)
-  const krawczyk = (X) => {
+  const krawczyk = (X, allowSpill = false) => {
     let unique = false;
     for (let it = 0; it < 60; it++) {
       const m = X.isPoint ? X.lo : middle(X.lo, X.hi);
@@ -480,11 +493,29 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       const N = K.intersect(X);
       if (!N) return unique ? X : "none";
       if (lt(X.lo, K.lo) && lt(K.hi, X.hi)) unique = true;
+      // K sticks out past an end of X while contracting: the zero sits on (or
+      // next to) that end, where no sub-box of X can hold it in its interior.
+      if (!unique && allowSpill && lt(K.width.multiply(TWO), X.width) && (lt(K.lo, X.lo) || lt(X.hi, K.hi))) return { spill: K };
       if (unique && le(N.width, s.tol)) return N;
       if (!unique && ge(N.width.multiply(TWO), X.width)) return null; // not contracting yet: bisect
       X = N;
     }
     return unique ? X : null;
+  };
+  // k: a bracket proven to hold the one zero of the Krawczyk box
+  const accept = (k, kbox) => {
+    // the same zero may be certified twice (from a neighbouring piece): each
+    // Krawczyk box holds exactly one zero, so nested brackets name the same one
+    const inside = (u, v) => le(v.lo, u.lo) && le(u.hi, v.hi);
+    if (out.some((r) => r.kbox && (inside(k, r.kbox) || inside(r, kbox)))) return;
+    // the unique zero may be a simple rational (0, 1, -2/3): try the simplest one in the bracket
+    const c = simplestBetween(k.lo, k.hi);
+    if (pointSign(c) === 0) return addExact(c);
+    const sl = pointSign(k.lo);
+    const sh = pointSign(k.hi);
+    if (sl === 0) addExact(k.lo);
+    else if (sh === 0) addExact(k.hi);
+    else out.push({ kind: "sign-change", lo: k.lo, hi: k.hi, unique: true, atMost: 1, sLo: sl, sHi: sh, kbox });
   };
   // Boxes are processed from a stack, so the search can pause (yield) and
   // stop at a budget; unfinished boxes are reported as "possible".
@@ -507,7 +538,28 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       const dX = df ? safe(df, X) : null;
       if (dX && !dX.containsZero()) return;
     }
-    const k = krawczyk(X);
+    let k = krawczyk(X, true);
+    if (k && k.spill) {
+      // retry on a box centred on the suspected zero, kept inside [a, b]
+      const w = max(k.spill.width, s.tol.divide(new Rational(4n)));
+      const Xs = new Iv(max(s.a, k.spill.lo.subtract(w)), min(s.b, k.spill.hi.add(w)));
+      const ks = krawczyk(Xs);
+      if (ks && ks !== "none" && !ks.exact && ks.lo) {
+        accept(ks, Xs);
+        // the rest of X, outside the certified box, still has to be searched
+        if (lt(lo, Xs.lo)) stack.push([lo, Xs.lo, depth + 1]);
+        if (lt(Xs.hi, hi)) stack.push([Xs.hi, hi, depth + 1]);
+        return;
+      }
+      if (ks === "none" || (ks === null && le(Xs.width, s.tol))) {
+        // nothing in Xs, or a bracket already below the tolerance that cannot be settled (a zero at an end of [a, b])
+        if (ks === null) finish(Xs, pointSign(Xs.lo), pointSign(Xs.hi));
+        if (lt(lo, Xs.lo)) stack.push([lo, Xs.lo, depth + 1]);
+        if (lt(Xs.hi, hi)) stack.push([Xs.hi, hi, depth + 1]);
+        return;
+      }
+      k = krawczyk(X);
+    }
     if (k === "none") return;
     if (k && k.exact) {
       addExact(k.exact);
@@ -515,17 +567,7 @@ function* generalZeros(ast, s, { pieces = 16, maxDepth = 48, maxMultiplicity = 4
       if (lt(k.X.lo, k.exact)) stack.push([k.X.lo, k.exact, depth + 1]);
       return;
     }
-    if (k) {
-      // the unique zero may be a simple rational (0, 1, -2/3): try the simplest one in the bracket
-      const c = simplestBetween(k.lo, k.hi);
-      if (pointSign(c) === 0) return addExact(c);
-      const sl = pointSign(k.lo);
-      const sh = pointSign(k.hi);
-      if (sl === 0) addExact(k.lo);
-      else if (sh === 0) addExact(k.hi);
-      else out.push({ kind: "sign-change", lo: k.lo, hi: k.hi, unique: true, atMost: 1, sLo: sl, sHi: sh });
-      return;
-    }
+    if (k) return accept(k, X);
     if (le(y.mag, s.flat) && !(df && safe(df, X) && !safe(df, X).containsZero())) {
       // |f| ≤ 2^-flatBits on all of X and no proof of a single crossing:
       // f is numerically 0 here (a flat function such as e^(-1/x²) near 0).
@@ -649,7 +691,7 @@ function holeRecords(s) {
 const budgetNote = (list) => (list.some((r) => r.budget) ? "; work budget hit, so some brackets are left as possible (raise maxBoxes)" : "");
 
 function clean(r) {
-  const { sLo, sHi, ...rest } = r;
+  const { sLo, sHi, kbox, ...rest } = r;
   return record(rest);
 }
 
@@ -899,7 +941,8 @@ function quickCritical(F, a, b, k) {
 export function zeros(f, interval, opts = {}) {
   if (isPiecewise(f, opts)) return fn(f, opts).zeros(interval, opts);
   const s = setup(f, interval, opts);
-  return new Refinement(() => quickZeros(s.F, s.a, s.b), () => (s.rf ? rationalZeros(s) : generalZerosStage(s)));
+  if (!s.rf && isNumZero(simplify(s.F.ast))) return new Refinement(() => ({ value: [{ kind: "everywhere", lo: s.a, hi: s.b }], trust: "good" }), () => everywhereZero(s));
+  return new Refinement(() => (s.rf && RP.isZeroPoly(s.rf.num) ? { value: [{ kind: "everywhere", lo: s.a, hi: s.b }], trust: "good" } : quickZeros(s.F, s.a, s.b)), () => (s.rf ? rationalZeros(s) : generalZerosStage(s)));
 }
 
 /** poles(f, [a, b], opts): poles, holes (removable points) and undefined points. */
