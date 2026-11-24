@@ -32,7 +32,7 @@ import { Iv } from "./interval.js";
 import { AnalyticError } from "./errors.js";
 import { ZERO, ONE, TWO, lt, le, gt, ge, isZero, sign, min, max, roundDyadic, bitLen, toQ } from "./rat.js";
 import { fn, evalParams } from "./fn.js";
-import { derivative as dAst, compileFloat, floatEnv, toRational, S, simplify } from "./expr.js";
+import { derivative as dAst, compileFloat, floatEnv, toRational, S, simplify, constantRational } from "./expr.js";
 import { encloseAst } from "./ieval.js";
 import * as RP from "./rpoly.js";
 import { cancelHoles } from "./holes.js";
@@ -985,13 +985,27 @@ export function zeros(f, interval, opts = {}) {
   return new Refinement(() => (s.rf && RP.isZeroPoly(s.rf.num) ? { value: [{ kind: "everywhere", lo: s.a, hi: s.b }], trust: "good" } : quickZeros(s.F, s.a, s.b)), () => (s.rf ? rationalZeros(s) : generalZerosStage(s)));
 }
 
+/** u^c with a negative constant c written as 1/u^(−c), so the pole search sees the division. */
+function asQuotients(ast) {
+  if (!ast.args) return ast;
+  const args = ast.args.map(asQuotients);
+  if (ast.type === "op" && ast.op === "^") {
+    const c = constantRational(args[1]);
+    if (c && c.numerator < 0n) {
+      const one = { type: "num", value: new Rational(1n) };
+      return { type: "op", op: "/", args: [one, { type: "op", op: "^", args: [args[0], { type: "num", value: c.negate() }] }] };
+    }
+  }
+  return { ...ast, args };
+}
+
 /** poles(f, [a, b], opts): poles, holes (removable points) and undefined points. */
 export function poles(f, interval, opts = {}) {
   if (isPiecewise(f, opts)) return fn(f, opts).poles(interval, opts);
   const s = setup(f, interval, opts);
   return new Refinement(
     () => ({ value: [], trust: "unsure" }),
-    () => (s.rf ? rationalPoles(s) : generalPoles(s)),
+    () => (s.rf ? rationalPoles(s) : generalPoles({ ...s, F: fn(asQuotients(s.F.ast), { variable: s.F.variable, params: s.F.params }) })),
   );
 }
 

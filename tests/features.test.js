@@ -1,5 +1,6 @@
 // asin/acos/cbrt/erf, non-smooth ranges and integrals, tracked ODE steps, simplify, taylor, limit.
 import { describe, test, expect } from "bun:test";
+import { poles as polesOf } from "../index.js";
 import { RationalInterval, Rational } from "@ratmath/core";
 import { fn, zeros, ode, simplify, parse, format, enclose } from "../index.js";
 
@@ -165,5 +166,14 @@ describe("Taylor coefficients at removable points", () => {
   });
   test("a real pole is still refused", () => {
     expect(() => fn("cos(x)/x").taylor(0, 3)).toThrow();
+  });
+});
+
+describe("poles of negative fractional powers", () => {
+  test.each(["x^(-1/3)", "x^(-1/2)", "1/cbrt(x)"])("%s has a pole at 0", (e) => {
+    const p = polesOf(e, [-1, 2]).exact();
+    expect(p.length).toBe(1);
+    expect(p[0].kind).toBe("pole");
+    expect(p[0].at.toString()).toBe("0");
   });
 });
