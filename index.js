@@ -1,13 +1,13 @@
 export { TaylorModel, TM, Domain, DomainClass, DEFAULTS } from "./src/model.js";
-export { exp, sin, cos, tan, log, log1p, atan, sqrt, reciprocal, sinh, cosh, tanh, power } from "./src/elementary.js";
+export { exp, sin, cos, tan, log, log1p, atan, asin, acos, cbrt, erf, sqrt, reciprocal, sinh, cosh, tanh, power } from "./src/elementary.js";
 export { AnalyticError } from "./src/errors.js";
 export { series } from "./src/series.js";
 export { enclose, constants } from "./src/enclose.js";
 export { createScope } from "./src/scope.js";
 export { bitsForDigits } from "./src/scope.js";
-export { Refinement, live } from "./src/refine.js";
+export { Refinement, live } from "@ratmath/core/refine";
 export { fn, AnalyticFunction } from "./src/fn.js";
-export { parse, format, derivative as differentiate, compileFloat, modelOf, freeVariables, num, v, op, call } from "./src/expr.js";
+export { parse, format, derivative as differentiate, simplify, compileFloat, modelOf, freeVariables, num, v, op, call, toRational, FUNCTIONS, CONSTANTS, erfFloat } from "./src/expr.js";
 export { ode } from "./src/ode.js";
 export { zeros, poles, extrema, inflections, simplestBetween } from "./src/roots.js";
 export { encloseAst } from "./src/ieval.js";

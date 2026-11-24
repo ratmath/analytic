@@ -4,12 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Formulas and derivatives · RatMath Analytic</title>
+<meta name="description" content="Formulas and derivatives. RatMath Analytic: certified values, ranges, integrals, zeros and ODE solutions on exact rationals, in JavaScript.">
+<meta property="og:title" content="Formulas and derivatives · RatMath Analytic">
+<meta property="og:description" content="Certified calculus on exact rationals: values, ranges, integrals, zeros, Taylor models and validated ODE steps.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ratmath.com/analytic/expressions.html">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 
-<link rel="stylesheet" href="assets/site.css?v=cbeb5e37fa">
+<link rel="stylesheet" href="assets/site.css?v=84b3fb6621">
 </head>
 <body>
 <div class="shell">
@@ -45,6 +50,7 @@
     <a href="odes.html">Differential equations</a>
     <a href="series.html">Your own series</a>
   </nav>
+  <p class="sitelinks"><a href="https://github.com/ratmath/analytic">GitHub</a> · <a href="https://www.npmjs.com/package/@ratmath/analytic">npm</a> · <a href="https://ratmath.com/">ratmath.com</a><br><a href="https://ratmath.com/core/">core</a> · <a href="https://ratmath.com/algebraic/">algebraic</a> · <a href="https://ratmath.com/linalg/">linalg</a> · <a href="https://ratmath.com/graphics/">graphics</a></p>
 </aside>
 <main>
 <section class="page" data-page="expressions">
@@ -59,7 +65,7 @@
     <tr><td><code>^</code> or <code>**</code></td><td>powers; <code>-x^2</code> is −(x²)</td></tr>
     <tr><td><code>2x</code>, <code>2(x+1)</code>, <code>x sin(x)</code></td><td>implicit multiplication</td></tr>
     <tr><td><code>sin x</code></td><td>a function applied to the next factor, the same as <code>sin(x)</code></td></tr>
-    <tr><td><code>sin cos tan exp log ln sqrt atan log1p sinh cosh tanh</code></td><td>the elementary functions (<code>log</code> and <code>ln</code> are both natural log)</td></tr>
+    <tr><td><code>sin cos tan asin acos atan exp log ln log1p sqrt cbrt sinh cosh tanh erf</code></td><td>the elementary functions (<code>log</code> and <code>ln</code> are both natural log)</td></tr>
     <tr><td><code>abs min max</code></td><td>non-smooth functions, modelled where they are smooth (see below)</td></tr>
     <tr><td><code>pi e</code></td><td>constants, certified to the working precision</td></tr>
     <tr><td><code>1/3</code>, <code>0.25</code>, <code>2.5E-3</code></td><td>exact rationals: 0.25 is 1/4, not a double</td></tr>
@@ -120,6 +126,6 @@ fn("y*t", { variable: "t", params: { y: 2 } }).value(5).exact()</textarea>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=cbeb5e37fa"></script>
+<script type="module" src="assets/pages.js?v=84b3fb6621"></script>
 </body>
 </html>

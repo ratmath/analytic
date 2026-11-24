@@ -10,6 +10,8 @@
     <tr><td>f.value(x, { digits = 20, maxBits = 8192 })</td><td><em>R</em> RationalInterval</td><td>a point interval for rational-only formulas; bits double until the digits are met or maxBits is reached</td></tr>
     <tr><td>f.range(I, { digits = 6, order = 8, maxPieces = 256 })</td><td><em>R</em> RationalInterval</td><td>preview: 256 samples (trust rough)</td></tr>
     <tr><td>f.integral(a, b, { digits = 12, order = 12, maxPieces })</td><td><em>R</em> RationalInterval</td><td>preview: Gauss–Legendre</td></tr>
+    <tr><td>f.limit(c, { digits = 20 })</td><td>RationalInterval</td><td>the value where f is defined; at a removable point of a quotient (sin(x)/x at 0) the certified limit. Refuses at poles</td></tr>
+    <tr><td>f.taylor(c, n = 6, { digits })</td><td>RationalInterval[]</td><td>enclosures of f⁽ᵏ⁾(c)/k! for k = 0…n, n ≤ 16; exact points for rational values; removable quotients are divided as series</td></tr>
     <tr><td>f.derivative()</td><td>a new function</td><td>symbolic and simplified</td></tr>
     <tr><td>f.model(D, { order, bits, centre })</td><td>TaylorModel</td><td>certified on the domain D</td></tr>
     <tr><td>f.regular()</td><td>a function</td><td>the same function with holes of its rational summands cancelled; used by range and integral</td></tr>
@@ -17,14 +19,14 @@
     <tr><td>f.with({ a: "3/8" })</td><td>a new function</td><td>other parameter values (sliders)</td></tr>
     <tr><td>f.toString()</td><td>string</td><td>calculator notation that parses back</td></tr>
   </table></div>
-  <p>Grammar: <code>+ - * / ^</code> (or <code>**</code>), parentheses, implicit products (<code>2x</code>, <code>3(x+1)</code>, <code>2sin(x)</code>), <code>-x^2 = -(x^2)</code>, <code>^</code> right-associative. Functions: <code>exp log ln sqrt sin cos tan atan sinh cosh tanh log1p abs min max</code>; constants <code>pi e</code>. It is the same grammar and the same plain AST as <code>@ratmath/graphics</code>.</p>
+  <p>Grammar: <code>+ - * / ^</code> (or <code>**</code>), parentheses, implicit products (<code>2x</code>, <code>3(x+1)</code>, <code>2sin(x)</code>), <code>-x^2 = -(x^2)</code>, <code>^</code> right-associative. Functions: <code>exp log ln log1p sqrt cbrt sin cos tan asin acos atan sinh cosh tanh erf abs min max</code> (<code>arcsin arccos arctan</code> too); constants <code>pi e</code>. A power with an odd denominator, <code>x^(1/3)</code>, is the real root and is defined for negative x. Ranges and integrals may cross points where the function is not smooth (<code>abs</code>, <code>cbrt</code> at 0); there the bounds come from interval evaluation. It is the same grammar and the same plain AST as <code>@ratmath/graphics</code>.</p>
 
   <h2>Features of a function</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>record kinds</th><th>fields</th></tr>
-    <tr><td>zeros(f, [a, b], opts)</td><td>exact, sign-change, isolated, possible, undefined</td><td>at, lo, hi, unique, multiplicity, atMost, bound, budget</td></tr>
+    <tr><td>zeros(f, [a, b], opts)</td><td>exact, sign-change, isolated, possible, undefined, everywhere</td><td>at, lo, hi, unique, multiplicity, atMost, bound, budget</td></tr>
     <tr><td>poles(f, [a, b], opts)</td><td>pole, hole, undefined</td><td>order (rational poles), source: "log" (asymptotes of ln), value (a hole's limit)</td></tr>
-    <tr><td>extrema(f, [a, b], opts)</td><td>max, min, flat, possible</td><td>value, unique, touching</td></tr>
+    <tr><td>extrema(f, [a, b], opts)</td><td>max, min, flat, possible, constant</td><td>value, unique, touching</td></tr>
     <tr><td>inflections(f, [a, b], opts)</td><td>inflection, possible</td><td>value, unique, touching</td></tr>
     <tr><td>simplestBetween(a, b)</td><td>Rational</td><td>smallest denominator in [a, b]</td></tr>
   </table></div>
@@ -32,6 +34,7 @@
   <div class="tablewrap"><table class="ref">
     <tr><th>kind or field</th><th>meaning</th></tr>
     <tr><td>exact</td><td>f(at) = 0 exactly, at a rational point</td></tr>
+    <tr><td>everywhere, constant</td><td>the function is identically zero (for zeros) or constant (for extrema) on [lo, hi]; one record covers the stretch</td></tr>
     <tr><td>sign-change</td><td>f has opposite proven signs at lo and hi; with unique, exactly one zero inside</td></tr>
     <tr><td>isolated</td><td>exactly one zero inside, but f keeps its sign (found through sqrt, abs or an even power)</td></tr>
     <tr><td>possible</td><td>undecided: maybe no zero, maybe several; atMost: m bounds the count with multiplicity</td></tr>
@@ -67,7 +70,7 @@
     <tr><td>Domain(R`a:b`, { centre })</td><td>centre defaults to the midpoint</td></tr>
     <tr><td>TM.x(D, { order = 12, bits = 96 }), TM.constant(D, v), TM.polynomial(D, [a0, a1, …])</td><td>sources</td></tr>
     <tr><td>.add .subtract .negate .multiply .divide .pow(n)</td><td>with models or numbers</td></tr>
-    <tr><td>exp sin cos tan log log1p atan sqrt sinh cosh tanh reciprocal power(g, a)</td><td>elementary functions of models</td></tr>
+    <tr><td>exp sin cos tan log log1p atan asin acos sqrt cbrt erf sinh cosh tanh reciprocal power(g, a)</td><td>elementary functions of models</td></tr>
     <tr><td>.at(x) .range() .integral(a, b) .integrate() .derivative()</td><td>derivative only for exact polynomials</td></tr>
     <tr><td>.coefficients .remainder .centre .order .describe() .toJSON()</td><td></td></tr>
     <tr><td>series(D, { coefficient or coefficients, degree, order, centre, rule, M, q, error, lookahead })</td><td>user series; rules lagrange, ratio, alternating, explicit</td></tr>
@@ -102,7 +105,7 @@
   <h2>Points, constants, plumbing</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>notes</th></tr>
-    <tr><td>enclose.exp(x, bits) (also log, sqrt, atan, sin, cos, tan, sinh, cosh, tanh, log1p)</td><td>points or intervals → RationalInterval</td></tr>
+    <tr><td>enclose.exp(x, bits) (also log, sqrt, cbrt, atan, asin, acos, sin, cos, tan, sinh, cosh, tanh, erf, log1p)</td><td>points or intervals → RationalInterval</td></tr>
     <tr><td>constants.pi(bits), constants.e(bits)</td><td></td></tr>
     <tr><td>createScope({ digits, bits, order })</td><td>callable set for evaluators: exp, sin, …, model, integral, range, fn, d, ode, zeros, …</td></tr>
     <tr><td>Refinement, live(compute, onStage, { idleMs })</td><td>the shared fast-then-exact shape</td></tr>

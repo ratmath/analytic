@@ -32,6 +32,17 @@ that runs with the library in scope; its code comes from the page's
 `scripts/docs-kit.js` are shared verbatim with the core, linalg and algebraic
 docs; keep the copies in sync.
 
+## Install
+
+```sh
+npm install @ratmath/analytic @ratmath/core
+```
+
+ES modules only, for Bun, Node 22+ and browsers. TypeScript declarations are
+included. Source: https://github.com/ratmath/analytic. Sibling libraries:
+[core](https://ratmath.com/core/), [algebraic](https://ratmath.com/algebraic/),
+[linalg](https://ratmath.com/linalg/), [graphics](https://ratmath.com/graphics/).
+
 Design notes: `docs/design/analytic-functions.md` in the [ratmath umbrella](https://github.com/ratmath/ratmath).
 This package depends only on Core (not on `packages/reals`).
 
@@ -61,12 +72,12 @@ f.describe();       // domain, order, remainder width, rules used
 | Domains | `Domain(R\`a:b\`)`, `Domain(a, b)`, `Domain([a, b], { centre })` |
 | Sources | `TM.x(D, opts)`, `TM.constant(D, value or interval)`, `TM.polynomial(D, [a0, a1, …])` (powers of x) |
 | Arithmetic | `.add`, `.subtract`, `.negate`, `.multiply`, `.divide`, `.pow(n)` (models or Core numbers) |
-| Elementary | `exp`, `sin`, `cos`, `tan`, `log`, `log1p`, `atan`, `sqrt`, `sinh`, `cosh`, `tanh`, `reciprocal`, `power(g, a)` |
+| Elementary | `exp`, `sin`, `cos`, `tan`, `log`, `log1p`, `atan`, `asin`, `acos`, `sqrt`, `cbrt`, `erf`, `sinh`, `cosh`, `tanh`, `reciprocal`, `power(g, a)` |
 | Evaluation | `.at(point or sub-interval)`, `.range({ depth })` |
 | Calculus | `.integrate()`, `.integral(a, b)`, `.derivative()` (exact models only; see below) |
 | User series | `series(D, { coefficient: k => a_k, order, rule, … })` |
 | Point values | `enclose.exp(x, bits)` etc., `constants.pi(bits)`, `constants.e(bits)` |
-| Formulas | `fn(text, { params })`: `.value`, `.range`, `.integral` (Refinements), `.derivative()`, `.model(D)` |
+| Formulas | `fn(text, { params })`: `.value`, `.range`, `.integral` (Refinements), `.limit(c)`, `.taylor(c, n)`, `.derivative()`, `.model(D)` |
 | ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
 | Features | `zeros`, `poles`, `extrema`, `inflections` (Refinements) |
 | Fast-then-certified | `Refinement`, `live` |
@@ -143,9 +154,8 @@ worker.
 ## Fast first, certified last
 
 Every question about a function given as a formula returns a `Refinement`,
-the same class `@ratmath/linalg` and `@ratmath/graphics` use (`src/refine.js`,
-copied verbatim in each; keep them in sync), so one `live()` loop drives all
-three libraries:
+the same class `@ratmath/linalg` and `@ratmath/graphics` use (it lives in
+`@ratmath/core/refine`), so one `live()` loop drives all three libraries:
 
 | member | what it gives |
 | --- | --- |
@@ -184,12 +194,32 @@ slider.oninput = () => update(`${slider.value}/8`);
 ### Expressions and d/dx
 
 `fn(text or AST, { variable = "x", params })` reads calculator notation with
-the parser from `@ratmath/graphics` (`2x`, `-x^2 = -(x^2)`, `^` right
-associative, decimals exact) plus `atan`, `log1p`, `sinh`, `cosh`, `tanh`.
-`log` and `ln` are the natural log. The AST is the same plain objects
+calculator notation (`2x`, `-x^2 = -(x^2)`, `^` right associative, decimals
+exact). Functions: `sin cos tan asin acos atan sinh cosh tanh exp log ln log1p
+sqrt cbrt erf abs min max` (`arcsin`, `arccos`, `arctan` are accepted too).
+`log` and `ln` are the natural log. A power with an odd denominator, such as
+`x^(1/3)` or `x^(2/3)`, is the real root and is defined for negative `x`. The AST is the same plain objects
 (`num`, `var`, `const`, `op`, `call`), so a parse tree can be passed between
 the libraries. Exports: `parse`, `format`, `differentiate(ast, name)`,
-`compileFloat(ast)`, `modelOf(ast, env, base)`.
+`simplify(ast)`, `compileFloat(ast)`, `modelOf(ast, env, base)`.
+
+`simplify` only cancels what is defined everywhere: `sin(x) - sin(x)` becomes
+`0`, while `x/x` and `log(x) - log(x)` are left alone because they are not
+defined at every point.
+
+```js
+fn("sin(x)/x").limit(0);              // [1, 1]: removable points are filled in
+fn("x/(exp(x) - 1)").taylor(0, 4);    // 1, -1/2, 1/12, 0, -1/720 as intervals
+fn("abs(x)").integral(-1, 2).exact(); // 5/2: integrals may cross a kink
+fn("cbrt(x)").range([-8, 8]).exact(); // [-2, 2]
+```
+
+`limit(c)` is the value where the function is defined and the certified limit
+at a removable point of a quotient; it refuses at poles. `taylor(c, n)` gives
+enclosures of the coefficients `f⁽ᵏ⁾(c)/k!` for `n ≤ 16`. Ranges and integrals
+work across points where the function is not smooth (`abs`, `cbrt` at 0,
+`asin` at ±1); there the bounds come from interval evaluation, which converges
+more slowly than Taylor models.
 
 Parameters may be numbers, strings, Rationals or intervals (an interval
 parameter gives a result valid for every value in it). `abs`, `min` and `max`
@@ -225,9 +255,12 @@ ends with `complete: false` and a `reason` instead of a wrong enclosure.
 Options: `order` (10), `step`, `tol`, `maxSteps` (400), `minStep`,
 `previewSteps` (200), `time` ("t"), `vars`, `params`.
 
-Systems are enclosed componentwise without preconditioning, so rotating
-systems widen over long spans (the wrapping effect): the oscillator above ends
-with widths near 4·10⁻¹².
+Each step also follows how the solution depends on the initial value (the
+variational equation, kept in a rotating frame), so the uncertainty carried
+from step to step turns with the flow instead of being boxed again each time.
+The oscillator above ends with widths near 10⁻¹⁴; `track: false` turns this
+off, which is 2 to 5 times faster and about 5 times wider there. `until` may
+be less than `t0` to integrate backward.
 
 ## Zeros, poles, extrema, inflections
 
@@ -355,7 +388,11 @@ across a jump is not a zero.
 - Proving the existence of multiple roots of non-polynomial functions (they
   are reported as `possible` with `atMost`), and endpoints of the domain as
   features (open or closed dots are left to the caller).
-- Preconditioned (QR) ODE steps for long spans of systems.
+- Improper integrals (an infinite end, or an integrable singularity such as
+  `1/sqrt(x)` at 0), and special functions beyond `erf` (gamma, Bessel).
+- Limits at infinity and one-sided limits.
+- A zero that sits exactly on an end of the search interval can come back as
+  `possible` instead of proven.
 - Speed: each elementary composition costs about 10 ms at order 8, so a
   certified range over 26 pieces takes about 0.8 s. Keep certified work in a
   Worker; previews are instant.

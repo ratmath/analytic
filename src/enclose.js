@@ -4,7 +4,7 @@
 import { Rational, RationalInterval } from "@ratmath/core";
 import { Iv } from "./interval.js";
 import { ZERO, ONE, TWO, HALF, rat, le, lt, gt, isZero } from "./rat.js";
-import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv } from "./points.js";
+import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv, asinPoint, acosPoint, rootPoint, erfPoint } from "./points.js";
 import { refuse } from "./errors.js";
 import { TaylorModel, Domain } from "./model.js";
 import * as E from "./elementary.js";
@@ -50,6 +50,17 @@ export const enclose = {
     return pieces(v, bits, E.tan);
   },
 };
+const unitCheck = (name) => (v) => {
+  if (lt(v.lo, rat(-1)) || gt(v.hi, ONE)) refuse("domain", `${name} needs arguments in [-1, 1], got ${v}`);
+};
+enclose.asin = monotone(asinPoint, unitCheck("asin"));
+enclose.acos = (x, bits = 96) => {
+  const v = Iv.from(x);
+  unitCheck("acos")(v);
+  return out(v.isPoint ? acosPoint(v.lo, bits) : new Iv(acosPoint(v.hi, bits).lo, acosPoint(v.lo, bits).hi));
+};
+enclose.cbrt = monotone((q, bits) => rootPoint(q, 3, bits));
+enclose.erf = monotone(erfPoint);
 enclose.log1p = (x, bits = 96) => enclose.log(Iv.from(x).add(ONE), bits);
 enclose.sinh = (x, bits = 96) => {
   const v = Iv.from(x);

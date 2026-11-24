@@ -245,3 +245,7 @@ nav.pager a { text-decoration: none; font-weight: 500; }
 .mono { font-family: var(--font-mono); font-size: .85rem; }
 .wrap { overflow-wrap: anywhere; }
 pre.tree { margin: 0; font-size: .8rem; }
+.sitelinks { margin: 1.1rem .6rem 0; font-size: .8rem; line-height: 1.7; color: var(--muted); }
+.sitelinks a { color: var(--muted); }
+.sitelinks a:hover { color: var(--accent); }
+@media (max-width: 900px) { .sitelinks { margin: .6rem 0 0; } }

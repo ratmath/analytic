@@ -5,7 +5,7 @@
 import { Rational } from "@ratmath/core";
 import { Iv } from "./interval.js";
 import { ZERO, ONE, TWO, HALF, rat, lt, le, gt, ge, isZero, min, max } from "./rat.js";
-import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv } from "./points.js";
+import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv, asinPoint, acosPoint, rootPoint, erfPoint } from "./points.js";
 import { refuse } from "./errors.js";
 import { constantRational } from "./expr.js";
 
@@ -59,6 +59,16 @@ const FNS = {
     return monotone(sqrtPoint, v, b);
   },
   atan: (v, b) => monotone(atanPoint, v, b),
+  asin(v, b) {
+    if (lt(v.lo, rat(-1)) || gt(v.hi, ONE)) refuse("domain", `asin needs arguments in [-1, 1], got ${v}`);
+    return monotone(asinPoint, v, b);
+  },
+  acos(v, b) {
+    if (lt(v.lo, rat(-1)) || gt(v.hi, ONE)) refuse("domain", `acos needs arguments in [-1, 1], got ${v}`);
+    return monotone(acosPoint, v, b, false);
+  },
+  cbrt: (v, b) => monotone((q, bits) => rootPoint(q, 3, bits), v, b),
+  erf: (v, b) => monotone(erfPoint, v, b),
   sin: (v, b) => trig(v, b, 0),
   cos: (v, b) => trig(v, b, 1),
   tan(v, b) {
@@ -154,6 +164,13 @@ export function encloseAst(ast, env, bits = 64) {
       return R(k > 0 ? a.pow(k) : a.pow(-k).recip(), bits);
     }
     if (q !== null && q.denominator === 2n && q.numerator === 1n) return R(FNS.sqrt(a, bits), bits);
+    if (q !== null && q.denominator <= 64n && q.numerator <= 64n && q.numerator >= -64n && (q.denominator % 2n === 1n || ge(a.lo, ZERO))) {
+      // a real root, then an integer power: (−8)^(2/3) = 4, and 0^(1/3) = 0 without a logarithm
+      const n = Number(q.denominator);
+      const k = Number(q.numerator);
+      const root = monotone((x, b) => rootPoint(x, n, b), a, bits + 8);
+      return R(k > 0 ? root.pow(k) : root.pow(-k).recip(), bits);
+    }
     return R(FNS.exp(go(n.args[1]).mul(FNS.log(a, bits)), bits), bits);
   };
   return go(ast);

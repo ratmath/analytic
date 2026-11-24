@@ -128,8 +128,26 @@ export class Iv {
   toRationalInterval() {
     return new RationalInterval(this.lo, this.hi);
   }
+  /** "[lo, hi]" with exact ends when they are short, else decimals rounded outward (for messages). */
   toString() {
-    return `[${this.lo}, ${this.hi}]`;
+    const show = (q, up) => {
+      const exact = q.toString();
+      if (exact.length <= 24) return exact;
+      // 10 significant digits, rounded away from the interval
+      const neg = q.numerator < 0n;
+      const a = neg ? q.negate() : q;
+      let e = 0;
+      let scaled = a;
+      const TEN = new Rational(10n);
+      while (scaled.compareTo(new Rational(10n ** 10n)) >= 0) { scaled = scaled.divide(TEN); e++; }
+      while (scaled.numerator !== 0n && scaled.compareTo(new Rational(10n ** 9n)) < 0) { scaled = scaled.multiply(TEN); e--; }
+      let m = scaled.numerator / scaled.denominator;
+      if (up !== neg && m * scaled.denominator !== scaled.numerator) m += 1n;
+      const digits = m.toString();
+      const exp = e + digits.length - 1;
+      return `${neg ? "-" : ""}${digits[0]}.${digits.slice(1).replace(/0+$/, "") || "0"}${exp ? `e${exp}` : ""}`;
+    };
+    return `[${show(this.lo, false)}, ${show(this.hi, true)}]`;
   }
 }
 

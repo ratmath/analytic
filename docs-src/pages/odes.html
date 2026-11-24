@@ -39,7 +39,7 @@ S.describe();</code></pre>
   <p>A system has one equation per component, and the enclosure is a box: one interval per component. Give the right-hand sides as a list and name the variables:</p>
 <pre><code>ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });     // x″ = −x
 ode.solve({ f: ["y2", "-y1 + mu*(1 - y1^2)*y2"], y0: [2, 0], until: 1, params: { mu: 1 } });</code></pre>
-  <p>Boxes have a weakness. A rotating flow turns each box, and the smallest box around a turned box is larger than the box was. Each step inherits that larger box, so over long spans the enclosure grows even when the true set of solutions does not. This is the wrapping effect, first described by Moore. Shorter spans, higher orders, or preconditioned steps (which track the box in rotated coordinates; not built yet) keep it in check.</p>
+  <p>Boxes have a weakness. A rotating flow turns each box, and the smallest box around a turned box is larger than the box was. Each step inherits that larger box, so over long spans the enclosure grows even when the true set of solutions does not. This is the wrapping effect, first described by Moore. The solver counters it by also following how the solution depends on its starting value (the variational equation) and carrying the uncertainty in coordinates that turn with the flow, so the box is not redrawn at every step. For the oscillator this ends near 10⁻¹⁴ wide at t = 3. Pass <code>track: false</code> to switch it off: steps are then 2 to 5 times faster and the box grows as described. <code>until</code> may also be less than <code>t0</code>, which integrates backward in time.</p>
   <div data-demo="oscillator"></div>
 
 <template data-runbox>

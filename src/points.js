@@ -58,12 +58,18 @@ export function expPoint(q, bits = 96) {
   const wp = bits + s + 16;
   const r = a.divide(pow2(s)); // 0 < r < 1/4
   // exp(r) = Σ r^k/k!; tail after k terms ≤ 2 r^k / k! (r ≤ 1/2).
+  // Terms are rounded to wp+16 bits as they are built (exact ones grow with
+  // every factor r): each is then off by less than 2·2^-(wp+16), and the sum
+  // of fewer than 2^13 terms by less than 2^-wp, which is added below.
+  const slack = pow2(-(wp + 14));
   let iv = sumSeries(
     ONE,
-    (t, k) => t.multiply(r).divide(new Rational(BigInt(k))),
-    (k, t) => (k === 0 ? null : t.multiply(TWO)),
+    (t, k) => roundDyadic(t.multiply(r).divide(new Rational(BigInt(k))), wp + 16),
+    (k, t) => (k === 0 ? null : t.add(slack).multiply(TWO)),
     wp,
   );
+  const pad = pow2(-wp);
+  iv = iv.add(new Iv(pad.negate(), pad));
   for (let i = 0; i < s; i++) iv = iv.mul(iv).roundOut(wp);
   if (neg) iv = iv.recip();
   return iv.roundOut(bits + 4, 6000); // keep tiny values (e^-1000) positive
@@ -71,30 +77,47 @@ export function expPoint(q, bits = 96) {
 
 // ---------------------------------------------------------------- atan, pi
 
-/** atan(x) for |x| ≤ 1/2 (alternating, decreasing series). */
+/**
+ * atan(x) for |x| ≤ 1/2 (alternating, decreasing series). The running power
+ * is rounded to wp+16 bits, as in twoAtanh: its error stays below
+ * (4/3)·2^-(wp+16), and the terms together are off by less than 2^-wp.
+ */
 function atanSmall(x, wp) {
+  if (bitLen(x.denominator) > wp + 8) {
+    // |atan′| ≤ 1: moving x by 2^-(wp+8) moves the value by no more
+    const xr = roundDyadic(x, wp + 8);
+    const e = pow2(-(wp + 8));
+    return atanSmall(xr, wp).add(new Iv(e.negate(), e));
+  }
   const x2 = x.multiply(x);
+  const slack = pow2(-(wp + 14));
   // terms t_k = (-1)^k x^{2k+1}/(2k+1); keep p_k = (-1)^k x^{2k+1} as state.
   let p = x;
-  return sumSeries(
+  const iv = sumSeries(
     x,
     (_t, k) => {
-      p = p.multiply(x2).negate();
+      p = roundDyadic(p.multiply(x2), wp + 16).negate();
       return p.divide(new Rational(BigInt(2 * k + 1)));
     },
-    (k, t) => (k === 0 ? null : t.abs()),
+    (k, t) => (k === 0 ? null : t.abs().add(slack)),
     wp,
   );
+  const e = pow2(-wp);
+  return iv.add(new Iv(e.negate(), e));
 }
 
-let piCache = null;
+// π and ln 2 are kept per precision: handing a longer value to a short
+// computation would make every later product carry the extra digits.
+const piCache = new Map();
 export function piIv(bits = 96) {
-  if (piCache && piCache.bits >= bits) return piCache.iv;
+  let iv = piCache.get(bits);
+  if (iv) return iv;
   const wp = bits + 12;
   const a = atanSmall(rat(1, 5), wp).scale(rat(16));
   const b = atanSmall(rat(1, 239), wp).scale(rat(4));
-  const iv = a.sub(b).roundOut(bits + 4);
-  piCache = { bits, iv };
+  iv = a.sub(b).roundOut(bits + 4);
+  if (piCache.size > 64) piCache.clear();
+  piCache.set(bits, iv);
   return iv;
 }
 
@@ -117,27 +140,37 @@ export function atanPoint(q, bits = 96) {
 
 // ---------------------------------------------------------------- log
 
-/** 2·atanh(z) for |z| ≤ 1/3: 2Σ z^{2j+1}/(2j+1), tail ≤ 2|t_N|·(2N+1)... bounded geometrically. */
+/**
+ * 2·atanh(z) for |z| ≤ 1/3: 2Σ z^{2j+1}/(2j+1). The running power is kept
+ * rounded to wp+16 bits (exact powers double in length every term): its error
+ * stays below (9/8)·2^-(wp+16), so the N < 2^15 terms are off by less than
+ * 2^-wp in total, which is added to the enclosure with the geometric tail.
+ */
 function twoAtanh(z, wp) {
   const z2 = z.multiply(z);
   const q = ONE.subtract(z2); // tail ratio bound: |t_{k+1}/t_k| ≤ z²
+  const slack = pow2(-(wp + 14));
   let p = z;
-  return sumSeries(
+  const iv = sumSeries(
     z,
     (_t, k) => {
-      p = p.multiply(z2);
+      p = roundDyadic(p.multiply(z2), wp + 16);
       return p.divide(new Rational(BigInt(2 * k + 1)));
     },
-    (k, t) => (k === 0 ? null : t.abs().divide(q)),
+    (k, t) => (k === 0 ? null : t.abs().add(slack).divide(q)),
     wp,
-  ).scale(TWO);
+  );
+  const e = pow2(-wp);
+  return iv.add(new Iv(e.negate(), e)).scale(TWO);
 }
 
-let ln2Cache = null;
+const ln2Cache = new Map();
 function ln2Iv(bits) {
-  if (ln2Cache && ln2Cache.bits >= bits) return ln2Cache.iv;
-  const iv = twoAtanh(rat(1, 3), bits + 8).roundOut(bits + 4);
-  ln2Cache = { bits, iv };
+  let iv = ln2Cache.get(bits);
+  if (iv) return iv;
+  iv = twoAtanh(rat(1, 3), bits + 8).roundOut(bits + 4);
+  if (ln2Cache.size > 64) ln2Cache.clear();
+  ln2Cache.set(bits, iv);
   return iv;
 }
 
@@ -154,7 +187,18 @@ export function logPoint(q, bits = 96) {
     k -= 1;
   }
   const wp = bits + 8 + bitLen(BigInt(Math.abs(k)));
-  let iv = twoAtanh(m.subtract(ONE).divide(m.add(ONE)), wp);
+  let z = m.subtract(ONE).divide(m.add(ONE));
+  let pad = null;
+  if (bitLen(z.denominator) > wp + 8) {
+    // a long denominator (log of 10^-300) makes exact powers of z explode:
+    // use a dyadic z′ with |z − z′| ≤ 2^-(wp+8). On |z| ≤ 1/3 the derivative
+    // of 2·atanh is 2/(1 − z²) ≤ 9/4, so the result moves by at most 3·2^-(wp+8).
+    z = roundDyadic(z, wp + 8);
+    const e = new Rational(3n, 1n << BigInt(wp + 8));
+    pad = new Iv(e.negate(), e);
+  }
+  let iv = twoAtanh(z, wp);
+  if (pad) iv = iv.add(pad);
   if (k !== 0) iv = iv.add(ln2Iv(wp).scale(rat(k)));
   return iv.roundOut(bits + 4);
 }
@@ -254,4 +298,106 @@ export function sqrtPoint(q, bits = 96) {
   const den = d << s;
   if (S * S === n * d << (2n * s)) return Iv.point(new Rational(S, den));
   return new Iv(new Rational(S, den), new Rational(S + 1n, den)).roundOut(bits + 4);
+}
+
+// ---------------------------------------------------------------- asin, acos, n-th roots
+
+/** asin(q) for |q| ≤ 1: 2·atan(q / (1 + √(1 − q²))), whose inner value stays in [−1, 1]. */
+export function asinPoint(q, bits = 96) {
+  if (gt(q.abs(), ONE)) refuse("domain", `asin and acos need an argument in [-1, 1], got ${q.toNumber()}`);
+  if (isZero(q)) return Iv.point(ZERO);
+  if (eq(q.abs(), ONE)) return piIv(bits + 8).scale(sign(q) > 0 ? HALF : HALF.negate()).roundOut(bits + 4);
+  const wp = bits + 16;
+  const s = sqrtPoint(ONE.subtract(q.multiply(q)), wp);
+  const t = Iv.point(q).div(s.add(Iv.point(ONE))).roundOut(wp);
+  return new Iv(atanPoint(t.lo, wp).lo, atanPoint(t.hi, wp).hi).scale(TWO).roundOut(bits + 4);
+}
+
+export function acosPoint(q, bits = 96) {
+  if (eq(q, ONE)) return Iv.point(ZERO);
+  return piIv(bits + 8).scale(HALF).sub(asinPoint(q, bits + 8)).roundOut(bits + 4);
+}
+
+/** Largest r with r^n ≤ N (N ≥ 0, n ≥ 1). */
+function iroot(N, n) {
+  if (N < 2n) return N;
+  const k = BigInt(n);
+  let x = 1n << BigInt(Math.ceil(bitLen(N) / n));
+  for (;;) {
+    const y = ((k - 1n) * x + N / x ** (k - 1n)) / k;
+    if (y >= x) break;
+    x = y;
+  }
+  while (x ** k > N) x -= 1n;
+  while ((x + 1n) ** k <= N) x += 1n;
+  return x;
+}
+
+/** The real n-th root of q: any q for odd n, q ≥ 0 for even n. */
+export function rootPoint(q, n, bits = 96) {
+  if (n === 2) return sqrtPoint(q, bits);
+  if (sign(q) < 0) {
+    if (n % 2 === 0) refuse("domain", `an even root is undefined at ${q.toNumber()} (needs a non-negative argument)`);
+    return rootPoint(q.negate(), n, bits).neg();
+  }
+  if (isZero(q)) return Iv.point(ZERO);
+  const k = BigInt(n);
+  const a = q.numerator;
+  const d = q.denominator;
+  const s = BigInt(bits + 8);
+  // (a/d)^(1/n) = (a·d^(n−1))^(1/n) / d
+  const N = (a * d ** (k - 1n)) << (k * s);
+  const S = iroot(N, n);
+  const den = d << s;
+  if (S ** k === N) return Iv.point(new Rational(S, den));
+  return new Iv(new Rational(S, den), new Rational(S + 1n, den)).roundOut(bits + 4);
+}
+
+// ---------------------------------------------------------------- erf
+
+/** 2/√π as an interval. */
+function twoOverSqrtPi(bits) {
+  const pi = piIv(bits + 8);
+  return new Iv(sqrtPoint(pi.lo, bits + 8).lo, sqrtPoint(pi.hi, bits + 8).hi).recip().scale(TWO);
+}
+
+/**
+ * erf(q) = 2/√π · Σ (−1)^k q^(2k+1) / (k!·(2k+1)). The terms grow to about
+ * e^(q²) before they shrink, so the sum carries that many extra bits; from the
+ * point where e^(−q²) is below the precision asked for, 0 ≤ 1 − erf(q) ≤ e^(−q²)
+ * is used instead.
+ */
+export function erfPoint(q, bits = 96) {
+  if (isZero(q)) return Iv.point(ZERO);
+  if (sign(q) < 0) return erfPoint(q.negate(), bits).neg();
+  const q2 = q.multiply(q);
+  const growth = Math.ceil(q2.toNumber() * 1.4427) + 1; // bits of e^(q²)
+  if (growth > bits + 12) {
+    // erfc(q) ≤ e^(−q²) ≤ 2^−(bits+12)
+    return new Iv(ONE.subtract(pow2(-(bits + 12))), ONE);
+  }
+  const wp = bits + growth + 24;
+  let x = q;
+  let pad = ZERO;
+  if (bitLen(q.denominator) > wp) {
+    // |erf′| ≤ 2/√π < 2: moving q by 2^-(wp+4) moves erf by less than 2^-(wp+3)
+    x = roundDyadic(q, wp + 4);
+    pad = pow2(-(wp + 3));
+  }
+  const x2 = x.multiply(x);
+  const slack = pow2(-(wp + 14));
+  const kMin = Math.ceil(x2.toNumber()) + 1; // the terms decrease from here on
+  // p_k = (−1)^k x^(2k+1)/k!, rounded as it is built (see expPoint); t_k = p_k/(2k+1)
+  let p = x;
+  const sum = sumSeries(
+    x,
+    (_t, k) => {
+      p = roundDyadic(p.multiply(x2).divide(new Rational(BigInt(-k))), wp + 16);
+      return p.divide(new Rational(BigInt(2 * k + 1)));
+    },
+    (k, t) => (k < kMin ? null : t.abs().add(slack)),
+    wp,
+  );
+  const e = pow2(-(bits + 16)).add(pad);
+  return sum.add(new Iv(e.negate(), e)).mul(twoOverSqrtPi(bits + 16)).intersect(new Iv(ZERO, ONE)).roundOut(bits + 4);
 }
