@@ -12,3 +12,4 @@ export { ode } from "./src/ode.js";
 export { zeros, poles, extrema, inflections, simplestBetween } from "./src/roots.js";
 export { encloseAst } from "./src/ieval.js";
 export { piecewise, PiecewiseFunction, Region, where, parsePiecewiseText } from "./src/piecewise.js";
+export { field, ScalarField, jet, divergence, curl, jacobian, lineIntegral, surfaceIntegral } from "./src/multi.js";
