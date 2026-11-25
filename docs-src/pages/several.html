@@ -1,0 +1,58 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Several variables</h1>
+  <p>A <code>field</code> is a formula in several named variables. It answers the questions of multivariable calculus the same way <code>fn</code> does in one variable: a quick Float64 preview, then an enclosure with a proof.</p>
+<pre><code>const f = field("x^2*y + sin(x*y)", ["x", "y"]);
+f.gradient();                       // [2*x*y + cos(x*y)*y, x^2 + cos(x*y)*x], as fields
+f.jet([1, "1/2"]);                  // value, gradient and Hessian as intervals
+f.integral({ x: [0, 1], y: [0, 1] }).exact();
+f.range("0:x:1 && 0:y:x").exact();  // over a triangle
+f.criticalPoints({ x: [-2, 2], y: [-2, 2] }).exact();</code></pre>
+
+  <h2>Partials, gradients, tangent planes</h2>
+  <p><code>partial</code>, <code>gradient</code>, <code>hessian</code> and <code>laplacian</code> are symbolic and return fields. <code>jet(point)</code> evaluates the value, the gradient and the Hessian together with interval arithmetic; given a box instead of a point, it encloses them over the whole box. Where the formula has a kink inside the box (<code>abs</code>, <code>min</code>, a square root at 0), <code>smooth</code> is false and no derivative is reported. <code>directional(point, direction)</code> and <code>linearization(point)</code> build on the same pieces.</p>
+
+  <h2>Regions</h2>
+  <p>Integrals and ranges take a region in one of three forms.</p>
+  <ul>
+    <li><strong>A box:</strong> <code>{ x: [0, 1], y: [0, 2] }</code>.</li>
+    <li><strong>Iterated bounds:</strong> <code>{ x: [-1, 1], y: ["-sqrt(1-x^2)", "sqrt(1-x^2)"] }</code>, each bound a formula in the variables before it. This is the usual way to write a double integral, and it covers curved sides.</li>
+    <li><strong>A region in Core's notation:</strong> <code>"0:x:_ &amp;&amp; 0:y:_ &amp;&amp; _:y:4-x &amp;&amp; _:y:3-x/2"</code>, or a <code>MultiRegion</code> from <code>@ratmath/core</code>. Core cuts it into cells with one lower and one upper bound per variable, and each cell becomes iterated bounds. Polygons and polytopes are therefore integrated exactly when the integrand is a polynomial of low degree.</li>
+  </ul>
+  <p>Each piece is mapped to a box by \(y = \text{lo} + s\,(\text{hi} - \text{lo})\), which multiplies the integrand by \(\text{hi} - \text{lo}\).</p>
+
+  <h2>How an integral is proven</h2>
+  <p>On a box, the product Boole rule (five points a side) is exact for polynomials up to degree five in each variable. Its error on a side of width w is at most \(w^7 \max|\partial^6 f| / 1935360\), so the whole error is at most</p>
+  \[ \mathrm{vol} \cdot \sum_i \frac{w_i^6\,|c_{6,i}|}{2688}, \qquad c_{6,i} \ni \frac{1}{6!}\frac{\partial^6 f}{\partial x_i^6} \text{ over the box.} \]
+  <p>The Taylor coefficients \(c_{6,i}\) come from one pass of interval Taylor arithmetic in each direction, done in fixed point. Simpson's rule with the fourth derivative is tried as well, and the smaller bound wins. Boxes wait in a heap ordered by the width of their enclosure, and the widest is halved along the side that contributes most. Where the integrand is not smooth on a box, the plain bound (volume times range) is used, which still converges as the boxes shrink.</p>
+  <p>A cylinder of radius 1 and a sphere show the cost of curved sides: the area of the unit disc to six digits takes about 0.2 s, because the square root is not smooth at the ends of the x range.</p>
+
+  <h2>Ranges and critical points</h2>
+  <p><code>range</code> is branch and bound: each box gets an enclosure from the mean value form \(f(m) + \nabla f(B)\cdot(B - m)\), boxes that cannot hold the minimum or the maximum are dropped, and the rest are halved.</p>
+  <p><code>criticalPoints</code> looks for zeros of the gradient. A box where some partial derivative has one sign is dropped. On the others an interval Newton step (Krawczyk's operator, with the interval Hessian as the Jacobian) is tried: if its image lies inside the box, there is exactly one critical point there, and repeating the step narrows it. The kind comes from the signs of the Hessian's pivots, by Sylvester's law of inertia, in interval arithmetic: all positive is a minimum, all negative a maximum, mixed a saddle. A saddle like x·y, whose diagonal entries vanish, is settled with a 2×2 pivot. Where the Hessian may be singular the point is <code>degenerate</code>. A curve of critical points (x²y² along the axes) cannot be isolated; it comes back as one <code>possible</code> record around the whole set.</p>
+
+  <h2>Vector calculus</h2>
+  <p><code>divergence</code>, <code>curl</code> and <code>jacobian</code> are symbolic. <code>lineIntegral(F, variables, curve, [a, b])</code> substitutes the curve and integrates in one variable; with one expression in place of the list it is the integral with respect to arc length. <code>surfaceIntegral(F, variables, surface, [u, v], region)</code> is the flux of F through a parametrised surface, or with one expression the integral over its area. Surface areas of curved surfaces are slow (tens of seconds for a sphere to four digits), because the integrand is a square root of a sum of squares and interval arithmetic does not see that sin² + cos² = 1.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>field(expr, variables, { params })</td><td>ScalarField</td></tr>
+    <tr><td>f.partial(...names), f.gradient(), f.hessian(), f.laplacian()</td><td>fields (symbolic)</td></tr>
+    <tr><td>f.jet(point or box, { digits, order })</td><td>{ value, gradient, hessian, smooth }</td></tr>
+    <tr><td>f.value(point), f.directional(point, direction)</td><td><em>R</em> RationalInterval</td></tr>
+    <tr><td>f.linearization(point), f.substitute({ y: 2 }), f.along(curve)</td><td>field or function</td></tr>
+    <tr><td>f.integral(region, { digits = 6, maxBoxes = 4000 })</td><td><em>R</em> RationalInterval</td></tr>
+    <tr><td>f.range(region, { digits })</td><td><em>R</em> RationalInterval</td></tr>
+    <tr><td>f.criticalPoints(box, { digits, maxBoxes })</td><td><em>R</em> records { kind, unique, point, value }</td></tr>
+    <tr><td>divergence, curl, jacobian, lineIntegral, surfaceIntegral</td><td></td></tr>
+  </table></div>
+
+<template data-runbox>
+const f = field("x^3 - 3x + y^2", ["x", "y"]);
+PRINT("gradient:", f.gradient().map(String));
+for (const p of f.criticalPoints({ x: [-2, 2], y: [-2, 2] }).exact()) PRINT(p.kind, "at", p.point.map((c) => c.low.toDecimal(6)), "value", p.value.low.toDecimal(6));
+PRINT("∫ x*y over the triangle 0 ≤ y ≤ x ≤ 1:", field("x*y", ["x", "y"]).integral("0:x:1 && 0:y:x").exact());
+const disc = field("1", ["x", "y"]).integral({ x: [-1, 1], y: ["-sqrt(1-x^2)", "sqrt(1-x^2)"] }, { digits: 4 });
+PRINT("area of the unit disc, preview:", disc.quick.value);
+disc.exact()
+</template>

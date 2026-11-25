@@ -10,6 +10,23 @@ import {
 } from "./rat.js";
 import { refuse } from "./errors.js";
 
+/**
+ * Remembers recent values of a point function. Quadrature on a grid asks for
+ * sin and exp at the same few coordinates again and again.
+ */
+function remembered(f) {
+  let seen = new Map();
+  return (q, bits = 96) => {
+    const key = `${q.numerator}/${q.denominator}@${bits}`;
+    let r = seen.get(key);
+    if (r === undefined) {
+      if (seen.size >= 4096) seen = new Map();
+      seen.set(key, (r = f(q, bits)));
+    }
+    return r;
+  };
+}
+
 const pow2 = (k) => (k >= 0 ? new Rational(1n << BigInt(k)) : new Rational(1n, 1n << BigInt(-k)));
 
 /**
@@ -42,7 +59,7 @@ function sumSeries(t0, next, tailBound, wp, maxTerms = 100000) {
 
 const EXP_BIG = new Rational(1n << 12n);
 
-export function expPoint(q, bits = 96) {
+export const expPoint = remembered(function expPoint(q, bits = 96) {
   if (isZero(q)) return Iv.point(ONE);
   const neg = sign(q) < 0;
   const a = q.abs();
@@ -56,24 +73,37 @@ export function expPoint(q, bits = 96) {
   const e = log2Approx(a);
   const s = Math.max(0, e + 3);
   const wp = bits + s + 16;
-  const r = a.divide(pow2(s)); // 0 < r < 1/4
-  // exp(r) = Σ r^k/k!; tail after k terms ≤ 2 r^k / k! (r ≤ 1/2).
-  // Terms are rounded to wp+16 bits as they are built (exact ones grow with
-  // every factor r): each is then off by less than 2·2^-(wp+16), and the sum
-  // of fewer than 2^13 terms by less than 2^-wp, which is added below.
-  const slack = pow2(-(wp + 14));
-  let iv = sumSeries(
-    ONE,
-    (t, k) => roundDyadic(t.multiply(r).divide(new Rational(BigInt(k))), wp + 16),
-    (k, t) => (k === 0 ? null : t.add(slack).multiply(TWO)),
-    wp,
-  );
-  const pad = pow2(-wp);
-  iv = iv.add(new Iv(pad.negate(), pad));
-  for (let i = 0; i < s; i++) iv = iv.mul(iv).roundOut(wp);
-  if (neg) iv = iv.recip();
+  // Fixed point at scale 2^−P. r = a/2^s lies in [rl, ru]·2^−P with 0 < r < 1/4.
+  // exp is increasing, so the lower sum uses rl with every term rounded down
+  // (a truncated sum of rounded-down terms is below exp(rl)), and the upper
+  // sum uses ru with every term rounded up plus a tail: the terms more than
+  // halve each time (r/k < 1/2 from k = 1), so the tail after t_k is below t_k.
+  const P = BigInt(wp + 16);
+  const UNIT = 1n << P;
+  const n = a.numerator << P;
+  const d = a.denominator << BigInt(s);
+  const rl = n / d;
+  const ru = n % d === 0n ? rl : rl + 1n;
+  let lo = UNIT;
+  for (let t = UNIT, k = 1n; t > 0n; k++) {
+    t = (t * rl) / (k << P);
+    lo += t;
+  }
+  let hi = UNIT;
+  for (let t = UNIT, k = 1n; ; k++) {
+    const m = t * ru;
+    const den = k << P;
+    t = m / den + (m % den === 0n ? 0n : 1n);
+    hi += t;
+    if (t <= 4n) { hi += t; break; }
+  }
+  for (let i = 0; i < s; i++) {
+    lo = (lo * lo) >> P;
+    hi = -((-(hi * hi)) >> P);
+  }
+  const iv = neg ? new Iv(new Rational(UNIT, hi), new Rational(UNIT, lo)) : new Iv(new Rational(lo, UNIT), new Rational(hi, UNIT));
   return iv.roundOut(bits + 4, 6000); // keep tiny values (e^-1000) positive
-}
+});
 
 // ---------------------------------------------------------------- atan, pi
 
@@ -174,7 +204,7 @@ function ln2Iv(bits) {
   return iv;
 }
 
-export function logPoint(q, bits = 96) {
+export const logPoint = remembered(function logPoint(q, bits = 96) {
   if (le(q, ZERO)) refuse("domain", `log is undefined at ${q} (needs a positive argument)`);
   if (eq(q, ONE)) return Iv.point(ZERO);
   let k = log2Approx(q);
@@ -201,7 +231,7 @@ export function logPoint(q, bits = 96) {
   if (pad) iv = iv.add(pad);
   if (k !== 0) iv = iv.add(ln2Iv(wp).scale(rat(k)));
   return iv.roundOut(bits + 4);
-}
+});
 
 // ---------------------------------------------------------------- sin, cos
 
@@ -256,7 +286,7 @@ function sinCosFixed(x, wp) {
 }
 
 /** {sin, cos} at a rational point. */
-export function sinCosPoint(q, bits = 96) {
+export const sinCosPoint = remembered(function sinCosPoint(q, bits = 96) {
   if (isZero(q)) return { sin: Iv.point(ZERO), cos: Iv.point(ONE) };
   let x = q;
   let slack = ZERO;
@@ -280,7 +310,7 @@ export function sinCosPoint(q, bits = 96) {
   // Lipschitz constant 1 for the reduction slack.
   const widen = (iv) => (isZero(slack) ? iv : new Iv(iv.lo.subtract(slack), iv.hi.add(slack)));
   return { sin: widen(sin).roundOut(bits + 4), cos: widen(cos).roundOut(bits + 4) };
-}
+});
 
 export const sinPoint = (q, bits) => sinCosPoint(q, bits).sin;
 export const cosPoint = (q, bits) => sinCosPoint(q, bits).cos;

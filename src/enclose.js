@@ -6,6 +6,7 @@ import { Iv } from "./interval.js";
 import { ZERO, ONE, TWO, HALF, rat, le, lt, gt, isZero } from "./rat.js";
 import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv, asinPoint, acosPoint, rootPoint, erfPoint } from "./points.js";
 import { refuse } from "./errors.js";
+import { gammaIv, lgammaIv, polygammaIv, besselJIv, siIv, fresnelSIv, fresnelCIv } from "./special.js";
 import { TaylorModel, Domain } from "./model.js";
 import * as E from "./elementary.js";
 
@@ -61,6 +62,24 @@ enclose.acos = (x, bits = 96) => {
 };
 enclose.cbrt = monotone((q, bits) => rootPoint(q, 3, bits));
 enclose.erf = monotone(erfPoint);
+// special functions (src/special.js)
+enclose.gamma = (x, bits = 96) => out(gammaIv(Iv.from(x), bits));
+enclose.lgamma = (x, bits = 96) => out(lgammaIv(Iv.from(x), bits));
+enclose.digamma = (x, bits = 96) => out(polygammaIv(0, Iv.from(x), bits));
+enclose.polygamma = (m, x, bits = 96) => out(polygammaIv(m, Iv.from(x), bits));
+enclose.beta = (a, b, bits = 96) => {
+  const A = Iv.from(a);
+  const B = Iv.from(b);
+  return out(gammaIv(A, bits + 8).mul(gammaIv(B, bits + 8)).div(gammaIv(A.add(B), bits + 8)).roundOut(bits + 4));
+};
+enclose.besselJ = (n, x, bits = 96) => out(besselJIv(n, Iv.from(x), bits));
+enclose.Si = (x, bits = 96) => out(siIv(Iv.from(x), bits));
+enclose.fresnelS = (x, bits = 96) => out(fresnelSIv(Iv.from(x), bits));
+enclose.fresnelC = (x, bits = 96) => out(fresnelCIv(Iv.from(x), bits));
+enclose.erfc = (x, bits = 96) => {
+  const v = Iv.from(x);
+  return out(Iv.point(ONE).sub(new Iv(erfPoint(v.lo, bits).lo, erfPoint(v.hi, bits).hi)));
+};
 enclose.log1p = (x, bits = 96) => enclose.log(Iv.from(x).add(ONE), bits);
 enclose.sinh = (x, bits = 96) => {
   const v = Iv.from(x);

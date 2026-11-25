@@ -23,6 +23,11 @@ export const PAGES = [
   { name: "zeros", title: "Zeros, poles and extrema" },
   { name: "piecewise", title: "Piecewise functions" },
   { name: "odes", title: "Differential equations" },
+  { name: "bvp", title: "Boundary value problems" },
+  { name: "several", title: "Several variables" },
+  { name: "improper", title: "Limits and improper integrals" },
+  { name: "special", title: "Special functions" },
+  { name: "fourier", title: "Fourier series" },
   { name: "series", title: "Your own series" },
 ];
 

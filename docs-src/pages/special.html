@@ -1,0 +1,39 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Special functions</h1>
+  <p>Beyond the elementary functions, formulas may use the gamma function and its relatives, the Bessel functions of the first kind, the sine integral and the Fresnel integrals. Each has a certified enclosure at a rational point and over an interval, a Float64 version for previews, and a derivative, so values, ranges, integrals, zeros and extrema work as for any other formula.</p>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>in a formula</th><th>meaning</th><th>direct call</th></tr>
+    <tr><td>gamma(x)</td><td>Γ(x), exact at positive integers; poles at 0, −1, −2, …</td><td>enclose.gamma(x, bits)</td></tr>
+    <tr><td>lgamma(x)</td><td>log Γ(x) for x &gt; 0</td><td>enclose.lgamma</td></tr>
+    <tr><td>digamma(x), trigamma(x)</td><td>Γ′/Γ and its derivative</td><td>enclose.digamma, enclose.polygamma(m, x)</td></tr>
+    <tr><td>beta(a, b)</td><td>Γ(a)Γ(b)/Γ(a+b), written out as it is read</td><td>enclose.beta(a, b)</td></tr>
+    <tr><td>besselJ(n, x)</td><td>J_n(x) for a whole number n</td><td>enclose.besselJ(n, x)</td></tr>
+    <tr><td>Si(x)</td><td>∫₀ˣ sin(t)/t dt</td><td>enclose.Si</td></tr>
+    <tr><td>fresnelS(x), fresnelC(x)</td><td>∫₀ˣ sin(πt²/2) dt and ∫₀ˣ cos(πt²/2) dt</td><td>enclose.fresnelS, enclose.fresnelC</td></tr>
+    <tr><td>erfc(x)</td><td>1 − erf(x), written out as it is read</td><td>enclose.erfc</td></tr>
+  </table></div>
+
+  <h2>Gamma by Stirling's series</h2>
+  <p>For large y,</p>
+  \[ \log\Gamma(y) = (y - \tfrac12)\log y - y + \tfrac12\log 2\pi + \sum_{k=1}^{n}\frac{B_{2k}}{2k(2k-1)\,y^{2k-1}} + R_n , \]
+  <p>and for real y &gt; 0 the error R_n is smaller than the first term left out. The series does not converge, but its terms shrink until k is about πy, so y is first raised by Γ(x) = Γ(x + N)/(x(x+1)⋯(x+N−1)) until the smallest term is below the precision asked for. The Bernoulli numbers B₂ₖ are exact rationals (<code>bernoulli(m)</code>). The polygamma functions use the derivative of the same series.</p>
+  <p>Over an interval between two poles, |Γ| is log-convex, so its maximum is at an end, and ψ = Γ′/Γ increases. The mean value form Γ(m) + Γ(X)·ψ(X)·(X − m) then gives an enclosure that tightens as the interval shrinks.</p>
+
+  <h2>Entire functions by their power series</h2>
+  <p>J_n, Si and the Fresnel integrals are sums of power series that converge everywhere:</p>
+  \[ J_n(x) = \sum_{k\ge 0}\frac{(-1)^k (x/2)^{2k+n}}{k!\,(k+n)!}, \qquad \mathrm{Si}(x) = \sum_{k\ge0}\frac{(-1)^k x^{2k+1}}{(2k+1)\,(2k+1)!}. \]
+  <p>The terms are built in fixed point, each rounded both down and up, with as many guard bits as the largest term needs (about 1.45·|x| bits, since the terms reach e^|x| before they fall). Once they more than halve, the rest of the series is below twice the last term. This is exact about what it claims, but it limits the range: |x| ≤ 4096 for J_n and Si, |x| ≤ 43 for the Fresnel integrals. Over an interval, each of these has a derivative bounded by 1, so the value at the midpoint, give or take the radius, is an enclosure.</p>
+
+  <h2>What works with them</h2>
+  <p>Taylor models do not know these functions, so <code>integral</code> switches to Taylor series in fixed point on halved pieces (the <code>via</code> line says so), and ranges and zero searches use interval evaluation. The Bessel functions carry their neighbours along: the series of J_n needs J_(n−1) and J_(n+1) one order lower, from J_n′ = (J_(n−1) − J_(n+1))/2. Limits at infinity and improper tails do not follow special functions.</p>
+  <p>The gamma function also appears without being named: Γ(5/2) is <code>fn("t^(3/2)*exp(-t)", { variable: "t" }).improperIntegral(0, "inf")</code>, and the two enclosures agree.</p>
+
+<template data-runbox>
+PRINT("Γ(1/2)² =", enclose.gamma(R`1/2`).multiply(enclose.gamma(R`1/2`)), "(π)");
+PRINT("Γ(5) =", enclose.gamma(R`5`), " B₁₂ =", bernoulli(12));
+PRINT("first zeros of J₀:", zeros("besselJ(0, x)", [0, 10]).exact().map((z) => z.lo.toDecimal(8)));
+PRINT("the minimum of Γ on x > 0:", extrema("gamma(x)", ["1/2", 3]).exact().map((e) => `${e.kind} near ${e.lo.toDecimal(6)}`));
+PRINT("∫₀¹⁰ J₀:", fn("besselJ(0, x)").integral(0, 10).exactStage().via);
+fn("besselJ(0, x)").integral(0, 10).exact()
+</template>
