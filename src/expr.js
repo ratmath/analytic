@@ -22,6 +22,7 @@ import * as E from "./elementary.js";
 import { constants } from "./enclose.js";
 import { Iv } from "./interval.js";
 import { ZERO, ONE, le, ge, isZero } from "./rat.js";
+import { gammaFloat, lgammaFloat, digammaFloat, trigammaFloat, besselJFloat, siFloat, fresnelSFloat, fresnelCFloat } from "./special.js";
 
 // ---- AST builders ------------------------------------------------------------
 
@@ -61,7 +62,22 @@ function parseDecimalString(s) {
 export const FUNCTIONS = new Set([
   "sin", "cos", "tan", "exp", "ln", "log", "sqrt", "abs", "min", "max",
   "atan", "log1p", "sinh", "cosh", "tanh", "asin", "acos", "cbrt", "erf",
+  "gamma", "lgamma", "digamma", "trigamma", "beta", "besselJ", "Si", "fresnelS", "fresnelC", "erfc",
 ]);
+/** Functions of two arguments. */
+const BINARY = new Set(["min", "max", "beta", "besselJ"]);
+/** Calls that are written out in terms of others as they are read. */
+function specialCall(name, args, text) {
+  if (BINARY.has(name) !== (args.length === 2)) throw new SyntaxError(`${name} takes ${BINARY.has(name) ? "two arguments" : "one argument"} in ${text}`);
+  if (name === "erfc") return op("-", num(1), call("erf", args[0]));
+  if (name === "beta") return op("/", op("*", call("gamma", args[0]), call("gamma", args[1])), call("gamma", op("+", args[0], args[1])));
+  if (name === "besselJ") {
+    const n = constantRational(args[0]);
+    if (n === null || n.denominator !== 1n) throw new SyntaxError(`besselJ(n, x) needs a whole number n in ${text}`);
+    return call("besselJ", num(n), args[1]);
+  }
+  return call(name, ...args);
+}
 const ALIASES = { arcsin: "asin", arccos: "acos", arctan: "atan" };
 export const CONSTANTS = new Set(["pi", "e"]);
 
@@ -145,9 +161,9 @@ export function parse(text) {
             args.push(expr());
           }
           expect(")");
-          return call(k.v, ...args);
+          return specialCall(k.v, args, text);
         }
-        return call(k.v, power());
+        return specialCall(k.v, [power()], text);
       }
       if (CONSTANTS.has(k.v)) return { type: "const", name: k.v };
       return v(k.v);
@@ -292,6 +308,8 @@ const FLOAT_FNS = {
   sqrt: Math.sqrt, abs: Math.abs, atan: Math.atan, log1p: Math.log1p,
   sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
   asin: Math.asin, acos: Math.acos, cbrt: Math.cbrt, erf: erfFloat,
+  gamma: gammaFloat, lgamma: lgammaFloat, digamma: digammaFloat, trigamma: trigammaFloat,
+  Si: siFloat, fresnelS: fresnelSFloat, fresnelC: fresnelCFloat,
 };
 
 /** Compile to a closure over doubles: (env) => number, env maps names to numbers. */
@@ -342,6 +360,10 @@ export function compileFloat(ast) {
         const [a, b] = n.args.map(go);
         const f = FLOAT_FNS[n.name];
         if (f) return (e) => f(a(e));
+        if (n.name === "besselJ") {
+          const order = Number(n.args[0].value.numerator);
+          return (e) => besselJFloat(order, b(e));
+        }
         if (n.name === "min") return (e) => Math.min(a(e), b(e));
         if (n.name === "max") return (e) => Math.max(a(e), b(e));
         break;
@@ -504,7 +526,7 @@ export const S = {
 
 const depends = (n, name) => freeVariables(n).has(name);
 
-const TOTAL_CALLS = new Set(["sin", "cos", "exp", "atan", "sinh", "cosh", "tanh", "abs", "min", "max", "cbrt", "erf"]);
+const TOTAL_CALLS = new Set(["sin", "cos", "exp", "atan", "sinh", "cosh", "tanh", "abs", "min", "max", "cbrt", "erf", "besselJ", "Si", "fresnelS", "fresnelC"]);
 
 /** True when the tree is defined for every real value of its variables (no division, log, root or tan). */
 export function isTotal(n) {
@@ -703,10 +725,26 @@ export function derivative(ast, name = "x") {
         break;
       }
       case "call": {
+        if (n.name === "besselJ") {
+          // J₀′ = −J₁ and J_n′ = (J_(n−1) − J_(n+1))/2
+          const k = n.args[0].value;
+          const x = n.args[1];
+          const J = (m) => call("besselJ", num(m), x);
+          const slope = isZero(k) ? S.neg(J(ONE)) : S.div(S.sub(J(k.subtract(ONE)), J(k.add(ONE))), num(2n));
+          return S.mul(slope, d(x));
+        }
         const [a] = n.args;
         const da = d(a);
         const two = () => num(2n);
+        const halfPi = (u) => S.div(S.mul({ type: "const", name: "pi" }, S.pow(u, two())), two());
         switch (n.name) {
+          case "gamma": return S.mul(S.mul(n, call("digamma", a)), da);
+          case "lgamma": return S.mul(call("digamma", a), da);
+          case "digamma": return S.mul(call("trigamma", a), da);
+          case "trigamma": return refuse("unsupported", "the derivative of trigamma is not available");
+          case "Si": return S.mul(S.div(call("sin", a), a), da);
+          case "fresnelS": return S.mul(call("sin", halfPi(a)), da);
+          case "fresnelC": return S.mul(call("cos", halfPi(a)), da);
           case "sin": return S.mul(call("cos", a), da);
           case "cos": return S.neg(S.mul(call("sin", a), da));
           case "tan": return S.div(da, S.pow(call("cos", a), two()));

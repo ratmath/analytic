@@ -14,10 +14,14 @@ import { PiecewiseFunction, parsePiecewiseText } from "./piecewise.js";
 import { cancelHoles } from "./holes.js";
 import { encloseAst } from "./ieval.js";
 import { boxBounder } from "./roots.js";
+import { quad1 } from "./quad.js";
 import { endpoint, isInfinite, improperStages, improperFloat, limitAt, behaviourAt } from "./improper.js";
 
 const q = (v) => (typeof v === "string" ? toRational(v) : typeof v === "number" && !Number.isInteger(v) ? toRational(v) : toQ(v));
 const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
+
+const SPECIAL = new Set(["gamma", "lgamma", "digamma", "trigamma", "besselJ", "Si", "fresnelS", "fresnelC"]);
+const usesSpecial = (ast) => (ast.type === "call" && SPECIAL.has(ast.name)) || ((ast.type === "call" || ast.type === "op") && ast.args.some(usesSpecial));
 
 const describeLimit = (x) => (typeof x === "number" ? (x > 0 ? "+∞" : "-∞") : `about ${Iv.from(x).mid.toNumber()}`);
 
@@ -428,6 +432,15 @@ function* integralStages(f, A, B, opts) {
   const bits = opts.bits ?? Math.max(64, bitsForDigits(digits) + 24);
   const maxPieces = opts.maxPieces ?? 256;
   if (A.compareTo(B) === 0) return { value: Iv.point(ZERO).toRationalInterval(), via: "empty interval" };
+  if (usesSpecial(f.ast)) {
+    // no Taylor models for these: fixed-point Taylor series on halved pieces instead
+    const env = {};
+    for (const [k, val] of Object.entries(evalParams(f.params))) env[k] = Iv.from(val);
+    const first = quad1(f.ast, f.variable, env, A, B, { tol: tenTo(Math.min(digits, 6)), bits });
+    yield { done: 1, of: 2, step: "pieces", partial: first.iv.toRationalInterval() };
+    const r = quad1(f.ast, f.variable, env, A, B, { tol: targetWidth(first.iv, digits), bits });
+    return { value: r.iv.toRationalInterval(), via: `Taylor series (order 14) on ${r.pieces} piece${r.pieces > 1 ? "s" : ""}${r.met ? "" : ", budget hit: wider than asked"}` };
+  }
   const [lo, hi, sgn] = lt(A, B) ? [A, B, ONE] : [B, A, ONE.negate()];
   // Each piece is refined on its own until its share of the width budget is met.
   let pieces = [{ lo, hi }];

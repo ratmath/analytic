@@ -25,6 +25,7 @@ import { toAst, format, compileFloat, floatEnv, derivative, simplify, freeVariab
 import { encloseAst } from "./ieval.js";
 import { bitsForDigits } from "./scope.js";
 import { AnalyticFunction } from "./fn.js";
+import { lgammaIv, polygammaIv, besselJIv } from "./special.js";
 
 const q = (x) => (typeof x === "string" ? toRational(x) : typeof x === "number" && !Number.isInteger(x) ? toRational(x) : toQ(x));
 const R = (iv, bits) => iv.roundOut(bits, 6000);
@@ -333,6 +334,42 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4, scale = null) {
         const signed = fname === "asin" ? g : neg(g);
         return integrate(a, value(a[0], (u) => call(fname, u)), (_b, i) => signed[i]);
       }
+      case "fresnelS":
+      case "fresnelC": {
+        const halfPi = from(encloseAst(op("/", { type: "const", name: "pi" }, num(2)), {}, bits));
+        const g = trig(mul(constant(halfPi), square(a)), false)[fname === "fresnelS" ? 0 : 1];
+        return integrate(a, value(a[0], (u) => call(fname, u)), (_b, i) => g[i]);
+      }
+      case "Si": {
+        const g = mul(trig(a, false)[0], recipS(a));
+        return integrate(a, value(a[0], (u) => call("Si", u)), (_b, i) => g[i]);
+      }
+      case "lgamma":
+      case "gamma":
+      case "digamma":
+      case "trigamma": {
+        // from the polygammas: lgamma⁽ᵏ⁾ = ψ⁽ᵏ⁻¹⁾, on positive arguments
+        const a0 = toIv(a[0]);
+        const start = fname === "digamma" ? 0 : fname === "trigamma" ? 1 : -1;
+        const F = [];
+        for (let k = 0; k <= K; k++) {
+          const m = start + k;
+          const iv = m < 0 ? lgammaIv(a0, bits) : polygammaIv(m, a0, bits);
+          F.push(from(iv.scale(new Rational(1n, FACT[k]))));
+        }
+        const out = zero();
+        out[0] = F[0];
+        const tail = a.map((x, k) => (k === 0 ? Z : x));
+        let power = constant(U1);
+        for (let k = 1; k <= K; k++) {
+          power = mul(power, tail);
+          for (let j = k; j <= K; j++) {
+            const t = mulI(F[k], power[j]);
+            out[j] = [out[j][0] + t[0], out[j][1] + t[1]];
+          }
+        }
+        return fname === "gamma" ? expS(out) : out;
+      }
       case "erf": {
         const factor = from(encloseAst(op("/", num(2), call("sqrt", { type: "const", name: "pi" })), {}, bits));
         const g = mul(constant(factor), expS(neg(square(a))));
@@ -340,6 +377,30 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4, scale = null) {
       }
     }
     return refuse("bad-expression", `cannot expand ${fname}`);
+  };
+  /**
+   * J_n of a series, from J_m′ = (J_(m−1) − J_(m+1))/2: the coefficient of
+   * order j needs the neighbours' coefficients below j, so the orders
+   * n − K … n + K are carried together and the range narrows by one each step.
+   */
+  const besselS = (a, n) => {
+    const a0 = toIv(a[0]);
+    const rows = new Map();
+    for (let m = n - K; m <= n + K; m++) {
+      const row = zero();
+      row[0] = from(besselJIv(m, a0, bits));
+      rows.set(m, row);
+    }
+    for (let j = 1; j <= K; j++) {
+      for (let m = n - K + j; m <= n + K - j; m++) {
+        const below = rows.get(m - 1);
+        const above = rows.get(m + 1);
+        const diff = [];
+        for (let i = 0; i < j; i++) diff.push([below[i][0] - above[i][1], below[i][1] - above[i][0]]);
+        rows.get(m)[j] = settle(wsum(a, diff, j, 1, j, big), 2n * big(j));
+      }
+    }
+    return rows.get(n);
   };
   /** apply(), with the value kept and `smooth` cleared where a derivative does not exist (sqrt at 0). */
   const compose = (a, fname, make, run) => {
@@ -402,6 +463,11 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4, scale = null) {
           smooth = false;
           const pick = (x, y) => ((isMin ? x < y : x > y) ? x : y);
           return constant([pick(a[0][0], b[0][0]), pick(a[0][1], b[0][1])]);
+        }
+        if (node.name === "besselJ") {
+          const order = Number(node.args[0].value.numerator);
+          const a = go(node.args[1]);
+          return compose(a, "besselJ", (u) => call("besselJ", node.args[0], u), () => besselS(a, order));
         }
         const fname = node.name === "ln" ? "log" : node.name;
         const a = go(node.args[0]);

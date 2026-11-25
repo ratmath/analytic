@@ -8,6 +8,7 @@ import { ZERO, ONE, TWO, HALF, rat, lt, le, gt, ge, isZero, min, max } from "./r
 import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv, asinPoint, acosPoint, rootPoint, erfPoint } from "./points.js";
 import { refuse } from "./errors.js";
 import { constantRational } from "./expr.js";
+import { gammaIv, lgammaIv, polygammaIv, besselJIv, siIv, fresnelSIv, fresnelCIv } from "./special.js";
 
 // relative rounding, with an absolute floor far below 2^-bits so tiny
 // positive values (e^-100) stay provably positive
@@ -69,6 +70,13 @@ const FNS = {
   },
   cbrt: (v, b) => monotone((q, bits) => rootPoint(q, 3, bits), v, b),
   erf: (v, b) => monotone(erfPoint, v, b),
+  gamma: gammaIv,
+  lgamma: lgammaIv,
+  digamma: (v, b) => polygammaIv(0, v, b),
+  trigamma: (v, b) => polygammaIv(1, v, b),
+  Si: siIv,
+  fresnelS: fresnelSIv,
+  fresnelC: fresnelCIv,
   sin: (v, b) => trig(v, b, 0),
   cos: (v, b) => trig(v, b, 1),
   tan(v, b) {
@@ -143,6 +151,7 @@ export function encloseAst(ast, env, bits = 64) {
       }
       case "call": {
         const args = n.args.map(go);
+        if (n.name === "besselJ") return R(besselJIv(Number(n.args[0].value.numerator), args[1], bits), bits);
         if (n.name === "min") return new Iv(min(args[0].lo, args[1].lo), min(args[0].hi, args[1].hi));
         if (n.name === "max") return new Iv(max(args[0].lo, args[1].lo), max(args[0].hi, args[1].hi));
         const f = FNS[n.name === "ln" ? "log" : n.name];
