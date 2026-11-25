@@ -14,9 +14,12 @@ import { PiecewiseFunction, parsePiecewiseText } from "./piecewise.js";
 import { cancelHoles } from "./holes.js";
 import { encloseAst } from "./ieval.js";
 import { boxBounder } from "./roots.js";
+import { endpoint, isInfinite, improperStages, improperFloat, limitAt, behaviourAt } from "./improper.js";
 
 const q = (v) => (typeof v === "string" ? toRational(v) : typeof v === "number" && !Number.isInteger(v) ? toRational(v) : toQ(v));
 const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
+
+const describeLimit = (x) => (typeof x === "number" ? (x > 0 ? "+∞" : "-∞") : `about ${Iv.from(x).mid.toNumber()}`);
 
 /** Target width for `digits` significant digits of a value of size `iv`. */
 function targetWidth(iv, digits) {
@@ -158,11 +161,63 @@ export class AnalyticFunction {
    * L'Hôpital enclosure. Refuses at poles and outside the domain.
    */
   limit(c, opts = {}) {
-    const at = q(c);
+    const where = endpoint(c, q);
+    if (isInfinite(where) || opts.side) return limitAt(this, where, opts.side, opts, evalParams);
+    const at = where;
     const bits = bitsForDigits(opts.digits ?? 20) + 16;
     const direct = pointValue(this, at, bits);
     if (direct) return direct.toRationalInterval();
-    return boxBounder(this, at.subtract(ONE), at.add(ONE), bits)(Iv.point(at)).toRationalInterval();
+    try {
+      return boxBounder(this, at.subtract(ONE), at.add(ONE), bits)(Iv.point(at)).toRationalInterval();
+    } catch (e) {
+      if (!(e instanceof AnalyticError)) throw e;
+      // not removable: compare the two one-sided limits
+      let left;
+      let right;
+      try {
+        left = limitAt(this, at, "left", opts, evalParams);
+        right = limitAt(this, at, "right", opts, evalParams);
+      } catch (e2) {
+        if (!(e2 instanceof AnalyticError)) throw e2;
+        throw e;
+      }
+      if (typeof left === "number" || typeof right === "number") {
+        if (left === right) return left;
+        return refuse("no-limit", `the one-sided limits at ${at} differ (${describeLimit(left)} from the left, ${describeLimit(right)} from the right)`);
+      }
+      const both = Iv.from(left).intersect(Iv.from(right));
+      if (!both) refuse("no-limit", `the one-sided limits at ${at} differ (${describeLimit(left)} from the left, ${describeLimit(right)} from the right)`);
+      return Iv.from(left).hull(Iv.from(right)).toRationalInterval();
+    }
+  }
+
+  /**
+   * How f behaves far out: f(x) = term·(coefficient + a part that dies out),
+   * with term = exp(k·x)·x^p·log(x)^m. `at` is "inf" (default) or "-inf".
+   */
+  asymptotic(at = "inf", opts = {}) {
+    const where = endpoint(at, q);
+    if (!isInfinite(where)) refuse("bad-point", "asymptotic(at) takes \"inf\" or \"-inf\"");
+    return behaviourAt(this, where, opts, evalParams);
+  }
+
+  /**
+   * An improper integral: an end at "inf" or "-inf", or an end where f is
+   * not defined (1/sqrt(x) at 0). The exact stage is a RationalInterval when
+   * the integral converges, ±Infinity when it is proven to diverge, and it
+   * refuses where neither could be shown. Singular points strictly inside
+   * the interval go in `singular: [...]`.
+   */
+  improperIntegral(a, b, opts = {}) {
+    const A = endpoint(a, q);
+    const B = endpoint(b, q);
+    return new Refinement(
+      () => {
+        const value = improperFloat(this, A, B, gaussLegendre);
+        return { value, trust: Number.isFinite(value) ? "rough" : "unsure" };
+      },
+      () => improperStages(this, A, B, opts, evalParams),
+    );
   }
 
   /** Range over an interval: sampled preview, then a certified enclosure. */

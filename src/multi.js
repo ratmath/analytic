@@ -77,7 +77,9 @@ function unaryOrder(trees, k) {
   return trees.higher[k];
 }
 
-const FACT = [1n, 1n, 2n, 6n, 24n, 120n, 720n];
+const FACT = [1n];
+for (let k = 1n; k <= 40n; k++) FACT.push(FACT[FACT.length - 1] * k);
+
 
 /**
  * Taylor coefficients F₀ … F_K of a one-argument function about every point
@@ -152,10 +154,14 @@ function unaryTaylor(key, make, a0, K, env, bits) {
  * Taylor coefficients c₀ … c_K of the tree in one variable, enclosed over the
  * whole box `env`: c_k contains (∂ᵏ/∂nameᵏ) f / k! at every point of the box.
  * Returns null where a derivative cannot be enclosed (a kink, an end of a domain).
+ * With `scale` = h the coefficients are those in s for name = centre + h·s,
+ * that is c_k·h^k, which keeps them near the size of f on wide boxes.
  */
-export function taylorAlong(ast, env, name, bits = 64, K = 4) {
-  // coefficients are pairs [lo, hi] of BigInt at the fixed scale 2^−P: the
-  // products of a Taylor series then cost shifts instead of gcds
+export function taylorAlong(ast, env, name, bits = 64, K = 4, scale = null) {
+  // Coefficients are pairs [lo, hi] of BigInt at the fixed scale 2^−P, so the
+  // products of a series cost shifts instead of gcds. Each function is
+  // applied by its series recurrence (exp: j·b_j = Σ i·a_i·b_(j−i), and the
+  // like), which keeps every term at the size of the result.
   const P = BigInt(bits + 64);
   const UNIT = 1n << P;
   const floor = (r) => {
@@ -167,8 +173,11 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4) {
   const from = (iv) => [floor(iv.lo), -floor(iv.hi.negate())];
   const toIv = ([lo, hi]) => new Iv(new Rational(lo, UNIT), new Rational(hi, UNIT));
   const Z = [0n, 0n];
+  const U1 = [UNIT, UNIT];
   const isZero = (x) => x[0] === 0n && x[1] === 0n;
   const zero = () => new Array(K + 1).fill(Z);
+  const fdiv = (n, d) => { const quotient = n / d; return n % d !== 0n && (n < 0n) !== (d < 0n) ? quotient - 1n : quotient; };
+  const cdiv = (n, d) => -fdiv(-n, d);
   const memo = new Map();
   let smooth = true;
   const go = (node) => {
@@ -179,58 +188,170 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4) {
   };
   const constant = (val) => { const c = zero(); c[0] = val; return c; };
   const isConstant = (a) => a.every((x, k) => k === 0 || isZero(x));
-  const mul = (a, b) => {
-    const out = [];
-    for (let k = 0; k <= K; k++) {
-      let lo = 0n;
-      let hi = 0n;
-      for (let i = 0; i <= k; i++) {
-        const x = a[i];
-        const y = b[k - i];
-        if (isZero(x) || isZero(y)) continue;
-        if (x[0] >= 0n && y[0] >= 0n) { lo += x[0] * y[0]; hi += x[1] * y[1]; continue; }
-        const p1 = x[0] * y[0];
-        const p2 = x[0] * y[1];
-        const p3 = x[1] * y[0];
-        const p4 = x[1] * y[1];
-        let least = p1 < p2 ? p1 : p2;
+  /** Σ_{i=from..to} w(i)·x[i]·y[j−i] at the scale 2^−2P, as [lo, hi]. */
+  const wsum = (x, y, j, lo0, hi0, w) => {
+    let lo = 0n;
+    let hi = 0n;
+    for (let i = lo0; i <= hi0; i++) {
+      const p = x[i];
+      const q2 = y[j - i];
+      if (isZero(p) || isZero(q2)) continue;
+      const weight = w ? w(i) : 1n;
+      if (weight === 0n) continue;
+      let least;
+      let most;
+      if (p[0] >= 0n && q2[0] >= 0n) { least = p[0] * q2[0]; most = p[1] * q2[1]; } else {
+        const p1 = p[0] * q2[0];
+        const p2 = p[0] * q2[1];
+        const p3 = p[1] * q2[0];
+        const p4 = p[1] * q2[1];
+        least = p1 < p2 ? p1 : p2;
         if (p3 < least) least = p3;
         if (p4 < least) least = p4;
-        let most = p1 > p2 ? p1 : p2;
+        most = p1 > p2 ? p1 : p2;
         if (p3 > most) most = p3;
         if (p4 > most) most = p4;
-        lo += least;
-        hi += most;
       }
-      out.push([lo >> P, -(-hi >> P)]);
+      if (weight > 0n) { lo += least * weight; hi += most * weight; } else { lo += most * weight; hi += least * weight; }
     }
+    return [lo, hi];
+  };
+  /** Rounds a 2^−2P sum to 2^−P, after dividing by the positive integer d. */
+  const settle = ([lo, hi], d = 1n) => [fdiv(lo, d << P), cdiv(hi, d << P)];
+  const mulI = (x, y) => settle(wsum([x], [y], 0, 0, 0));
+  const recipI = (y) => {
+    if (y[0] <= 0n && y[1] >= 0n) refuse("division-by-zero", "division by an interval that contains 0");
+    const sq = UNIT * UNIT;
+    return y[0] > 0n ? [fdiv(sq, y[1]), cdiv(sq, y[0])] : [fdiv(sq, y[1]), cdiv(sq, y[0])];
+  };
+  const mul = (a, b) => {
+    const out = [];
+    for (let k = 0; k <= K; k++) out.push(settle(wsum(a, b, k, 0, k)));
     return out;
   };
   const neg = (a) => a.map((x) => [-x[1], -x[0]]);
-  const compose = (a, key, make) => {
-    const a0 = toIv(a[0]);
-    const at = { ...env, u: a0 };
-    if (isConstant(a)) return constant(from(encloseAst(make(variable("u")), at, bits)));
-    const out = zero();
-    let F;
+  const addS = (a, b) => a.map((x, k) => [x[0] + b[k][0], x[1] + b[k][1]]);
+  const big = (i) => BigInt(i);
+  const value = (a0, make) => from(encloseAst(make(variable("u")), { ...env, u: toIv(a0) }, bits));
+  /** b with b′ = a′·g: j·b_j = Σ_{i=1..j} i·a_i·g_(j−i). g may be filled in as b grows. */
+  const integrate = (a, b0, gOf) => {
+    const b = zero();
+    b[0] = b0;
+    const g = [];
+    for (let j = 1; j <= K; j++) {
+      g[j - 1] = gOf(b, j - 1);
+      b[j] = settle(wsum(a, g, j, 1, j, big), big(j));
+    }
+    return b;
+  };
+  const recipS = (a) => {
+    const inv = recipI(a[0]);
+    const b = zero();
+    b[0] = inv;
+    for (let j = 1; j <= K; j++) {
+      const t = settle(wsum(a, b, j, 1, j));
+      b[j] = mulI([-t[1], -t[0]], inv);
+    }
+    return b;
+  };
+  const expS = (a) => integrate(a, value(a[0], (u) => call("exp", u)), (b, i) => b[i]);
+  const logS = (a) => {
+    const b = zero();
+    b[0] = value(a[0], (u) => call("log", u));
+    const inv = recipI(a[0]);
+    for (let j = 1; j <= K; j++) {
+      // j·a_0·b_j = j·a_j − Σ_{i=1..j−1} i·b_i·a_(j−i)
+      const t = j > 1 ? settle(wsum(b, a, j, 1, j - 1, big), big(j)) : Z;
+      b[j] = mulI([a[j][0] - t[1], a[j][1] - t[0]], inv);
+    }
+    return b;
+  };
+  const powS = (a, c) => {
+    if (c.denominator === 1n && c.numerator >= 0n && c.numerator <= 64n) {
+      let out = constant(U1);
+      let base = a;
+      for (let n = c.numerator; n > 0n; n >>= 1n) {
+        if (n & 1n) out = mul(out, base);
+        if (n > 1n) base = mul(base, base);
+      }
+      return out;
+    }
+    if (a[0][0] <= 0n && a[0][1] >= 0n) refuse("not-smooth", "a fractional or negative power has no derivative at 0");
+    const b = zero();
+    b[0] = value(a[0], (u) => op("^", u, num(c)));
+    const inv = recipI(a[0]);
+    for (let j = 1; j <= K; j++) {
+      // j·a_0·b_j = Σ_{i=1..j} (c·i − (j − i))·a_i·b_(j−i)
+      const t = settle(wsum(a, b, j, 1, j, (i) => c.numerator * big(i) - c.denominator * big(j - i)), big(j) * c.denominator);
+      b[j] = mulI(t, inv);
+    }
+    return b;
+  };
+  const trig = (a, hyperbolic) => {
+    const s = zero();
+    const c = zero();
+    s[0] = value(a[0], (u) => call(hyperbolic ? "sinh" : "sin", u));
+    c[0] = value(a[0], (u) => call(hyperbolic ? "cosh" : "cos", u));
+    for (let j = 1; j <= K; j++) {
+      s[j] = settle(wsum(a, c, j, 1, j, big), big(j));
+      const t = settle(wsum(a, s, j, 1, j, big), big(j));
+      c[j] = hyperbolic ? t : [-t[1], -t[0]];
+    }
+    return [s, c];
+  };
+  const one = () => constant(U1);
+  const square = (a) => mul(a, a);
+  /** The series of a one-argument function of the series a. */
+  const apply = (fname, a) => {
+    switch (fname) {
+      case "exp": return expS(a);
+      case "log": return logS(a);
+      case "sin": return trig(a, false)[0];
+      case "cos": return trig(a, false)[1];
+      case "sinh": return trig(a, true)[0];
+      case "cosh": return trig(a, true)[1];
+      case "sqrt": return powS(a, new Rational(1n, 2n));
+      case "cbrt": return powS(a, new Rational(1n, 3n));
+      case "log1p": return logS(addS(one(), a));
+      case "tan":
+      case "tanh": {
+        // b′ = a′·(1 ± b²), the square filled in as b grows
+        const sq = [];
+        return integrate(a, value(a[0], (u) => call(fname, u)), (b, i) => {
+          sq[i] = settle(wsum(b, b, i, 0, i));
+          const t = fname === "tan" ? sq[i] : [-sq[i][1], -sq[i][0]];
+          return i === 0 ? [t[0] + UNIT, t[1] + UNIT] : t;
+        });
+      }
+      case "atan": {
+        const g = recipS(addS(one(), square(a)));
+        return integrate(a, value(a[0], (u) => call("atan", u)), (_b, i) => g[i]);
+      }
+      case "asin":
+      case "acos": {
+        const g = powS(addS(one(), neg(square(a))), new Rational(-1n, 2n));
+        const signed = fname === "asin" ? g : neg(g);
+        return integrate(a, value(a[0], (u) => call(fname, u)), (_b, i) => signed[i]);
+      }
+      case "erf": {
+        const factor = from(encloseAst(op("/", num(2), call("sqrt", { type: "const", name: "pi" })), {}, bits));
+        const g = mul(constant(factor), expS(neg(square(a))));
+        return integrate(a, value(a[0], (u) => call("erf", u)), (_b, i) => g[i]);
+      }
+    }
+    return refuse("bad-expression", `cannot expand ${fname}`);
+  };
+  /** apply(), with the value kept and `smooth` cleared where a derivative does not exist (sqrt at 0). */
+  const compose = (a, fname, make, run) => {
+    if (isConstant(a)) return constant(value(a[0], make));
     try {
-      F = unaryTaylor(key, make, a0, K, env, bits).map(from);
+      return run();
     } catch (e) {
       if (!(e instanceof AnalyticError)) throw e;
-      // the value may still exist where a derivative does not (sqrt at 0)
-      out[0] = from(encloseAst(make(variable("u")), at, bits));
+      const out = constant(value(a[0], make)); // throws again where even the value is undefined
       smooth = false;
       return out;
     }
-    out[0] = F[0];
-    const tail = a.map((x, k) => (k === 0 ? Z : x));
-    let power = constant([UNIT, UNIT]);
-    for (let k = 1; k <= K; k++) {
-      power = mul(power, tail);
-      const term = mul(constant(F[k]), power);
-      for (let j = k; j <= K; j++) out[j] = [out[j][0] + term[j][0], out[j][1] + term[j][1]];
-    }
-    return out;
   };
   const eval1 = (node) => {
     switch (node.type) {
@@ -242,23 +363,26 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4) {
         const val = env[node.name];
         if (val === undefined) refuse("unbound", `no value for ${node.name}`);
         const c = constant(from(val));
-        if (node.name === name) c[1] = [UNIT, UNIT];
+        // with a scale h the series is in s where name = centre + h·s
+        if (node.name === name) c[1] = scale ? from(Iv.point(scale)) : U1;
         return c;
       }
       case "op": {
         if (node.op === "neg") return neg(go(node.args[0]));
-        if (node.op === "+" || node.op === "-") {
-          const a = go(node.args[0]);
-          const b = node.op === "+" ? go(node.args[1]) : neg(go(node.args[1]));
-          return a.map((x, k) => [x[0] + b[k][0], x[1] + b[k][1]]);
-        }
+        if (node.op === "+") return addS(go(node.args[0]), go(node.args[1]));
+        if (node.op === "-") return addS(go(node.args[0]), neg(go(node.args[1])));
         if (node.op === "*") return mul(go(node.args[0]), go(node.args[1]));
-        if (node.op === "/") return mul(go(node.args[0]), compose(go(node.args[1]), "recip", (u) => op("/", num(1), u)));
+        if (node.op === "/") {
+          const b = go(node.args[1]);
+          return mul(go(node.args[0]), compose(b, "recip", (u) => op("/", num(1), u), () => recipS(b)));
+        }
         if (node.op === "^") {
+          const a = go(node.args[0]);
           const c = constantRational(node.args[1]);
-          if (c !== null) return compose(go(node.args[0]), `pow ${c}`, (u) => op("^", u, num(c)));
-          const logu = compose(go(node.args[0]), "log", (u) => call("log", u));
-          return compose(mul(go(node.args[1]), logu), "exp", (u) => call("exp", u));
+          if (c !== null) return compose(a, "pow", (u) => op("^", u, num(c)), () => powS(a, c));
+          const logu = compose(a, "log", (u) => call("log", u), () => logS(a));
+          const e = mul(go(node.args[1]), logu);
+          return compose(e, "exp", (u) => call("exp", u), () => expS(e));
         }
         break;
       }
@@ -280,7 +404,8 @@ export function taylorAlong(ast, env, name, bits = 64, K = 4) {
           return constant([pick(a[0][0], b[0][0]), pick(a[0][1], b[0][1])]);
         }
         const fname = node.name === "ln" ? "log" : node.name;
-        return compose(go(node.args[0]), fname, (u) => call(fname, u));
+        const a = go(node.args[0]);
+        return compose(a, fname, (u) => call(fname, u), () => apply(fname, a));
       }
     }
     return refuse("bad-expression", `cannot evaluate ${node.type} ${node.op ?? node.name ?? ""}`);
@@ -991,7 +1116,7 @@ function boxIntegral(ast, names, box, paramEnv, bits, cache) {
 }
 
 /** A max-heap of { key, ... } items. */
-class Heap {
+export class Heap {
   #a = [];
   get size() { return this.#a.length; }
   items() { return this.#a; }
