@@ -1,0 +1,39 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Fourier series</h1>
+  <p><code>fourier(f, [a, b])</code> computes the coefficients of the Fourier series of f on [a, b], each as a certified interval. f may be a formula or a piecewise function, so square waves and sawtooths are first-class.</p>
+<pre><code>const F = fourier("-1 if -1:x:!0; 1 if 0:x:1", [-1, 1], { terms: 9 }).exact();
+F.b[1];                 // 4/π, enclosed
+F.partial(5);           // the partial sum as a function, to plot
+F.toString(3, 4);       // "1.2732*sin(pi*x) + 0.4244*sin(3*pi*x)"
+F.meanSquareError(5);   // (1/L)·∫ (f − S₅)², proven</code></pre>
+  <p>With L = b − a,</p>
+  \[ f(x) \sim \frac{a_0}{2} + \sum_{n\ge1} a_n\cos\frac{2\pi n x}{L} + b_n\sin\frac{2\pi n x}{L}, \qquad a_n = \frac{2}{L}\int_a^b f(x)\cos\frac{2\pi n x}{L}\,dx . \]
+  <p><code>kind: "sine"</code> or <code>"cosine"</code> gives the half-range series in πn(x − a)/L instead, which extends f as an odd or an even function of period 2L. These are the series that solve the heat and wave equations on an interval.</p>
+
+  <h2>How the coefficients are enclosed</h2>
+  <p>Each coefficient is an integral of f times a sine or cosine. On a piece with centre c and half-width h, f(c + hs) is expanded in powers of s to order 14 in fixed-point interval arithmetic; the even terms integrate exactly, and the coefficient of order 14, enclosed over the whole piece, bounds the rest. The widest piece is halved until the total is narrow enough. A piecewise function is integrated rule by rule between its breakpoints, so a jump costs nothing.</p>
+
+  <h2>Parseval and the error of a partial sum</h2>
+  <p>The mean square of f equals the sum of the squares of the coefficients:</p>
+  \[ \frac1L\int_a^b f^2 = \frac{a_0^2}{4} + \frac12\sum_{n\ge1}\bigl(a_n^2 + b_n^2\bigr). \]
+  <p>The partial sum S_N is the best approximation by harmonics up to N in the mean-square sense, and its error is what is left of the sum. <code>meanSquare()</code> encloses the left side, and <code>meanSquareError(N)</code> subtracts the part of the right side that S_N uses. This is a proven statement about the whole function, not a sample of points. It says nothing about any single point: near a jump the partial sums overshoot by about 9% however many terms are taken (the Gibbs phenomenon), which <code>F.partial(N).range(...)</code> will show.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>fourier(f, [a, b], { terms = 10, digits = 10, kind })</td><td><em>R</em>: preview { a, b } as numbers, exact FourierSeries</td></tr>
+    <tr><td>F.a[n], F.b[n], F.coefficient(n), F.amplitude(n)</td><td>RationalInterval; a[0] is a₀</td></tr>
+    <tr><td>F.partial(N)</td><td>AnalyticFunction (coefficients at the midpoints)</td></tr>
+    <tr><td>F.value(x, N)</td><td>the partial sum at a rational point, certified</td></tr>
+    <tr><td>F.meanSquare(), F.meanSquareError(N)</td><td>RationalInterval</td></tr>
+    <tr><td>F.toString(N, places), F.period, F.length, F.kind, F.terms</td><td></td></tr>
+  </table></div>
+
+<template data-runbox>
+const F = fourier("-1 if -1:x:!0; 1 if 0:x:1", [-1, 1], { terms: 9 }).exact();
+PRINT(F.toString(5, 4));
+PRINT("b₁ lies in", F.b[1], "and 4/π ≈", 4 / Math.PI);
+for (const N of [1, 3, 5, 9]) PRINT(`mean-square error with ${N} harmonics:`, F.meanSquareError(N).low.toDecimal(6));
+PRINT("overshoot of S₉ near the jump:", F.partial(9).range([0, "1/4"]).exact().high.toDecimal(4));
+fourier("x^2", [-1, 1], { terms: 4 }).exact().toString()
+</template>

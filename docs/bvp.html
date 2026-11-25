@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boundary value problems · RatMath Analytic</title>
+<meta name="description" content="Boundary value problems. RatMath Analytic: certified values, ranges, integrals, zeros and ODE solutions on exact rationals, in JavaScript.">
+<meta property="og:title" content="Boundary value problems · RatMath Analytic">
+<meta property="og:description" content="Certified calculus on exact rationals: values, ranges, integrals, zeros, Taylor models and validated ODE steps.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ratmath.com/analytic/bvp.html">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+
+<link rel="stylesheet" href="assets/site.css?v=519202a940">
+</head>
+<body>
+<div class="shell">
+<aside>
+  <header class="brand"><a class="mark" href="index.html">RatMath <span>analytic</span></a><small>Functions with proofs attached</small></header>
+  <select id="toc-select" aria-label="Page">
+    <option value="index.html">Introduction</option>
+    <option value="reference.html">Reference</option>
+    <option value="explore.html">Explore</option>
+    <option value="fast.html">Fast, then certified</option>
+    <option value="models.html">Taylor models</option>
+    <option value="values.html">Values to many digits</option>
+    <option value="expressions.html">Formulas and derivatives</option>
+    <option value="ranges.html">Ranges and integrals</option>
+    <option value="zeros.html">Zeros, poles and extrema</option>
+    <option value="piecewise.html">Piecewise functions</option>
+    <option value="odes.html">Differential equations</option>
+    <option value="bvp.html" selected>Boundary value problems</option>
+    <option value="several.html">Several variables</option>
+    <option value="improper.html">Limits and improper integrals</option>
+    <option value="special.html">Special functions</option>
+    <option value="fourier.html">Fourier series</option>
+    <option value="series.html">Your own series</option>
+  </select>
+  <nav class="toc" aria-label="Contents">
+    <a href="index.html">Introduction</a>
+    <a href="reference.html">Reference</a>
+    <a href="explore.html">Explore</a>
+    <div class="group">Ideas</div>
+    <a href="fast.html">Fast, then certified</a>
+    <a href="models.html">Taylor models</a>
+    <div class="group">Topics</div>
+    <a href="values.html">Values to many digits</a>
+    <a href="expressions.html">Formulas and derivatives</a>
+    <a href="ranges.html">Ranges and integrals</a>
+    <a href="zeros.html">Zeros, poles and extrema</a>
+    <a href="piecewise.html">Piecewise functions</a>
+    <a href="odes.html">Differential equations</a>
+    <a href="bvp.html" class="on" aria-current="page">Boundary value problems</a>
+    <a href="several.html">Several variables</a>
+    <a href="improper.html">Limits and improper integrals</a>
+    <a href="special.html">Special functions</a>
+    <a href="fourier.html">Fourier series</a>
+    <a href="series.html">Your own series</a>
+  </nav>
+  <p class="sitelinks"><a href="https://github.com/ratmath/analytic">GitHub</a> · <a href="https://www.npmjs.com/package/@ratmath/analytic">npm</a> · <a href="https://ratmath.com/">ratmath.com</a><br><a href="https://ratmath.com/core/">core</a> · <a href="https://ratmath.com/algebraic/">algebraic</a> · <a href="https://ratmath.com/linalg/">linalg</a> · <a href="https://ratmath.com/graphics/">graphics</a></p>
+</aside>
+<main>
+<section class="page" data-page="bvp">
+<div class="eyebrow">Topic</div>
+  <h1>Boundary value problems</h1>
+  <p>An initial value problem fixes y and y′ at one end. A boundary value problem fixes one condition at each end of an interval, and asks for the solution in between:</p>
+<pre><code>// y″ = −y, y(0) = 0, y(1) = 1
+const s = bvp({ f: "-y", interval: [0, 1], left: { y: 0 }, right: { y: 1 } }).exact();
+s.start;       // the slope y′(0), enclosed: 1/sin(1)
+s.at("1/2");   // y(1/2), enclosed
+s.unique;      // true: the equation is linear</code></pre>
+  <p><code>f</code> is the formula for y″ in <code>x</code>, <code>y</code> and <code>dy</code> (rename them with <code>time</code> and <code>vars</code>). Each condition is <code>{ y: value }</code> or <code>{ dy: value }</code>.</p>
+
+  <h2>Shooting, with proof</h2>
+  <p>One value at the left end is not given: the slope, when y(a) is. Call it s. For each s the initial value problem has a solution, and the right-hand condition is missed by some amount g(s). The preview finds a root of g in Float64, by the secant method on RK4 solves. The exact stage then:</p>
+  <ol>
+    <li>takes a small bracket [s₋, s₊] around that root;</li>
+    <li>solves the initial value problem from s₋ and from s₊ with the validated solver (see <a href="odes.html">Differential equations</a>), and checks that the enclosures of g(s₋) and g(s₊) have opposite signs;</li>
+    <li>solves once more from the whole bracket. If that solve reaches b, every solution starting in the bracket exists up to b, so g is continuous on the bracket.</li>
+  </ol>
+  <p>By the intermediate value theorem, g has a root in the bracket: a solution of the boundary value problem exists, its left-end value lies in <code>start</code>, and the tube from step 3 encloses it at every x. If a bracket fails, a wider one is tried.</p>
+
+  <h2>What is and is not claimed</h2>
+  <p>For a linear equation g is a straight line, so the root is the only one and <code>unique</code> is true. For a nonlinear equation there may be other solutions with other slopes; the result is one solution, proven to exist, near the one the preview found. A different <code>guess</code> for the unknown value can lead to another. If the Float64 shooting does not converge, there is nothing to certify and the call refuses.</p>
+  <p>The cost is three validated solves. Linear problems take a fraction of a second. Nonlinear ones are slow over long intervals, because the validated solver is: the pendulum y″ = −sin y on [0, 1] takes about half a minute. Run them in a Worker and show the preview meanwhile.</p>
+<section class="runbox" aria-label="Runnable code">
+  <div class="runbox-head"><strong>Try it</strong><span>Edit the code and run it with <code>@ratmath/analytic</code> and Core's <code>R</code>, <code>Rational</code>, <code>RationalInterval</code> in scope. The last line's value is shown; <code>PRINT(…)</code> adds lines, <code>TEX(…)</code> typesets math.</span></div>
+  <textarea spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Code">const r = bvp({ f: "y + x", interval: [0, 1], left: { dy: 0 }, right: { y: 1 } });
+PRINT("preview of y(0):", r.quick.value.start);
+const s = r.exactStage();
+PRINT(s.via);
+PRINT("y(0) lies in", s.value.start);
+PRINT("y(1/2) lies in", s.value.at("1/2"));
+s.value.slopeAt(1)</textarea>
+  <div class="runbox-bar"><button type="button" data-run>Run</button><button type="button" class="ghost" data-reset>Reset</button><span class="runbox-meta">Ctrl/⌘ + Enter runs</span></div>
+  <div class="runbox-out" aria-live="polite"></div>
+</section>
+<nav class="pager" aria-label="Previous and next page"><a class="prev" href="odes.html">← Differential equations</a><a class="next" href="several.html">Several variables →</a></nav>
+</section>
+</main>
+</div>
+<script type="module" src="assets/pages.js?v=519202a940"></script>
+</body>
+</html>

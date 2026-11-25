@@ -19,6 +19,22 @@
 
 ### Added
 
+- Several variables: `field(text, vars)` with partials, gradients, Hessians,
+  certified values over points and boxes, directional derivatives, ranges,
+  classified critical points, and integrals over boxes, iterated bounds and
+  Core's multi-variable regions; `divergence`, `curl`, `jacobian`,
+  `lineIntegral` and `surfaceIntegral`.
+- Limits at infinity and one-sided limits (`limit("inf")`,
+  `limit(c, { side })`), `asymptotic()`, and `improperIntegral(a, b)` for
+  infinite ends and integrable singularities, with proven divergence.
+- Special functions in formulas and as point enclosures: `gamma`, `lgamma`,
+  `digamma`, `trigamma`, `beta`, `besselJ`, `Si`, `fresnelS`, `fresnelC`,
+  `erfc`; `bernoulli(m)`.
+- `fourier(f, [a, b])`: certified Fourier coefficients, half-range series,
+  partial sums and the mean-square error by Parseval.
+- `bvp(spec)`: two-point boundary value problems for y″ = f(x, y, y′) by
+  certified shooting.
+- Docs pages for each of these.
 - `asin`, `acos`, `cbrt` and `erf` as Taylor models, point enclosures
   (`enclose.*`), in expressions and in the evaluator scope. Powers with an odd
   denominator (`x^(1/3)`) are real roots, defined for negative arguments.

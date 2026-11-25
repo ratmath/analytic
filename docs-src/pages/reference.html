@@ -10,7 +10,9 @@
     <tr><td>f.value(x, { digits = 20, maxBits = 8192 })</td><td><em>R</em> RationalInterval</td><td>a point interval for rational-only formulas; bits double until the digits are met or maxBits is reached</td></tr>
     <tr><td>f.range(I, { digits = 6, order = 8, maxPieces = 256 })</td><td><em>R</em> RationalInterval</td><td>preview: 256 samples (trust rough)</td></tr>
     <tr><td>f.integral(a, b, { digits = 12, order = 12, maxPieces })</td><td><em>R</em> RationalInterval</td><td>preview: Gauss–Legendre</td></tr>
-    <tr><td>f.limit(c, { digits = 20 })</td><td>RationalInterval</td><td>the value where f is defined; at a removable point of a quotient (sin(x)/x at 0) the certified limit. Refuses at poles</td></tr>
+    <tr><td>f.limit(c, { digits = 20, side })</td><td>RationalInterval or ±Infinity</td><td>c is a rational point, <code>"inf"</code> or <code>"-inf"</code>; <code>side</code> is <code>"left"</code> or <code>"right"</code>. Throws <code>no-limit</code> where the two sides differ or the function keeps oscillating</td></tr>
+    <tr><td>f.asymptotic("inf" | "-inf")</td><td>{ exp, power, log, coefficient, oscillates, term }</td><td>the leading behaviour e<sup>kx</sup>·x<sup>p</sup>·log(x)<sup>m</sup>·(coefficient + a part that dies out)</td></tr>
+    <tr><td>f.improperIntegral(a, b, { digits = 10, singular })</td><td><em>R</em> RationalInterval, ±Infinity or NaN</td><td>an end at <code>"inf"</code> / <code>"-inf"</code> or where f is undefined; <code>singular</code> lists interior singular points. ±Infinity is a proven divergence; an integral that cannot be decided throws <code>undecided</code></td></tr>
     <tr><td>f.taylor(c, n = 6, { digits })</td><td>RationalInterval[]</td><td>enclosures of f⁽ᵏ⁾(c)/k! for k = 0…n, n ≤ 16; exact points for rational values; removable quotients are divided as series</td></tr>
     <tr><td>f.derivative()</td><td>a new function</td><td>symbolic and simplified</td></tr>
     <tr><td>f.model(D, { order, bits, centre })</td><td>TaylorModel</td><td>certified on the domain D</td></tr>
@@ -19,7 +21,7 @@
     <tr><td>f.with({ a: "3/8" })</td><td>a new function</td><td>other parameter values (sliders)</td></tr>
     <tr><td>f.toString()</td><td>string</td><td>calculator notation that parses back</td></tr>
   </table></div>
-  <p>Grammar: <code>+ - * / ^</code> (or <code>**</code>), parentheses, implicit products (<code>2x</code>, <code>3(x+1)</code>, <code>2sin(x)</code>), <code>-x^2 = -(x^2)</code>, <code>^</code> right-associative. Functions: <code>exp log ln log1p sqrt cbrt sin cos tan asin acos atan sinh cosh tanh erf abs min max</code> (<code>arcsin arccos arctan</code> too); constants <code>pi e</code>. A power with an odd denominator, <code>x^(1/3)</code>, is the real root and is defined for negative x. Ranges and integrals may cross points where the function is not smooth (<code>abs</code>, <code>cbrt</code> at 0); there the bounds come from interval evaluation. It is the same grammar and the same plain AST as <code>@ratmath/graphics</code>.</p>
+  <p>Grammar: <code>+ - * / ^</code> (or <code>**</code>), parentheses, implicit products (<code>2x</code>, <code>3(x+1)</code>, <code>2sin(x)</code>), <code>-x^2 = -(x^2)</code>, <code>^</code> right-associative. Functions: <code>exp log ln log1p sqrt cbrt sin cos tan asin acos atan sinh cosh tanh erf erfc abs min max</code> (<code>arcsin arccos arctan</code> too), and the special functions <code>gamma lgamma digamma trigamma beta(a, b) besselJ(n, x) Si fresnelS fresnelC</code>; constants <code>pi e</code>. A power with an odd denominator, <code>x^(1/3)</code>, is the real root and is defined for negative x. Ranges and integrals may cross points where the function is not smooth (<code>abs</code>, <code>cbrt</code> at 0); there the bounds come from interval evaluation. It is the same grammar and the same plain AST as <code>@ratmath/graphics</code>.</p>
 
   <h2>Features of a function</h2>
   <div class="tablewrap"><table class="ref">
@@ -63,6 +65,42 @@
     <tr><td>ode.step({ f, y0, step, order })</td><td>{ t0, t1, models, model }</td><td>one validated step, or an error</td></tr>
   </table></div>
   <p><code>f</code> is a formula in <code>t</code> and <code>y</code>, an array of formulas for a system (<code>vars</code> names the unknowns), or a JS function <code>(t, y) =&gt; model</code> with an optional <code>float</code> twin for previews.</p>
+
+  <h2>Boundary value problems</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>bvp({ f, interval, left, right, digits = 8, vars, time, params, guess, order })</td><td><em>R</em> BVPSolution</td><td><code>f</code> is y″ as a formula in x, y and dy; each end gives <code>{ y }</code> or <code>{ dy }</code>. Solved by certified shooting</td></tr>
+    <tr><td>s.at(x), s.slopeAt(x)</td><td>RationalInterval</td><td>enclosures of y(x) and y′(x)</td></tr>
+    <tr><td>s.start, s.unknown, s.linear, s.unique, s.tube</td><td></td><td>the left-end value that was solved for and which one it is; <code>unique</code> is proven for linear problems; <code>tube</code> is the ODESolution</td></tr>
+  </table></div>
+
+  <h2>Several variables</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>field(text, ["x", "y"], { params })</td><td>ScalarField</td><td>any number of variables</td></tr>
+    <tr><td>F.partial("x", "y"), F.gradient(), F.hessian(), F.laplacian()</td><td>ScalarFields</td><td>symbolic and simplified</td></tr>
+    <tr><td>F.jet(point, { digits, order })</td><td>{ value, gradient, hessian, smooth }</td><td>certified at a point or over a box (sides may be <code>[a, b]</code>)</td></tr>
+    <tr><td>F.value(point), F.directional(point, direction, { unit })</td><td><em>R</em> RationalInterval</td><td></td></tr>
+    <tr><td>F.linearization(point)</td><td>ScalarField</td><td>the tangent plane</td></tr>
+    <tr><td>F.along({ x: "cos(t)", y: "sin(t)" })</td><td>AnalyticFunction</td><td>the field along a curve; <code>F.substitute</code> fixes some variables</td></tr>
+    <tr><td>F.range(region, { digits })</td><td><em>R</em> RationalInterval</td><td></td></tr>
+    <tr><td>F.integral(region, { digits, maxBoxes })</td><td><em>R</em> RationalInterval</td><td>product Simpson or Boole rules with proven error terms, refined where the enclosure is widest</td></tr>
+    <tr><td>F.criticalPoints(box, { digits })</td><td><em>R</em> records</td><td>{ kind: min | max | saddle | degenerate | possible, unique, point, value }; a box with no record holds no critical point</td></tr>
+    <tr><td>divergence(F, vars), curl(F, vars), jacobian(F, vars)</td><td>ScalarFields</td><td>F is a list of formulas</td></tr>
+    <tr><td>lineIntegral(F, vars, curve, [t0, t1])</td><td><em>R</em> RationalInterval</td><td>∫ F·dr for a list, ∫ f ds for one formula</td></tr>
+    <tr><td>surfaceIntegral(F, vars, surface, ["u", "v"], region)</td><td><em>R</em> RationalInterval</td><td>the flux for a list, ∫∫ f dS for one formula</td></tr>
+  </table></div>
+  <p>A region is a box <code>{ x: [0, 1], y: [0, 2] }</code>, iterated bounds <code>{ x: [0, 1], y: ["0", "x^2"] }</code>, region text such as <code>"0:x:1 &amp;&amp; 0:y:x"</code>, or a Core <code>MultiRegion</code> (<code>R.region</code>).</p>
+
+  <h2>Fourier series</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>fourier(f, [a, b], { terms = 10, digits = 10, kind })</td><td><em>R</em> FourierSeries</td><td>f is a formula, a function or a piecewise function; <code>kind</code> is <code>"full"</code>, <code>"sine"</code> or <code>"cosine"</code> (half-range)</td></tr>
+    <tr><td>S.a, S.b, S.coefficient(n), S.amplitude(n)</td><td>RationalIntervals</td><td>a[0] is a₀, so the mean is a₀/2</td></tr>
+    <tr><td>S.partial(N)</td><td>AnalyticFunction</td><td>the partial sum, for plotting</td></tr>
+    <tr><td>S.value(x, N)</td><td>RationalInterval</td><td>the partial sum at a point</td></tr>
+    <tr><td>S.meanSquare(), S.meanSquareError(N)</td><td>RationalInterval</td><td>(1/L)∫f² and (1/L)∫(f − S<sub>N</sub>)², by Parseval</td></tr>
+  </table></div>
 
   <h2>Taylor models</h2>
   <div class="tablewrap"><table class="ref">

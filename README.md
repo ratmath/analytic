@@ -78,7 +78,12 @@ f.describe();       // domain, order, remainder width, rules used
 | User series | `series(D, { coefficient: k => a_k, order, rule, … })` |
 | Point values | `enclose.exp(x, bits)` etc., `constants.pi(bits)`, `constants.e(bits)` |
 | Formulas | `fn(text, { params })`: `.value`, `.range`, `.integral` (Refinements), `.limit(c)`, `.taylor(c, n)`, `.derivative()`, `.model(D)` |
+| Limits and improper integrals | `.limit("inf")`, `.limit(c, { side })`, `.asymptotic()`, `.improperIntegral(a, b)` (Refinement) |
+| Special functions | `gamma`, `lgamma`, `digamma`, `trigamma`, `beta`, `besselJ`, `Si`, `fresnelS`, `fresnelC`, `erfc` in formulas and as `enclose.*`; `bernoulli(m)` |
+| Several variables | `field(text, vars)`: `.partial`, `.gradient`, `.hessian`, `.jet`, `.directional`, `.range`, `.integral`, `.criticalPoints` (Refinements); `divergence`, `curl`, `jacobian`, `lineIntegral`, `surfaceIntegral` |
+| Fourier series | `fourier(f, [a, b], { terms, kind })` (Refinement of a `FourierSeries`) |
 | ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
+| Boundary value problems | `bvp({ f, interval, left, right })` (Refinement of a `BVPSolution`) |
 | Features | `zeros`, `poles`, `extrema`, `inflections` (Refinements) |
 | Fast-then-certified | `Refinement`, `live` |
 | Evaluator scope | `createScope({ digits })` (adds `fn`, `d`, `ode`) |
@@ -383,14 +388,55 @@ f.breaks([-2, 4]).exact();     // jumps, removable points, closed sides
 work piece by piece and tag results with `piece` (and `n`). A sign change
 across a jump is not a zero.
 
+## The rest of the calculus sequence
+
+```js
+import { fn, field, fourier, bvp, lineIntegral } from "@ratmath/analytic";
+
+fn("(1 + 1/x)^x").limit("inf");                    // an interval around e
+fn("1/x").limit(0, { side: "right" });             // Infinity
+fn("exp(-x^2)").improperIntegral("-inf", "inf").exact();   // an interval around √π
+fn("1/sqrt(x)").improperIntegral(0, 1).exact();    // singular at 0: an interval around 2
+fn("1/x").improperIntegral(1, "inf").exact();      // Infinity, a proven divergence
+fn("gamma(x)").value("1/2").exact();               // √π again
+fn("besselJ(0, x)").integral(0, 5).exact();
+
+const F = field("x^2 + x*y + y^2 - 3x", ["x", "y"]);
+F.gradient();                                      // two ScalarFields
+F.criticalPoints({ x: [-5, 5], y: [-5, 5] }).exact();      // one proven minimum at (2, −1)
+field("x*y", ["x", "y"]).integral("0:x:1 && 0:y:x").exact();   // over a triangle
+lineIntegral(["-y", "x"], ["x", "y"], { x: "cos(t)", y: "sin(t)" }, [0, 1]).exact();
+
+const S = fourier("x", [-1, 1], { terms: 8 }).exact();
+S.b[1];  S.partial(8);  S.meanSquareError(8);
+
+const s = bvp({ f: "-y", interval: [0, 1], left: { y: 0 }, right: { y: 1 } }).exact();
+s.at("1/2");  s.start;                             // y(1/2), and the slope y′(0) that was found
+```
+
+A limit or an improper integral is decided by a growth calculus: every
+subexpression is bounded on a ray by e^(kx)·x^p·log(x)^m times an enclosed
+coefficient, and the tail of an integral is bounded in closed form from that.
+Divergence is proven the same way (the p-test with certified constants). The
+special functions are enclosed by Stirling series with their proven error term
+or by entire series, and they differentiate, integrate and find zeros like the
+elementary ones. Integrals in several variables use product rules with error
+terms from certified Taylor coefficients, over boxes, iterated bounds or
+Core's multi-variable regions. Each topic has a page with a runnable example
+at [ratmath.com/analytic](https://ratmath.com/analytic/).
+
 ## Not yet done
 
 - Proving the existence of multiple roots of non-polynomial functions (they
   are reported as `possible` with `atMost`), and endpoints of the domain as
   features (open or closed dots are left to the caller).
-- Improper integrals (an infinite end, or an integrable singularity such as
-  `1/sqrt(x)` at 0), and special functions beyond `erf` (gamma, Bessel).
-- Limits at infinity and one-sided limits.
+- Complex analytic functions (contour integrals, residues).
+- Limits that need a cancellation of leading terms (`sqrt(x^2 + x) - x`) are
+  refused, and conditionally convergent integrals (`sin(x)/x` to infinity)
+  come back as `undecided`. Asymptotics do not follow the special functions.
+- Speed of the harder problems: a surface integral over a sphere takes about
+  20 s for 4 digits, and a nonlinear boundary value problem can take minutes,
+  because every shot is a validated ODE solve.
 - A zero that sits exactly on an end of the search interval can come back as
   `possible` instead of proven.
 - Speed: each elementary composition costs about 10 ms at order 8, so a

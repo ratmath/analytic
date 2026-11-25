@@ -1,0 +1,40 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Limits and improper integrals</h1>
+  <p>A limit at infinity cannot be found by plugging in a large number, and an improper integral cannot be found by integrating a long way out. Both need a statement about <em>all</em> large x. The library gets one from a small calculus of growth rates.</p>
+<pre><code>fn("(2x^2+1)/(x^2-3)").limit("inf");            // exactly 2
+fn("(1+1/x)^x").limit("inf");                   // e, to 20 digits
+fn("1/x").limit(0, { side: "right" });          // Infinity
+fn("exp(-x^2)").improperIntegral("-inf", "inf").exact();   // √π
+fn("1/x").improperIntegral(1, "inf").exact();   // Infinity: proven to diverge
+fn("1/sqrt(x)").improperIntegral(0, 1).exact(); // 2</code></pre>
+
+  <h2>The growth calculus</h2>
+  <p>On a ray [X, ∞) every subexpression is written as</p>
+  \[ g(x) = e^{kx}\,x^{p}\,(\log x)^{m}\,\bigl(\ell + \rho(x)\bigr), \qquad |\rho(x)| \le C\,e^{bx}x^{a}(\log x)^{c}, \]
+  <p>with exact rational exponents, a constant ℓ known as an interval, and a remainder ρ whose bound decays. Sums, products, quotients, powers and the elementary functions keep this form. In a sum the term of larger order leads and the other joins the remainder; exp of a growing negative argument is bounded by an exponential; sin of something small is that thing times 1 + ρ. Where no constant leads, as in sin x, the node only carries a range. Rational parts are expanded exactly first, so leading terms that cancel are cancelled.</p>
+  <p><code>fn(...).asymptotic()</code> shows the result: <code>fn("(3x^2+1)/(x-1)").asymptotic()</code> has <code>term: "x"</code> and coefficient 3.</p>
+
+  <h2>Limits</h2>
+  <p>If the term decays, the limit is 0. If the term is constant and ℓ is a true constant, the limit is ℓ, exactly: no large X is ever substituted. If the term grows and the sign of ℓ + ρ is settled, the limit is ±∞. If only a range is known and it does not decay, the answer is an <code>AnalyticError</code> with code <code>no-limit</code>. That covers sin x, but also cases this calculus cannot settle, such as √(x² + x) − x, where the leading terms cancel inside a square root.</p>
+  <p>A one-sided limit at a point c is the limit at infinity of f(c ± 1/t). <code>limit(c)</code> without a side first tries the removable case (sin(x)/x at 0), and otherwise compares the two sides.</p>
+
+  <h2>Improper integrals</h2>
+  <p>The ray is cut at some X. Up to X the integral is ordinary, done on doubling pieces [1, 2], [2, 4], … by Taylor series in fixed point. Beyond X the growth form decides:</p>
+  <ul>
+    <li><strong>Converges, with a closed form for the tail.</strong> For x^p, e^(kx), x^n·e^(kx) and x^p·log(x)^n the tail is written down exactly, times ℓ, plus a bound for the remainder. So ∫₁^∞ dx/x² needs no large X at all.</li>
+    <li><strong>Converges, with a bound.</strong> Otherwise the tail is bounded by an integrable envelope, and X is raised until the bound is small. For an oscillating integrand like sin(x)/x² this is slow, and the answer may be wider than asked; the <code>via</code> line says so.</li>
+    <li><strong>Diverges.</strong> If the integrand keeps one sign and is at least a constant times a term that is not integrable (x^p with p ≥ −1, anything growing), the exact value is <code>Infinity</code> or <code>-Infinity</code>. This is the p-test, with proof.</li>
+    <li><strong>Undecided.</strong> For sin(x)/x, which converges only by cancellation, the calculus has no answer and refuses with code <code>undecided</code>.</li>
+  </ul>
+  <p>An end where f is undefined is moved to infinity by x = c ± 1/t, so 1/√x on (0, 1] becomes t^(−3/2) on [1, ∞). A singular point strictly inside the interval must be named: <code>improperIntegral(-1, 1, { singular: [0] })</code>. Both ends of the real line are handled separately, so ∫ x dx over the whole line is reported as divergent (the value is <code>NaN</code>: the two ends diverge with opposite signs) rather than as the principal value 0.</p>
+
+<template data-runbox>
+PRINT("lim (1+1/x)^x:", fn("(1+1/x)^x").limit("inf"));
+PRINT("x*log(x) as x → 0+:", fn("x*log(x)").limit(0, { side: "right" }));
+PRINT("leading behaviour:", fn("x^2*exp(-2x) + 1/x").asymptotic().term);
+for (const p of ["1/2", "1", "101/100", "2"]) PRINT(`∫ dx/x^${p} from 1:`, fn(`1/x^(${p})`).improperIntegral(1, "inf").exact());
+const g = fn("exp(-x^2)").improperIntegral("-inf", "inf");
+PRINT("preview:", g.quick.value);
+g.exactStage()
+</template>

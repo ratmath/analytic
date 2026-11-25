@@ -167,9 +167,18 @@ export function series(domain: IntervalLike, spec?: SeriesSpec): TaylorModel;
 type PointFunction = (x: RationalLike | RationalInterval, bits?: number) => RationalInterval;
 /** Certified enclosures of the elementary functions at a point or over an interval. */
 export const enclose: Record<
-  "exp" | "log" | "log1p" | "sqrt" | "cbrt" | "atan" | "asin" | "acos" | "sin" | "cos" | "tan" | "erf" | "sinh" | "cosh" | "tanh",
+  "exp" | "log" | "log1p" | "sqrt" | "cbrt" | "atan" | "asin" | "acos" | "sin" | "cos" | "tan" | "erf" | "sinh" | "cosh" | "tanh"
+  | "gamma" | "lgamma" | "digamma" | "Si" | "fresnelS" | "fresnelC" | "erfc",
   PointFunction
->;
+> & {
+  /** ψ⁽ᵐ⁾: m = 0 is digamma, m = 1 trigamma. */
+  polygamma(m: number, x: RationalLike | RationalInterval, bits?: number): RationalInterval;
+  beta(a: RationalLike | RationalInterval, b: RationalLike | RationalInterval, bits?: number): RationalInterval;
+  /** The Bessel function J_n for a whole number n. */
+  besselJ(n: number, x: RationalLike | RationalInterval, bits?: number): RationalInterval;
+};
+/** The Bernoulli number B_m, exactly. */
+export function bernoulli(m: number): Rational;
 export const constants: { pi(bits?: number): RationalInterval; e(bits?: number): RationalInterval };
 export function bitsForDigits(digits: number): number;
 /** The functions bound to one set of defaults: createScope({ order, bits }) or createScope({ digits }). */
@@ -224,12 +233,37 @@ export class AnalyticFunction {
   value(x: RationalLike, options?: DigitsOptions): Refinement<number, RationalInterval>;
   /** Certified Taylor coefficients f^(k)(c)/k! for k = 0…n (n ≤ 16), also at removable points such as sin(x)/x at 0. */
   taylor(c: RationalLike, n?: number, options?: { digits?: number }): RationalInterval[];
-  /** The two-sided limit at c, certified, including removable points. */
-  limit(c: RationalLike, options?: { digits?: number }): RationalInterval;
+  /**
+   * The limit at a rational point c (two-sided, or one-sided with `side`),
+   * or at "inf" / "-inf". A RationalInterval that holds the limit, or
+   * ±Infinity. Throws AnalyticError "no-limit" where none exists.
+   */
+  limit(c: RationalLike | EndLike, options?: { digits?: number; side?: "left" | "right" }): RationalInterval | number;
+  /** The leading behaviour far out: f(x) = term·(coefficient + a part that dies out). */
+  asymptotic(at?: "inf" | "-inf", options?: { digits?: number }): Asymptotic;
+  /**
+   * An improper integral: an end at "inf" or "-inf", or an end where f is
+   * undefined. The exact value is a RationalInterval when it converges,
+   * ±Infinity when it is proven to diverge (NaN: diverges with both signs).
+   */
+  improperIntegral(a: RationalLike | EndLike, b: RationalLike | EndLike, options?: { digits?: number; singular?: RationalLike[] }): Refinement<number, RationalInterval | number>;
   range(interval: IntervalLike, options?: DigitsOptions & { samples?: number }): Refinement<[number, number], RationalInterval>;
   integral(a: RationalLike, b: RationalLike, options?: DigitsOptions): Refinement<number, RationalInterval>;
 }
 export function fn(expression: ExpressionLike, options?: { variable?: string; params?: Params }): AnalyticFunction;
+/** An infinite end of an interval. */
+export type EndLike = "inf" | "-inf" | "+inf" | "∞" | "-∞" | number;
+export interface Asymptotic {
+  /** k, p and m in exp(k·x)·x^p·log(x)^m. */
+  exp: Rational;
+  power: Rational;
+  log: Rational;
+  coefficient: RationalInterval;
+  /** True when the coefficient is only a range (sin(x)/x). */
+  oscillates: boolean;
+  /** The term as text, such as "exp(-2*x)*x^2". */
+  term: string;
+}
 
 // ---- zeros, poles, extrema, inflections
 
@@ -361,3 +395,128 @@ export class PiecewiseFunction {
   breaks(interval: IntervalLike, options?: DigitsOptions): Refinement<unknown[], unknown[]>;
 }
 export function piecewise(pieces: PieceSpec[] | string, options?: { variable?: string; params?: Params }): PiecewiseFunction;
+
+// ---- several variables
+
+/** A box { x: [0, 1], y: [0, 2] }, iterated bounds { x: [0, 1], y: ["0", "x^2"] }, region text "0:x:1 && 0:y:x", or a Core MultiRegion. */
+export type RegionLike = Record<string, [RationalLike | string, RationalLike | string]> | Array<[RationalLike | string, RationalLike | string]> | string | object;
+export type PointLike = RationalLike[] | Record<string, RationalLike | [RationalLike, RationalLike] | RationalInterval>;
+export interface Jet {
+  value: RationalInterval;
+  /** null where the function is not differentiable on the box. */
+  gradient: RationalInterval[] | null;
+  hessian: RationalInterval[][] | null;
+  smooth: boolean;
+}
+export interface CriticalRecord {
+  /** "min", "max", "saddle", "degenerate" (proven point, Hessian undecided) or "possible" (undecided box). */
+  kind: "min" | "max" | "saddle" | "degenerate" | "possible";
+  unique: boolean;
+  point: RationalInterval[];
+  value: RationalInterval | null;
+}
+export interface FieldOptions {
+  digits?: number;
+  bits?: number;
+  maxBoxes?: number;
+}
+export class ScalarField {
+  constructor(expression: ExpressionLike, variables: string[], options?: { params?: Params });
+  ast: Ast;
+  variables: readonly string[];
+  params: Params;
+  readonly dimension: number;
+  toString(): string;
+  with(params: Params): ScalarField;
+  float(point: number[] | Record<string, number>): number;
+  /** ∂f/∂name; several names give a higher partial. */
+  partial(...names: string[]): ScalarField;
+  gradient(): ScalarField[];
+  hessian(): ScalarField[][];
+  laplacian(): ScalarField;
+  substitute(values: Record<string, RationalLike | string>): ScalarField | AnalyticFunction;
+  /** f along a curve given by an expression for each variable. */
+  along(curve: Record<string, string>, options?: { variable?: string }): AnalyticFunction;
+  /** Value, gradient and Hessian at a point or over a box, certified. */
+  jet(point: PointLike, options?: { digits?: number; order?: 0 | 1 | 2 }): Jet;
+  value(point: PointLike, options?: { digits?: number }): Refinement<number, RationalInterval>;
+  directional(point: PointLike, direction: Array<RationalLike | string> | Record<string, RationalLike | string>, options?: { digits?: number; unit?: boolean }): Refinement<number, RationalInterval>;
+  /** The tangent plane at a point. */
+  linearization(point: PointLike, options?: { digits?: number }): ScalarField;
+  range(region: RegionLike, options?: FieldOptions & { samples?: number }): Refinement<[number, number], RationalInterval>;
+  integral(region: RegionLike, options?: FieldOptions & { nodes?: number }): Refinement<number, RationalInterval>;
+  criticalPoints(box: RegionLike, options?: FieldOptions & { starts?: number }): Refinement<Array<{ point: number[]; value: number }>, CriticalRecord[]>;
+}
+export function field(expression: ExpressionLike, variables: string[], options?: { params?: Params }): ScalarField;
+export function jet(ast: Ast, env: Record<string, unknown>, names: string[], bits?: number, order?: number): unknown;
+export function divergence(F: ExpressionLike[], variables: string[], options?: { params?: Params }): ScalarField;
+/** Three ScalarFields in three variables; the scalar curl in two. */
+export function curl(F: ExpressionLike[], variables: string[], options?: { params?: Params }): ScalarField[] | ScalarField;
+export function jacobian(F: ExpressionLike[], variables: string[], options?: { params?: Params }): ScalarField[][];
+/** ∫_C F·dr for a list F, or ∫_C f ds for one expression, along r(t). */
+export function lineIntegral(F: ExpressionLike[] | ExpressionLike, variables: string[], curve: Record<string, string>, interval: [RationalLike, RationalLike], options?: DigitsOptions & { variable?: string; params?: Params }): Refinement<number, RationalInterval>;
+/** The flux of F through r(u, v), or ∫∫ f dS for one expression. */
+export function surfaceIntegral(F: ExpressionLike[] | ExpressionLike, variables: string[], surface: Record<string, string>, parameters: [string, string], region: RegionLike, options?: FieldOptions & { params?: Params }): Refinement<number, RationalInterval>;
+/** ∫_a^b of a tree in one variable by fixed-point Taylor series, to the absolute width `tol`. */
+export function quadrature(ast: Ast, variable: string, env: Record<string, unknown>, a: Rational, b: Rational, options: { tol: Rational; bits?: number; maxPieces?: number; order?: number }): { iv: unknown; pieces: number; met: boolean };
+
+// ---- Fourier series
+
+export class FourierSeries {
+  interval: [Rational, Rational];
+  /** b − a. */
+  length: Rational;
+  period: Rational;
+  kind: "full" | "sine" | "cosine";
+  terms: number;
+  /** a[0] is a₀ (the mean is a₀/2). */
+  a: RationalInterval[];
+  /** b[0] is 0. */
+  b: RationalInterval[];
+  coefficient(n: number): { a: RationalInterval; b: RationalInterval };
+  amplitude(n: number, bits?: number): RationalInterval;
+  /** The partial sum as a function, for plotting. */
+  partial(N?: number): AnalyticFunction;
+  /** The partial sum at a rational point, certified. */
+  value(x: RationalLike, N?: number, bits?: number): RationalInterval;
+  /** (1/L)·∫ f². */
+  meanSquare(): RationalInterval;
+  /** (1/L)·∫ (f − S_N)², by Parseval. */
+  meanSquareError(N?: number): RationalInterval;
+  toString(N?: number, places?: number): string;
+}
+export function fourier(
+  f: ExpressionLike | AnalyticFunction | PiecewiseFunction,
+  interval: [RationalLike, RationalLike],
+  options?: { terms?: number; digits?: number; kind?: "full" | "sine" | "cosine"; params?: Params; variable?: string },
+): Refinement<{ a: number[]; b: number[] }, FourierSeries>;
+
+// ---- boundary value problems
+
+export interface BvpSpec {
+  /** y″ as a formula in x, y and dy. */
+  f: ExpressionLike;
+  interval: [RationalLike, RationalLike];
+  left: { y: RationalLike } | { dy: RationalLike };
+  right: { y: RationalLike } | { dy: RationalLike };
+  /** Names of y and y′ (default ["y", "dy"]) and of the independent variable (default "x"). */
+  vars?: [string, string];
+  time?: string;
+  params?: Params;
+  digits?: number;
+  /** A starting guess for the unknown left-end value. */
+  guess?: number;
+  order?: number;
+}
+export class BVPSolution {
+  tube: ODESolution;
+  unknown: "y" | "dy";
+  /** The enclosure of the left-end value that was solved for. */
+  start: RationalInterval;
+  linear: boolean;
+  unique: boolean;
+  interval: [Rational, Rational];
+  at(x: RationalLike | RationalInterval): RationalInterval;
+  slopeAt(x: RationalLike | RationalInterval): RationalInterval;
+}
+export function bvp(spec: BvpSpec): Refinement<{ t: Float64Array; y: Float64Array; dy: Float64Array; start: number } | null, BVPSolution>;
