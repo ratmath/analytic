@@ -1,0 +1,64 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Surfaces and curvature</h1>
+  <p>A surface is three formulas in two parameters. <code>surface</code> returns its two fundamental forms, its normal, and its Gaussian, mean and principal curvatures, as formulas and as certified values, and says what kind of point each point is.</p>
+<pre><code>const torus = surface(["(2 + cos(v))*cos(u)", "(2 + cos(v))*sin(u)", "sin(v)"], ["u", "v"]);
+torus.first();        // { E: "cos(v)^2 + 4*cos(v) + 4", F: "0", G: "1" }
+torus.gaussian();     // "cos(v)/(cos(v) + 2)"
+torus.at(0, 0).kind;      // "elliptic"    the outer rim
+torus.at(0, "pi").kind;   // "hyperbolic"  the inner rim
+torus.area({ u: [0, "2*pi"], v: [0, "2*pi"] });   // an interval around 8π²</code></pre>
+  <h2>The first fundamental form</h2>
+  <p>With \(r(u, v)\) the surface and \(r_u, r_v\) its partial derivatives,</p>
+  \[ E = r_u \cdot r_u, \qquad F = r_u \cdot r_v, \qquad G = r_v \cdot r_v . \]
+  <p>These three functions hold everything that can be measured inside the surface. A curve \((u(t), v(t))\) on it has speed \(\sqrt{E u'^2 + 2F u'v' + G v'^2}\); the angle between two directions comes from the same form; and area is</p>
+  \[ A = \iint \sqrt{EG - F^2}\;du\,dv . \]
+  <p>The parametrisation is regular where \(EG - F^2 > 0\). At a point where that fails (the poles of a sphere in latitude and longitude) <code>at</code> refuses.</p>
+
+  <h2>The second fundamental form and curvature</h2>
+  <p>With unit normal \(n = (r_u \times r_v)/|r_u \times r_v|\),</p>
+  \[ L = r_{uu} \cdot n, \qquad M = r_{uv} \cdot n, \qquad N = r_{vv} \cdot n . \]
+  <p>Cut the surface with a plane through the normal: the curvature of the section is the <em>normal curvature</em> in that direction. Its largest and smallest values over all directions are the <em>principal curvatures</em> \(k_1 \le k_2\), and</p>
+  \[ K = k_1 k_2 = \frac{LN - M^2}{EG - F^2}, \qquad H = \frac{k_1 + k_2}{2} = \frac{EN - 2FM + GL}{2(EG - F^2)}, \qquad k_{1,2} = H \mp \sqrt{H^2 - K}. \]
+  <p>\(K\) is the Gaussian curvature and \(H\) the mean curvature. The sign of \(H\) depends on which way the normal points; \(K\) does not.</p>
+  <table class="ref">
+    <tr><th>kind</th><th>condition</th><th>the surface near the point</th></tr>
+    <tr><td>elliptic</td><td>\(K > 0\)</td><td>lies on one side of its tangent plane, like a dome</td></tr>
+    <tr><td>hyperbolic</td><td>\(K < 0\)</td><td>crosses its tangent plane, like a saddle</td></tr>
+    <tr><td>parabolic</td><td>\(K = 0\), not planar</td><td>curved in one direction only, like a cylinder</td></tr>
+    <tr><td>planar</td><td>\(L = M = N = 0\)</td><td>flat to second order</td></tr>
+  </table>
+  <p>An enclosure can prove \(K > 0\) or \(K < 0\). It cannot prove \(K = 0\), so parabolic and planar are reported only when the formulas vanish exactly at the point; otherwise <code>kind</code> is <code>null</code>.</p>
+
+  <h2>The Theorema Egregium</h2>
+  <p>\(K\) is defined through the normal, which is about how the surface sits in space. Gauss found that it can be computed from \(E, F, G\) alone: bend a sheet of paper without stretching it and \(K\) stays 0 everywhere. <code>intrinsicGaussian()</code> computes \(K\) from the first form by way of the Christoffel symbols and the curvature tensor, and it agrees with <code>gaussian()</code>.</p>
+  <p>Because of that, the curvature makes sense for a <code>metric</code> with no surface behind it; see <a href="#geodesics">Geodesics and Gauss-Bonnet</a>.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>surface(components, [u, v], { params })</td><td>Surface (a Metric with a normal)</td></tr>
+    <tr><td>s.first(), s.second(), s.normal()</td><td>{ E, F, G }, { L, M, N }, r_u × r_v, as formulas</td></tr>
+    <tr><td>s.gaussian(), s.mean(), s.intrinsicGaussian()</td><td>formulas</td></tr>
+    <tr><td>s.at(u, v, { digits = 15 })</td><td>{ point, normal, E, F, G, L, M, N, gaussian, mean, principal, kind }</td></tr>
+    <tr><td>s.area(region, { digits = 8 }), s.totalCurvature(region)</td><td>RationalInterval; region { u: [a, b], v: [lo(u), hi(u)] }</td></tr>
+  </table></div>
+<template data-runbox>
+// A monkey saddle and a paraboloid, classified point by point.
+const saddle = surface(["u", "v", "u^3 - 3*u*v^2"], ["u", "v"]);
+PRINT("K =", saddle.gaussian());
+for (const [u, v] of [[1, 0], [0, 1], [0, 0]]) {
+  const a = saddle.at(u, v);
+  PRINT(`(${u}, ${v}): K in [${a.gaussian.low.toDecimal(5)}, ${a.gaussian.high.toDecimal(5)}], ${a.kind}`);
+}
+
+const bowl = surface(["u", "v", "u^2 + v^2"], ["u", "v"]);
+const b = bowl.at(1, 0);
+PRINT("bowl at (1, 0): principal curvatures", b.principal.map((k) =&gt; k.low.toDecimal(6)).join(" and "), "-&gt;", b.kind);
+PRINT("the same K from the metric alone:", bowl.intrinsicGaussian() === bowl.gaussian());
+
+// Area of the torus, 8π² = 78.9568...
+const torus = surface(["(2 + cos(v))*cos(u)", "(2 + cos(v))*sin(u)", "sin(v)"], ["u", "v"]);
+PRINT("torus area:", torus.area({ u: [0, "2*pi"], v: [0, "2*pi"] }).low.toDecimal(6));
+PRINT("total curvature of the torus:", torus.totalCurvature({ u: [0, "2*pi"], v: [0, "2*pi"] }).high.toDecimal(6), "(it is 0)");
+`torus: K = ${torus.gaussian()}`;
+</template>

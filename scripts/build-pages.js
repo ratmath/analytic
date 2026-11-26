@@ -34,6 +34,9 @@ export const PAGES = [
   { name: "power", title: "Power series and uniform convergence" },
   { name: "theorems", title: "Green, Stokes and the divergence theorem" },
   { name: "multipliers", title: "Change of variables, potentials, multipliers" },
+  { name: "curves", title: "Curves: length, curvature, torsion" },
+  { name: "surfaces", title: "Surfaces and curvature" },
+  { name: "geodesics", title: "Geodesics and Gauss-Bonnet" },
 ];
 
 export function buildPages() {

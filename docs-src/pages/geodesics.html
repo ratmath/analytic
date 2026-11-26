@@ -1,0 +1,76 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Geodesics and Gauss-Bonnet</h1>
+  <p>The geometry inside a surface needs only its first fundamental form. A <code>metric</code> is that form on its own; a <code>surface</code> is a metric too. Both give Christoffel symbols, geodesics as validated solutions of their differential equations, parallel transport, geodesic curvature, and the Gauss-Bonnet theorem as a checked statement.</p>
+<pre><code>const sphere = surface(["cos(u)*sin(v)", "sin(u)*sin(v)", "cos(v)"], ["u", "v"]);
+sphere.christoffel();     // { u_uv: "cos(v)/sin(v)", v_uu: "-(sin(v)*cos(v))", ... }
+
+const plane = metric({ E: "1/v^2", F: 0, G: "1/v^2" }, ["u", "v"]);   // the hyperbolic half-plane
+plane.gaussian();         // "-1"
+
+const g = plane.geodesic({ from: [0, 1], direction: [1, 0], until: 1 });
+g.quick.value;            // a preview at once: { t, y: [u, v, u', v'] }
+g.exact().final;          // certified enclosures of u, v, u', v' at the end
+
+sphere.gaussBonnet({ u: [0, 1], v: [1, 2] }).agree;   // true</code></pre>
+  <h2>Christoffel symbols</h2>
+  <p>Write the metric as \(g_{11} = E\), \(g_{12} = g_{21} = F\), \(g_{22} = G\) and its inverse as \(g^{kl}\). The Christoffel symbols</p>
+  \[ \Gamma^k_{ij} = \tfrac12 \sum_l g^{kl}\bigl(\partial_i g_{lj} + \partial_j g_{li} - \partial_l g_{ij}\bigr) \]
+  <p>say how the coordinate directions turn from point to point. <code>christoffel()</code> lists the six different ones under keys such as <code>u_uv</code> for \(\Gamma^u_{uv}\).</p>
+
+  <h2>Geodesics</h2>
+  <p>A geodesic is a curve that does not turn within the surface: its acceleration has no tangential part. In coordinates,</p>
+  \[ u'' = -\sum_{i,j} \Gamma^u_{ij}\,x^{i\prime} x^{j\prime}, \qquad v'' = -\sum_{i,j} \Gamma^v_{ij}\,x^{i\prime} x^{j\prime}, \qquad (x^1, x^2) = (u, v). \]
+  <p>Geodesics are the straight lines of the surface: great circles on a sphere, and in the half-plane model vertical lines and half-circles centred on the boundary. A short enough piece of a geodesic is the shortest path between its ends.</p>
+  <p><code>geodesic</code> solves this system from a point in a direction. Like every <a href="#odes">differential equation here</a> it answers twice: <code>quick</code> is a floating-point preview, and <code>exact()</code> is a validated solution whose every value is an enclosure. Certified steps of this system take about a second each, so the defaults are modest (six digits); pass <code>order</code> and <code>tol</code> for more. With <code>{ unit: true }</code> the direction is scaled to unit speed, and the parameter is arc length.</p>
+
+  <h2>Parallel transport</h2>
+  <p>Carrying a tangent vector \(V\) along a curve \(c(t)\) without turning it within the surface means solving</p>
+  \[ V^{k\prime} = -\sum_{i,j} \Gamma^k_{ij}\,c^{i\prime}\,V^j . \]
+  <p>Transport keeps lengths and angles. Carried around a closed curve a vector comes back rotated, and on a surface the rotation equals the integral of \(K\) over the region enclosed. Around the circle of colatitude \(\varphi\) on the unit sphere that is \(2\pi(1 - \cos\varphi)\), which is why a Foucault pendulum away from the poles does not return to its plane in a day. <code>transport</code> reports the transported vector and the angle.</p>
+
+  <h2>Geodesic curvature</h2>
+  <p>The curvature of a curve on a surface splits into a part along the normal and a part within the surface. The second is the geodesic curvature \(k_g\): how much someone walking on the surface has to steer. For \(c(t) = (u(t), v(t))\),</p>
+  \[ k_g = \frac{\sqrt{EG - F^2}\,\bigl(u'A^v - v'A^u\bigr)}{|c'|^3}, \qquad A^k = x^{k\prime\prime} + \sum_{i,j}\Gamma^k_{ij}\,x^{i\prime}x^{j\prime}. \]
+  <p>It is zero exactly along geodesics. The sign is positive when the curve turns towards the side to which \(u\) rotates into \(v\).</p>
+
+  <h2>The Gauss-Bonnet theorem</h2>
+  <p>For a region \(R\) on a surface bounded by a simple closed curve made of smooth pieces,</p>
+  \[ \iint_R K\,dA \;+\; \oint_{\partial R} k_g\,ds \;+\; \sum_i \theta_i \;=\; 2\pi, \]
+  <p>where the \(\theta_i\) are the exterior angles at the corners. For a triangle with geodesic sides the middle term vanishes and the theorem says that the angles add to \(\pi + \iint K\,dA\): more than \(\pi\) on a sphere, less on a saddle.</p>
+  <p><code>gaussBonnet(region)</code> checks the theorem on the image of the region \(\{a \le u \le b,\ lo(u) \le v \le hi(u)\}\). The three terms are enclosed separately: a double integral, one integral per side, and an angle per corner measured with the metric. It reports each, their sum, and whether the sum contains \(2\pi\). The theorem holds, so <code>agree</code> is a check of the computation and a way to see how the three terms trade off as the region changes. The patch must be regular up to its boundary.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>metric({ E, F, G }, [u, v], { params })</td><td>Metric</td></tr>
+    <tr><td>m.christoffel(), m.gaussian()</td><td>formulas</td></tr>
+    <tr><td>m.geodesic({ from, direction, until, unit, order, tol })</td><td>a Refinement: <code>quick</code>, <code>exact()</code> an ODESolution in (u, v, u′, v′)</td></tr>
+    <tr><td>m.transport(path, [a, b], vector, { order, tol })</td><td>{ start, vector, length, lengthAfter, angle, solution }; path { u: "…", v: "…" } in t</td></tr>
+    <tr><td>m.geodesicCurvature(path, t)</td><td>a formula, or with t a RationalInterval</td></tr>
+    <tr><td>m.gaussBonnet(region, { digits = 7 })</td><td>{ statement, curvature, boundary, angles, total, expected, agree }</td></tr>
+    <tr><td>m.area(region), m.totalCurvature(region)</td><td>RationalInterval</td></tr>
+  </table></div>
+<template data-runbox>
+// Gauss-Bonnet on a patch of the unit sphere (u is longitude, v colatitude).
+const sphere = surface(["cos(u)*sin(v)", "sin(u)*sin(v)", "cos(v)"], ["u", "v"]);
+const gb = sphere.gaussBonnet({ u: [0, 1], v: [1, 2] });
+PRINT(gb.statement);
+PRINT("  curvature inside:", gb.curvature.value.low.toDecimal(7));
+for (const p of gb.boundary.pieces) PRINT(`  side ${p.side}:`, p.value.low.toDecimal(7));
+PRINT("  exterior angles: ", gb.angles.value.low.toDecimal(7));
+PRINT("  total:", gb.total.low.toDecimal(6), "to", gb.total.high.toDecimal(6), " 2π inside:", gb.agree);
+
+// The same in the hyperbolic half-plane, where K = -1.
+const plane = metric({ E: "1/v^2", F: 0, G: "1/v^2" }, ["u", "v"]);
+const hb = plane.gaussBonnet({ u: [0, 1], v: [1, "2 + u"] });
+PRINT("hyperbolic patch: curvature", hb.curvature.value.low.toDecimal(6), "sides", hb.boundary.value.low.toDecimal(6), "angles", hb.angles.value.low.toDecimal(6), "agree:", hb.agree);
+
+// A geodesic of the half-plane from (0, 1) heading right is the unit circle: u^2 + v^2 = 1.
+const g = plane.geodesic({ from: [0, 1], direction: [1, 0], until: 2 });
+const q = g.quick.value;
+const end = [q.y[0].at(-1), q.y[1].at(-1)];
+PRINT("preview at s = 2:", end.map((x) =&gt; x.toFixed(6)).join(", "), " u^2 + v^2 =", (end[0] ** 2 + end[1] ** 2).toFixed(8));
+const sol = plane.geodesic({ from: [0, 1], direction: [1, 0], until: "1/8" }).exact();
+PRINT("certified at s = 1/8: u in", sol.final[0].low.toDecimal(8), "to", sol.final[0].high.toDecimal(8), " (tanh(1/8) = 0.12435300...)");
+`Christoffel symbols of the half-plane: ${JSON.stringify(plane.christoffel())}`;
+</template>

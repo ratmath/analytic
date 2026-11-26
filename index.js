@@ -19,3 +19,5 @@ export { fourier, FourierSeries } from "./src/fourier.js";
 export { bvp, BVPSolution } from "./src/bvp.js";
 export { sequence, Sequence, recursive, RecursiveSequence, sum, Series, powerSeries, PowerSeries, taylorRemainder, functionSequence, FunctionSequence } from "./src/sequences.js";
 export { greens, stokes, divergenceTheorem, changeOfVariables, potential, lagrange } from "./src/theorems.js";
+export { curve, Curve, surface, Surface, metric, Metric } from "./src/geometry.js";
+export { tidy } from "./src/tidy.js";

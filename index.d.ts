@@ -716,3 +716,95 @@ export function lagrange(
   box: Bounds,
   options?: { multiplier?: [RationalLike, RationalLike]; multiplierName?: string; digits?: number; maxBoxes?: number },
 ): { lagrangian: string; candidates: LagrangeCandidate[]; max: { value: RationalInterval; at: Array<Record<string, RationalInterval>> } | null; min: { value: RationalInterval; at: Array<Record<string, RationalInterval>> } | null; complete: boolean };
+
+// ---- differential geometry (also "@ratmath/analytic/geometry")
+/** A quotient of polynomials in variables and calls, with sin² + cos² = 1 used and common factors cancelled. */
+export function tidy(tree: Ast): Ast;
+export type PointLike = RationalLike | string | RationalInterval;
+export interface CurvePoint {
+  point: RationalInterval[];
+  velocity: RationalInterval[];
+  speed: RationalInterval;
+  tangent: RationalInterval[];
+  normal: RationalInterval[] | null;
+  binormal?: RationalInterval[] | null;
+  /** Signed for a plane curve: positive where it turns left. */
+  curvature: RationalInterval;
+  torsion?: RationalInterval | null;
+  /** Radius and centre of the osculating circle; null where the curvature may vanish. */
+  radius: RationalInterval | null;
+  centre: RationalInterval[] | null;
+}
+export class Curve {
+  constructor(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, PointLike> });
+  readonly parameter: string;
+  readonly dimension: 2 | 3;
+  readonly position: string[];
+  readonly velocity: string[];
+  readonly acceleration: string[];
+  speed(): string;
+  curvature(): string;
+  curvatureAst(): Ast;
+  torsion(): string;
+  torsionAst(): Ast;
+  evolute(): Curve;
+  length(interval: [PointLike, PointLike], options?: { digits?: number }): RationalInterval;
+  totalCurvature(interval: [PointLike, PointLike], options?: { digits?: number }): RationalInterval;
+  at(t: PointLike, options?: { digits?: number }): CurvePoint;
+}
+export function curve(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, PointLike> }): Curve;
+export interface GaussBonnetReport {
+  statement: string;
+  curvature: { name: string; value: RationalInterval };
+  boundary: { name: string; value: RationalInterval; pieces: Array<{ side: string; path: Record<string, string>; value: RationalInterval }> };
+  angles: { name: string; value: RationalInterval; corners: Array<{ at: RationalInterval[]; exterior: RationalInterval }> };
+  total: RationalInterval;
+  expected: RationalInterval;
+  agree: boolean;
+}
+export class Metric {
+  constructor(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, PointLike> });
+  readonly parameters: [string, string];
+  first(): { E: string; F: string; G: string };
+  /** Keys such as "u_uv" for Γᵘ_uv. */
+  christoffel(): Record<string, string>;
+  christoffelAst(): Ast[][][];
+  gaussian(): string;
+  gaussianAst(): Ast;
+  area(region: Bounds, options?: { digits?: number }): RationalInterval;
+  totalCurvature(region: Bounds, options?: { digits?: number }): RationalInterval;
+  /** State (u, v, u′, v′). */
+  geodesic(spec: { from: [PointLike, PointLike]; direction: [PointLike, PointLike]; until: RationalLike | string; unit?: boolean; order?: number; tol?: RationalLike | string; track?: boolean; step?: RationalLike | string }): Refinement<{ t: Float64Array; y: Float64Array[] } | null, ODESolution>;
+  transport(
+    path: Record<string, ExpressionLike>,
+    interval: [RationalLike | string, RationalLike | string],
+    vector: [PointLike, PointLike],
+    options?: { parameter?: string; order?: number; tol?: RationalLike | string; step?: RationalLike | string },
+  ): { start: RationalInterval[]; vector: RationalInterval[]; length: RationalInterval; lengthAfter: RationalInterval | null; angle: RationalInterval | null; solution: ODESolution };
+  geodesicCurvature(path: Record<string, ExpressionLike>): string;
+  geodesicCurvature(path: Record<string, ExpressionLike>, t: PointLike, options?: { parameter?: string; digits?: number }): RationalInterval;
+  gaussBonnet(region: Bounds, options?: { digits?: number }): GaussBonnetReport;
+}
+export function metric(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Metric;
+export interface SurfacePoint {
+  point: RationalInterval[];
+  normal: RationalInterval[];
+  E: RationalInterval; F: RationalInterval; G: RationalInterval;
+  L: RationalInterval; M: RationalInterval; N: RationalInterval;
+  gaussian: RationalInterval;
+  mean: RationalInterval;
+  principal: [RationalInterval, RationalInterval];
+  /** null when the enclosures cannot tell. */
+  kind: "elliptic" | "hyperbolic" | "parabolic" | "planar" | null;
+}
+export class Surface extends Metric {
+  constructor(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> });
+  readonly position: string[];
+  normal(): string[];
+  second(): { L: string; M: string; N: string };
+  mean(): string;
+  meanAst(): Ast;
+  intrinsicGaussian(): string;
+  at(u: PointLike, v: PointLike, options?: { digits?: number }): SurfacePoint;
+}
+export function surface(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Surface;

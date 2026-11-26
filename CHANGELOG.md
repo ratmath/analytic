@@ -40,6 +40,14 @@
   and the transformed integrand. `potential` decides whether a field is a
   gradient (true, false with a witness, or undecided) and finds the potential.
   `lagrange` returns certified candidates for constrained extremes.
+- Differential geometry (roadmap 13.2), also at `@ratmath/analytic/geometry`:
+  `curve` (speed, arc length, Frenet frame, curvature, torsion, osculating
+  circle, evolute), `surface` (both fundamental forms, normal, Gaussian, mean
+  and principal curvatures, each point classified) and `metric` (Christoffel
+  symbols, Gaussian curvature from the metric alone, geodesics and parallel
+  transport as validated solutions, geodesic curvature, and `gaussBonnet` as
+  a checked statement). Formulas come out tidied by the new `tidy`.
+- `ode.solve({ ..., track: false })` skips tracking the initial value.
 - `enclose.gammaP(a, x)`, `enclose.gammaQ(a, x)` and `enclose.betaI(x, a, b)`:
   certified regularized incomplete gamma and beta functions, the cumulative
   probabilities behind the gamma, chi-square, beta, t and F distributions.

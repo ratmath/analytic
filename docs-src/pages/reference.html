@@ -124,6 +124,16 @@
     <tr><td>lagrange(f, g, vars, box, { multiplier })</td><td>{ lagrangian, candidates, max, min, complete }</td><td>candidates are certified critical points of f − λg</td></tr>
   </table></div>
 
+  <h2>Differential geometry</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>curve(components, parameter, { params })</td><td>Curve</td><td><code>speed()</code>, <code>curvature()</code>, <code>torsion()</code>, <code>evolute()</code>, <code>length([a, b])</code>, <code>totalCurvature([a, b])</code>, <code>at(t)</code>. See <a href="#curves">Curves</a></td></tr>
+    <tr><td>surface(components, [u, v], { params })</td><td>Surface</td><td><code>first()</code>, <code>second()</code>, <code>normal()</code>, <code>gaussian()</code>, <code>mean()</code>, <code>at(u, v)</code>, <code>area(region)</code>. See <a href="#surfaces">Surfaces and curvature</a></td></tr>
+    <tr><td>metric({ E, F, G }, [u, v])</td><td>Metric</td><td><code>christoffel()</code>, <code>gaussian()</code>, <code>geodesic({ from, direction, until })</code>, <code>transport(path, [a, b], vector)</code>, <code>geodesicCurvature(path, t)</code>, <code>gaussBonnet(region)</code>. See <a href="#geodesics">Geodesics and Gauss-Bonnet</a></td></tr>
+    <tr><td>tidy(tree)</td><td>formula tree</td><td>quotient of polynomials in variables and calls, with sin² + cos² = 1 used and common factors cancelled</td></tr>
+    <tr><td>ode.solve({ …, track: false })</td><td></td><td>skips tracking the initial value, which is faster for a single starting point over a short span</td></tr>
+  </table></div>
+
   <h2>Taylor models</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>notes</th></tr>

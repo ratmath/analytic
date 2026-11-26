@@ -1,0 +1,67 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Curves: length, curvature, torsion</h1>
+  <p>A curve is a list of two or three formulas in one parameter. <code>curve</code> differentiates them and returns what a first course in differential geometry computes, each as a formula and as a certified value at a point: speed and arc length, the Frenet frame, curvature and torsion, the osculating circle and the evolute.</p>
+<pre><code>const helix = curve(["cos(t)", "sin(t)", "t/2"], "t");
+helix.speed();              // "sqrt(5/4)"
+helix.curvature();          // "4/5"
+helix.torsion();            // "2/5"
+helix.length([0, "2*pi"]);  // an interval around π√5
+
+const a = helix.at(1);      // every number an interval
+a.tangent; a.normal; a.binormal;
+a.curvature;                // [4/5, 4/5]
+a.radius; a.centre;         // the osculating circle</code></pre>
+  <p>It is also available as <code>import { curve, surface, metric } from "@ratmath/analytic/geometry"</code>.</p>
+
+  <h2>Speed and arc length</h2>
+  <p>For \(r(t)\) the velocity is \(r'(t)\) and the speed is \(|r'(t)|\). The length of the curve between \(t = a\) and \(t = b\) is</p>
+  \[ L = \int_a^b |r'(t)|\,dt . \]
+  <p><code>length</code> encloses that integral; the ends may be formulas such as <code>"2*pi"</code>. A curve is <em>regular</em> where the speed is not zero. At a point where the velocity may vanish, such as the cusp of \((t^2, t^3)\) at 0, there is no tangent and <code>at</code> refuses.</p>
+
+  <h2>Curvature</h2>
+  <p>Curvature measures how fast the unit tangent \(T = r'/|r'|\) turns per unit of length: \(\kappa = |dT/ds|\). In terms of the parameter,</p>
+  \[ \kappa = \frac{|r' \times r''|}{|r'|^3} \quad\text{in space}, \qquad \kappa = \frac{x'y'' - y'x''}{(x'^2 + y'^2)^{3/2}} \quad\text{in the plane}. \]
+  <p>In the plane the curvature has a sign: positive where the curve turns to the left. A circle of radius \(R\) has curvature \(1/R\), a line has curvature 0.</p>
+  <p>The <em>osculating circle</em> at a point is the circle that fits the curve best there: it passes through the point with the same tangent and the same curvature. Its radius is \(1/|\kappa|\) and its centre is \(r + N/\kappa\), where \(N\) is the unit normal. The centres trace the <em>evolute</em>; <code>evolute()</code> returns it as another curve, so the evolute of a parabola is one line of code.</p>
+  <p>The integral of the curvature against arc length is the total turning of the tangent. For a simple closed curve in the plane it is \(2\pi\), whatever the shape; <code>totalCurvature</code> encloses it.</p>
+
+  <h2>The Frenet frame and torsion</h2>
+  <p>In space the unit tangent \(T\), the principal normal \(N = T'/|T'|\) and the binormal \(B = T \times N\) form a frame that travels with the curve. The Frenet formulas say how it turns:</p>
+  \[ T' = \kappa N, \qquad N' = -\kappa T + \tau B, \qquad B' = -\tau N \qquad (\text{derivatives in arc length}). \]
+  <p>The torsion \(\tau\) measures how fast the curve leaves its osculating plane:</p>
+  \[ \tau = \frac{(r' \times r'') \cdot r^{\prime\prime\prime}}{|r' \times r''|^2}. \]
+  <p>A curve lies in a plane exactly when its torsion is zero, and a curve with constant curvature and constant torsion is a helix. Where the curvature may be zero the normal and binormal are not defined, and <code>at</code> reports them as <code>null</code>.</p>
+
+  <h2>Formulas that come out readable</h2>
+  <p>The formulas are tidied by <code>tidy</code>, which writes a formula as a quotient of polynomials in its variables and function calls, uses \(\sin^2 + \cos^2 = 1\) and \(\sqrt{P}^{\,2} = P\), and cancels the common factor. It is exported for use on your own formulas: <code>format(tidy(parse("(x^2 - 1)/(x - 1)")))</code> is <code>"x + 1"</code>.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>curve(components, parameter = "t", { params })</td><td>Curve, in the plane or in space</td></tr>
+    <tr><td>c.position, c.velocity, c.acceleration</td><td>formulas</td></tr>
+    <tr><td>c.speed(), c.curvature(), c.torsion()</td><td>formulas</td></tr>
+    <tr><td>c.evolute()</td><td>Curve (plane curves)</td></tr>
+    <tr><td>c.length([a, b], { digits = 12 }), c.totalCurvature([a, b])</td><td>RationalInterval</td></tr>
+    <tr><td>c.at(t, { digits = 15 })</td><td>{ point, velocity, speed, tangent, normal, binormal, curvature, torsion, radius, centre }</td></tr>
+    <tr><td>tidy(tree)</td><td>the tidied formula tree</td></tr>
+  </table></div>
+<template data-runbox>
+// An ellipse: curvature at the ends of the axes, the osculating circles there,
+// its length (an elliptic integral, enclosed) and its total curvature.
+const ellipse = curve(["2*cos(t)", "sin(t)"], "t");
+PRINT("curvature:", ellipse.curvature());
+for (const t of [0, "pi/2"]) {
+  const a = ellipse.at(t);
+  PRINT(`t = ${t}: curvature ${a.curvature.low.toDecimal(6)}, circle of radius ${a.radius.low.toDecimal(6)} centred at (${a.centre.map((c) =&gt; c.low.toDecimal(4)).join(", ")})`);
+}
+PRINT("length:", ellipse.length([0, "2*pi"]).low.toDecimal(10));
+PRINT("total curvature:", ellipse.totalCurvature([0, "2*pi"]).low.toDecimal(8), "= 2π");
+PRINT("evolute:", ellipse.evolute().position.join(" , "));
+
+// A space curve whose torsion changes sign.
+const twisted = curve(["t", "t^2", "t^3"], "t");
+PRINT("torsion:", twisted.torsion());
+PRINT("binormal at t = 1:", twisted.at(1).binormal.map((c) =&gt; c.low.toDecimal(5)).join(", "));
+`the helix (cos t, sin t, t/2) has curvature ${curve(["cos(t)", "sin(t)", "t/2"]).curvature()} and torsion ${curve(["cos(t)", "sin(t)", "t/2"]).torsion()}`;
+</template>
