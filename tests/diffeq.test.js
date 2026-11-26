@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { firstOrder, exactEquation, linearODE, laplace, inverseLaplace, linearSystem, planarSystem, seriesSolution, heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville, antiderivative, parse, format } from "../index.js";
+import { firstOrder, exactEquation, linearODE, laplace, inverseLaplace, laplaceSolve, linearSystem, planarSystem, seriesSolution, heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville, antiderivative, parse, format } from "../index.js";
 
 const num = (x) => x.toNumber();
 const holds = (iv, x, slack = 1e-9, maxWidth = 1e-3) => num(iv.low) <= x + slack && num(iv.high) >= x - slack && num(iv.high) - num(iv.low) < maxWidth;
@@ -100,11 +100,43 @@ describe("Laplace transforms", () => {
     expect(inverseLaplace("(s + 3)/(s^2 + 2*s + 5)").result).toBe("cos(2*t)*exp(-t) + sin(2*t)*exp(-t)");
     expect(inverseLaplace("1/((s^2 + 1)*(s^2 + 4))").result).toBe("1/3*sin(t) - 1/6*sin(2*t)");
     expect(() => laplace("log(t)")).toThrow();
-    expect(() => inverseLaplace("s^2/(s + 1)")).toThrow(/impulses/);
+    expect(() => inverseLaplace("s^2/(s + 1)")).toThrow(/impulse/);
+  });
+  test("steps and impulses", () => {
+    expect(laplace("heaviside(t - 2)*t")).toBe("exp(-2*s)*(2/s + 1/s^2)");
+    expect(laplace("dirac(t - 3)")).toBe("exp(-3*s)");
+    expect(laplace("heaviside(t - 1)*sin(t - 1)")).toBe("exp(-s)/(s^2 + 1)");
+    expect(inverseLaplace("exp(-2*s)/(s^2 + 1)").result).toBe("heaviside(t - 2)*sin(t - 2)");
+    expect(inverseLaplace("1 + exp(-s)/s").result).toBe("dirac(t) + heaviside(t - 1)");
+    expect(inverseLaplace("(s + 1)/(s + 2)").result).toBe("dirac(t) - exp(-2*t)");
+    expect(() => laplace("heaviside(t + 1)")).toThrow(/negative time/);
+  });
+  test("laplaceSolve verifies piece by piece", () => {
+    const r = laplaceSolve([1, 0, 4], "heaviside(t - 1)", [0, 0]);
+    expect(r.verified).toBe(true);
+    expect(r.solution).toBe("heaviside(t - 1)*(-1/4*cos(2*t - 2) + 1/4)");
+    expect(r.pieces.length).toBe(2);
+    const k = laplaceSolve([1, 1], "dirac(t - 2)", [1]);
+    expect(k.verified).toBe(true);
+    expect(k.solution).toBe("exp(-t) + heaviside(t - 2)*exp(-t + 2)");
   });
 });
 
 describe("systems", () => {
+  test("n by n systems: exponential by Laplace, verified, stability from exact signs", () => {
+    const s = linearSystem([[0, 1, 0], [0, 0, 1], [-6, -11, -6]]);
+    expect(s.characteristic).toBe("s^3 + 6*s^2 + 11*s + 6 = 0");
+    expect(s.eigenvalues).toEqual(["-1", "-2", "-3"]);
+    expect(s.stability).toBe("asymptotically stable");
+    expect(s.verified).toBe(true);
+    const c = linearSystem([[0, 1, 0], [-1, 0, 0], [0, 0, -1]]);
+    expect(c.stability).toBe("stable, not asymptotically");
+    expect(c.exponential).toEqual([["cos(t)", "sin(t)", "0"], ["-sin(t)", "cos(t)", "0"], ["0", "0", "exp(-t)"]]);
+    // a nilpotent Jordan block grows polynomially
+    const j = linearSystem([[0, 1, 0], [0, 0, 1], [0, 0, 0]]);
+    expect(j.stability).toBe("unstable");
+    expect(j.verified).toBe(true);
+  });
   test("linear systems are classified and solved", () => {
     const s = linearSystem([[1, 2], [3, 2]]);
     expect(s.eigenvalues).toEqual(["-1", "4"]);

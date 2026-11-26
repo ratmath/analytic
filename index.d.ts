@@ -854,14 +854,37 @@ export interface LinearODESolution {
 export function linearODE(coefficients: Array<RationalLike | string>, forcing?: ExpressionLike | number, options?: { x?: string; y?: string }): LinearODESolution;
 export function laplace(f: ExpressionLike, options?: { t?: string; s?: string; delay?: RationalLike | string }): string;
 export function inverseLaplace(F: ExpressionLike, options?: { t?: string; s?: string }): { partialFractions: string; result: string; tree: Ast };
+/**
+ * Solve a_n y⁽ⁿ⁾ + … + a_0 y = forcing by Laplace transforms. The forcing may
+ * contain heaviside(t − c) and dirac(t − c). The answer is checked on each
+ * interval between switches, at t = 0, and at each join (a jump of w/a_n in
+ * y⁽ⁿ⁻¹⁾ at an impulse of weight w).
+ */
+export function laplaceSolve(coefficients: Array<RationalLike | string>, forcing?: ExpressionLike, initial?: Array<RationalLike | string>, options?: { t?: string; s?: string }): {
+  transform: string;
+  partialFractions: string;
+  solution: string;
+  pieces: Array<{ from: Rational; y: string }>;
+  verified: boolean;
+  steps: Array<{ what: string; value: string }>;
+  at(time: RationalLike | string): string;
+};
 export function linearSystem(matrix: Array<Array<RationalLike | string>>, options?: { t?: string }): {
   matrix: Rational[][];
   trace: Rational;
-  determinant: Rational;
-  discriminant: Rational;
-  eigenvalues: string[];
+  /** 2 by 2 only */
+  determinant?: Rational;
+  /** 2 by 2 only */
+  discriminant?: Rational;
+  /** n by n (n ≠ 2): the characteristic polynomial, "… = 0" */
+  characteristic?: string;
+  /** n by n (n ≠ 2): d/dt e^{At} = A·e^{At} and e^{A·0} = I were checked symbolically */
+  verified?: boolean;
+  /** null for n by n when the characteristic polynomial does not split over the rationals and quadratics */
+  eigenvalues: string[] | null;
   eigenvectors: Array<string[] | null> | null;
-  kind: string;
+  /** the phase portrait's name, 2 by 2 only (null otherwise) */
+  kind: string | null;
   stability: string;
   exponential: string[][];
   solution(x0: Array<RationalLike | string>): string[];

@@ -26,6 +26,7 @@ export const PAGES = [
   { name: "bvp", title: "Boundary value problems" },
   { name: "methods", title: "First-order equations: the methods" },
   { name: "linearodes", title: "Linear equations and Laplace transforms" },
+  { name: "switches", title: "Steps and impulses" },
   { name: "systems", title: "Systems in the plane" },
   { name: "seriessolutions", title: "Series solutions" },
   { name: "pdes", title: "Heat, waves and potentials" },

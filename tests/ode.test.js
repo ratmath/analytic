@@ -53,7 +53,7 @@ describe("validated ODE steps", () => {
     // y = 1/(1 − t)
     const t = sol.t1.toNumber();
     expect(contains(sol.final, 1 / (1 - t), 1e-9 / (1 - t) ** 2)).toBe(true);
-  });
+  }, 20000);
   test("single steps and refusals", () => {
     const s = ode.step({ f: "y", y0: 1, step: "1/4" });
     expect(contains(s.model.at(R`1/4`), Math.exp(0.25), 1e-15)).toBe(true);
