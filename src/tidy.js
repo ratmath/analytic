@@ -142,11 +142,21 @@ function polyAst(p, names) {
     .sort((s, t) => -lexCmp(s[0], t[0]))
     .map(([e, c]) => {
       let m = null;
+      let expo = null; // the combined argument of the exponentials in this term
       e.forEach((d, i) => {
         if (!d) return;
+        if (names[i].type === "call" && names[i].name === "exp") {
+          const piece = d === 1 ? names[i].args[0] : op("*", num(d), names[i].args[0]);
+          expo = expo ? op("+", expo, piece) : piece;
+          return;
+        }
         const f = d === 1 ? names[i] : op("^", names[i], num(d));
         m = m ? op("*", m, f) : f;
       });
+      if (expo) {
+        const f = call("exp", tidy(expo));
+        m = m ? op("*", m, f) : f;
+      }
       const neg = c.numerator < 0n;
       const a = neg ? c.negate() : c;
       const body = m === null ? num(a) : a.equals(ONE) ? m : op("*", num(a), m);
@@ -171,6 +181,14 @@ function ratSqrt(c) {
   const a = root(c.numerator);
   const b = root(c.denominator);
   return a === null || b === null ? null : new Rational(a, b);
+}
+
+/** the additive terms of a tree with their signs */
+function signedTerms(t, sign = 1) {
+  if (t.type === "op" && t.op === "+") return [...signedTerms(t.args[0], sign), ...signedTerms(t.args[1], sign)];
+  if (t.type === "op" && t.op === "-") return [...signedTerms(t.args[0], sign), ...signedTerms(t.args[1], -sign)];
+  if (t.type === "op" && t.op === "neg") return signedTerms(t.args[0], -sign);
+  return [{ sign, body: t }];
 }
 
 class Context {
@@ -200,7 +218,65 @@ function build(ast, ctx) {
   if (t.type === "call") {
     if (t.name === "sqrt" && t.args.length === 1) return root(t.args[0], ctx);
     const args = t.args.map((a) => tidy(a));
+    if (args.length === 1) {
+      const c0 = constantRational(args[0]);
+      if (c0 !== null) {
+        const fold = c0.numerator === 0n ? { exp: ONE, sin: ZERO, cos: ONE, tan: ZERO, atan: ZERO, sinh: ZERO, cosh: ONE, tanh: ZERO, asin: ZERO }[t.name] : c0.equals(ONE) && (t.name === "log" || t.name === "ln") ? ZERO : t.name === "abs" ? (c0.numerator < 0n ? c0.negate() : c0) : undefined;
+        if (fold !== undefined) return (n) => ({ n: constP(n, fold), d: constP(n, ONE) });
+      }
+    }
+    if (t.name === "exp" && args.length === 1) {
+      // exp(a + b) = exp(a)·exp(b), exp(k·m) = exp(m)^k for whole k: so products and quotients of exponentials combine
+      const factors = [];
+      for (const { sign, body } of signedTerms(args[0])) {
+        let c = ONE;
+        let m = body;
+        const whole = constantRational(body);
+        if (whole !== null) {
+          c = whole.numerator < 0n ? ONE.negate() : ONE;
+          m = num(whole.numerator < 0n ? whole.negate() : whole);
+        } else if (body.type === "op" && body.op === "*" && body.args[0].type === "num") {
+          c = body.args[0].value;
+          m = body.args[1];
+        }
+        if (sign < 0) c = c.negate();
+        if (m.type === "call" && (m.name === "log" || m.name === "ln") && c.denominator === 1n) {
+          // exp(k·log u) = u^k
+          factors.push({ recipe: build(op("^", m.args[0], num(c)), ctx) });
+          continue;
+        }
+        let power;
+        if (c.denominator === 1n) power = Number(c.numerator);
+        else {
+          power = c.numerator < 0n ? -1 : 1;
+          m = op("*", num(c.numerator < 0n ? c.negate() : c), m);
+        }
+        factors.push({ letter: ctx.letter(call("exp", m)).letter, power });
+      }
+      return (n) => {
+        let pn = constP(n, ONE);
+        let pd = constP(n, ONE);
+        for (const f of factors) {
+          if (f.recipe !== undefined) {
+            if (f.recipe === null) throw new RangeError("not a rational form");
+            const r = f.recipe(n);
+            pn = mulP(pn, r.n);
+            pd = mulP(pd, r.d);
+            continue;
+          }
+          const l = letterP(n, f.letter, Math.abs(f.power));
+          if (f.power >= 0) pn = mulP(pn, l);
+          else pd = mulP(pd, l);
+        }
+        return { n: pn, d: pd };
+      };
+    }
     const { letter } = ctx.letter(call(t.name, ...args));
+    if (t.name === "abs" && args.length === 1) {
+      // |X|² = X²
+      const sq = build(op("^", args[0], num(2)), ctx);
+      if (sq) ctx.pending.push({ letter, square: sq });
+    }
     return (n) => ({ n: letterP(n, letter), d: constP(n, ONE) });
   }
   if (t.type !== "op") return null;
@@ -410,6 +486,22 @@ export function tidy(ast) {
   scale = scale.multiply(new Rational(lcm, gcd || 1n));
   const dn = scaleP(r.d, scale);
   const nn = scaleP(r.n, scale);
+  const top0 = null;
+  void top0;
+  let nn2 = nn;
+  let dn2 = dn;
+  if (dn.size === 1) {
+    const [dkey, dc] = [...dn][0];
+    const de = expOf(dkey);
+    const moved = de.map((d, i) => (d > 0 && ctx.letters[i].type === "call" && ctx.letters[i].name === "exp" ? d : 0));
+    if (moved.some((d) => d > 0)) {
+      nn2 = new Map([...nn].map(([key, c]) => [keyOf(expOf(key).map((x, i) => x - moved[i])), c]));
+      dn2 = new Map([[keyOf(de.map((d, i) => d - moved[i])), dc]]);
+    }
+  }
+  return finish(nn2, dn2, ctx);
+}
+function finish(nn, dn, ctx) {
   const top = polyAst(nn, ctx.letters);
   const constantDen = dn.size === 1 && leading(dn).e.every((x) => x === 0);
   return simplify(constantDen ? polyAst(scaleP(nn, leading(dn).c.reciprocal()), ctx.letters) : op("/", top, polyAst(dn, ctx.letters)));

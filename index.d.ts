@@ -808,3 +808,112 @@ export class Surface extends Metric {
   at(u: PointLike, v: PointLike, options?: { digits?: number }): SurfacePoint;
 }
 export function surface(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Surface;
+
+// ---- differential equations: methods
+export interface MethodStep { what: string; formula: string }
+export interface CheckReport { agree: boolean; numeric: RationalInterval; formula?: RationalInterval; relation?: RationalInterval; constant?: RationalInterval }
+export interface ParticularSolution {
+  x0: RationalLike | string;
+  y0: RationalLike | string;
+  constant: string;
+  /** The explicit solution, or null when the method gives only a relation. */
+  solution: string | null;
+  relation: string | null;
+  at(x: PointLike, options?: { digits?: number }): RationalInterval;
+  /** The formula against the validated numerical solution at x1. */
+  check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string; track?: boolean }): CheckReport;
+}
+export interface FirstOrderSolution {
+  equation: string;
+  type: "linear" | "separable" | "bernoulli" | "homogeneous" | "exact" | null;
+  types: string[];
+  steps: MethodStep[];
+  /** "y = …" with the constant C, or null. */
+  general: string | null;
+  /** "G(x, y) = C", or null. */
+  implicit: string | null;
+  singular: string[];
+  through(x0: RationalLike | string, y0: RationalLike | string): ParticularSolution;
+}
+export function firstOrder(rhs: ExpressionLike, options?: { x?: string; y?: string; method?: "linear" | "separable" | "bernoulli" | "homogeneous" }): FirstOrderSolution;
+export function exactEquation(M: ExpressionLike, N: ExpressionLike, options?: { x?: string; y?: string }): FirstOrderSolution & { exact: boolean; factor: string | null; potential: string | null };
+export interface LinearODESolution {
+  order: number;
+  characteristic: string;
+  roots: Array<{ root: string; kind: "real" | "complex"; multiplicity: number }>;
+  basis: string[];
+  homogeneous: string;
+  particular: string | null;
+  method: "undetermined coefficients" | "variation of parameters" | null;
+  verified?: boolean;
+  steps: MethodStep[];
+  general: string | null;
+  initial(values: Array<RationalLike | string>, x0?: RationalLike | string): { constants: string[]; solution: string; tree: Ast; at(x: PointLike, options?: { digits?: number }): RationalInterval; check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string }): CheckReport };
+}
+/** Coefficients highest derivative first: linearODE([1, -3, 2], "exp(x)") is y″ − 3y′ + 2y = eˣ. */
+export function linearODE(coefficients: Array<RationalLike | string>, forcing?: ExpressionLike | number, options?: { x?: string; y?: string }): LinearODESolution;
+export function laplace(f: ExpressionLike, options?: { t?: string; s?: string; delay?: RationalLike | string }): string;
+export function inverseLaplace(F: ExpressionLike, options?: { t?: string; s?: string }): { partialFractions: string; result: string; tree: Ast };
+export function linearSystem(matrix: Array<Array<RationalLike | string>>, options?: { t?: string }): {
+  matrix: Rational[][];
+  trace: Rational;
+  determinant: Rational;
+  discriminant: Rational;
+  eigenvalues: string[];
+  eigenvectors: Array<string[] | null> | null;
+  kind: string;
+  stability: string;
+  exponential: string[][];
+  solution(x0: Array<RationalLike | string>): string[];
+};
+export interface Equilibrium {
+  point: RationalInterval[];
+  unique: boolean;
+  jacobian: RationalInterval[][];
+  trace: RationalInterval;
+  determinant: RationalInterval;
+  kind: string | null;
+  stability: string | null;
+  hyperbolic: boolean | null;
+}
+export class PlanarSystem {
+  constructor(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, PointLike> });
+  jacobian(): string[][];
+  nullclines(): Record<string, string>;
+  equilibria(box: Bounds, options?: { digits?: number; tol?: RationalLike | string; maxBoxes?: number }): Equilibrium[] & { complete: boolean };
+  conserves(H: ExpressionLike): boolean;
+  along(V: ExpressionLike): string;
+  orbit(spec: { from: Array<RationalLike | string>; until: RationalLike | string; order?: number; tol?: RationalLike | string }): Refinement<unknown, ODESolution>;
+}
+export function planarSystem(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, PointLike> }): PlanarSystem;
+export function seriesSolution(spec: { p?: ExpressionLike | number; q?: ExpressionLike | number; about?: RationalLike | string; order?: number; x?: string }): {
+  about: Rational;
+  kind: "ordinary" | "regular singular" | "irregular singular";
+  indicial?: string;
+  exponents?: Array<Rational | string> | null;
+  solutions: Array<{ exponent: Rational; coefficients: Rational[]; text: string }>;
+  notes: string[];
+  /** Distance to the nearest other singular point (a floating-point estimate; Infinity when there is none). */
+  radius?: number;
+};
+export interface SeriesValue { value: RationalInterval | null; partial: RationalInterval; tail: Rational | null }
+export interface SeparatedSolution {
+  equation: string;
+  terms: number;
+  at(...point: Array<RationalLike | string>): SeriesValue;
+  formula(terms?: number, digits?: number): string;
+}
+export function heat(spec: { k?: RationalLike | string; length?: RationalLike | string; initial: ExpressionLike; ends?: "fixed" | "insulated"; terms?: number; digits?: number; x?: string }): SeparatedSolution & { coefficients: RationalInterval[]; modes: Array<{ n: number; coefficient: RationalInterval; rate: string }> };
+export function laplaceRectangle(spec: { width?: RationalLike | string; height?: RationalLike | string; top: ExpressionLike; terms?: number; digits?: number; x?: string }): SeparatedSolution & { coefficients: RationalInterval[] };
+export function laplaceDisc(spec: { radius?: RationalLike | string; boundary: ExpressionLike; terms?: number; digits?: number; angle?: string }): SeparatedSolution & { coefficients: { a: RationalInterval[]; b: RationalInterval[] }; mean: RationalInterval };
+export function wave(spec: { c?: RationalLike | string; length?: RationalLike | string | null; position?: ExpressionLike; velocity?: ExpressionLike; digits?: number; x?: string }): {
+  equation: string;
+  speed: Rational;
+  length: Rational | null;
+  at(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+  travelling: { right: string; left: string } | null;
+  modes(N?: number): Array<{ n: number; frequency: string; cos: RationalInterval; sin: RationalInterval }>;
+};
+export function sturmLiouville(spec: { p?: ExpressionLike; q?: ExpressionLike; w?: ExpressionLike; interval: [RationalLike | string, RationalLike | string]; count?: number; from?: number; to?: number; width?: RationalLike | string; certify?: boolean; x?: string }): Array<{ index: number; eigenvalue: RationalInterval; estimate: number; proven: boolean }>;
+export function antiderivative(tree: Ast, name?: string): { tree: Ast; trust: "proven" | "checked" } | null;
+export function partialFractions(N: Rational[], D: Rational[]): { poly: Rational[]; linear: Array<{ root: Rational; power: number; coeff: Rational }>; quadratic: Array<{ p: Rational; q: Rational; alpha: Rational; beta: Rational }> } | null;

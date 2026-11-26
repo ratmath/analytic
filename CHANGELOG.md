@@ -40,6 +40,19 @@
   and the transformed integrand. `potential` decides whether a field is a
   gradient (true, false with a witness, or undecided) and finds the potential.
   `lagrange` returns certified candidates for constrained extremes.
+- Differential equations (roadmap 13.1). Solution methods with their steps:
+  `firstOrder` (linear, separable, Bernoulli, homogeneous), `exactEquation`
+  (with integrating factors) and `linearODE` (characteristic roots,
+  undetermined coefficients with resonance, variation of parameters, initial
+  values); each formula has a `check` against the validated numerical
+  solution. `laplace` and `inverseLaplace`. `linearSystem` (2 by 2: exact
+  e^{At}, the equilibrium classified) and `planarSystem` (every equilibrium in
+  a box proven and classified, conserved quantities). `seriesSolution` at
+  ordinary and regular singular points (Frobenius). `heat`, `laplaceRectangle`
+  and `laplaceDisc` by separation of variables with a proven bound on the
+  tail; `wave` by d'Alembert's formula; `sturmLiouville` eigenvalues by
+  shooting, each bracketed by two validated solutions. `antiderivative` and
+  `partialFractions` are the integrals the methods use.
 - Differential geometry (roadmap 13.2), also at `@ratmath/analytic/geometry`:
   `curve` (speed, arc length, Frenet frame, curvature, torsion, osculating
   circle, evolute), `surface` (both fundamental forms, normal, Gaussian, mean

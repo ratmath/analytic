@@ -124,6 +124,22 @@
     <tr><td>lagrange(f, g, vars, box, { multiplier })</td><td>{ lagrangian, candidates, max, min, complete }</td><td>candidates are certified critical points of f − λg</td></tr>
   </table></div>
 
+  <h2>Differential equations: methods</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>firstOrder(rhs, { x, y, method })</td><td>{ type, types, steps, general, implicit, singular, through(x0, y0) }</td><td>linear, separable, Bernoulli, homogeneous. See <a href="#methods">First-order equations</a></td></tr>
+    <tr><td>exactEquation(M, N)</td><td>the same with { exact, factor, potential }</td><td>integrating factors in x alone or y alone</td></tr>
+    <tr><td>linearODE(coefficients, forcing)</td><td>{ characteristic, roots, basis, particular, method, general, initial(values, x0) }</td><td>See <a href="#linearodes">Linear equations and Laplace transforms</a></td></tr>
+    <tr><td>laplace(f), inverseLaplace(F)</td><td>formula; { partialFractions, result }</td><td></td></tr>
+    <tr><td>linearSystem(A)</td><td>{ eigenvalues, kind, stability, exponential, solution(x0) }</td><td>2 by 2. See <a href="#systems">Systems in the plane</a></td></tr>
+    <tr><td>planarSystem([f, g], [x, y])</td><td>PlanarSystem</td><td><code>equilibria(box)</code>, <code>jacobian()</code>, <code>nullclines()</code>, <code>conserves(H)</code>, <code>along(V)</code>, <code>orbit({ from, until })</code></td></tr>
+    <tr><td>seriesSolution({ p, q, about, order })</td><td>{ kind, indicial, exponents, solutions, notes, radius }</td><td>See <a href="#seriessolutions">Series solutions</a></td></tr>
+    <tr><td>heat, laplaceRectangle, laplaceDisc</td><td>series solutions with <code>at(…)</code> → { value, partial, tail }</td><td>See <a href="#pdes">Heat, waves and potentials</a></td></tr>
+    <tr><td>wave({ c, length, position, velocity })</td><td>{ at(x, t), travelling, modes(N) }</td><td>d'Alembert's formula</td></tr>
+    <tr><td>sturmLiouville({ p, q, w, interval, count })</td><td>[{ index, eigenvalue, proven }]</td><td>shooting, each eigenvalue bracketed by validated solutions</td></tr>
+    <tr><td>antiderivative(tree, name), partialFractions(N, D)</td><td></td><td>the integrals and partial fractions the methods use</td></tr>
+  </table></div>
+
   <h2>Differential geometry</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th><th>notes</th></tr>

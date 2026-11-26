@@ -84,6 +84,7 @@ f.describe();       // domain, order, remainder width, rules used
 | Fourier series | `fourier(f, [a, b], { terms, kind })` (Refinement of a `FourierSeries`) |
 | Sequences and series | `sequence(term)`: `.limit`, `.monotone`, `.bounds`; `recursive(next, { start })`: `.fixedPoints`, `.limit` by contraction; `sum(term)`: the convergence tests as methods, `.convergence()`, `.sum()` with a proven tail; `powerSeries(c)`: `.radius`, `.interval` with the ends examined; `taylorRemainder`; `functionSequence` |
 | Theorems of vector calculus | `greens`, `stokes`, `divergenceTheorem` (both sides enclosed, and the enclosures must meet); `changeOfVariables` with its Jacobian; `potential`; `lagrange` |
+| Differential equations: methods | `firstOrder(rhs)` and `exactEquation(M, N)` with steps and a `check` against the validated solution; `linearODE(coefficients, forcing)`; `laplace`, `inverseLaplace`; `linearSystem(A)`, `planarSystem([f, g])` with proven equilibria; `seriesSolution({ p, q })`; `heat`, `wave`, `laplaceRectangle`, `laplaceDisc` with proven tails; `sturmLiouville` |
 | Differential geometry | `curve(components)`: `.curvature`, `.torsion`, `.length`, `.at(t)` with the Frenet frame and osculating circle; `surface(components)`: fundamental forms, Gaussian and mean curvature, `.at(u, v)` with the kind of point; `metric({ E, F, G })`: `.christoffel`, `.geodesic`, `.transport`, `.gaussBonnet` |
 | ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
 | Boundary value problems | `bvp({ f, interval, left, right })` (Refinement of a `BVPSolution`) |

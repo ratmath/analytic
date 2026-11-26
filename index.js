@@ -21,3 +21,6 @@ export { sequence, Sequence, recursive, RecursiveSequence, sum, Series, powerSer
 export { greens, stokes, divergenceTheorem, changeOfVariables, potential, lagrange } from "./src/theorems.js";
 export { curve, Curve, surface, Surface, metric, Metric } from "./src/geometry.js";
 export { tidy } from "./src/tidy.js";
+export { firstOrder, exactEquation, linearODE, laplace, inverseLaplace, linearSystem, planarSystem, PlanarSystem, seriesSolution } from "./src/diffeq.js";
+export { heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville } from "./src/pde.js";
+export { antiderivative, partialFractions } from "./src/antiderivative.js";
