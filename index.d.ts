@@ -526,3 +526,513 @@ export class BVPSolution {
   slopeAt(x: RationalLike | RationalInterval): RationalInterval;
 }
 export function bvp(spec: BvpSpec): Refinement<{ t: Float64Array; y: Float64Array; dy: Float64Array; start: number } | null, BVPSolution>;
+
+// ---- sequences and series
+
+export interface SequenceOptions {
+  /** The index (default "n"). */
+  variable?: string;
+  /** The first index (default 1). */
+  from?: number;
+  params?: Params;
+}
+export class Sequence {
+  constructor(term: ExpressionLike, options?: SequenceOptions);
+  readonly variable: string;
+  readonly from: number;
+  /** An exact Rational where the formula is rational at n, else a certified enclosure. */
+  term(n: number, options?: { digits?: number }): Rational | RationalInterval;
+  terms(count?: number, options?: { digits?: number }): Array<Rational | RationalInterval>;
+  /** The limit as n → ∞, or ±Infinity. Throws AnalyticError ("no-limit", "undecided") where none is proven. */
+  limit(options?: { digits?: number }): RationalInterval | number;
+  /** The direction, proven for every n ≥ from. */
+  monotone(options?: { digits?: number }): { direction: "increasing" | "decreasing" | "constant"; from: number; proven: string };
+  /** Bounds on every term; null for a bound that does not exist. */
+  bounds(options?: { digits?: number }): { lower: Rational | null; upper: Rational | null; bounded: boolean };
+  series(): Series;
+}
+export function sequence(term: ExpressionLike, options?: SequenceOptions): Sequence;
+
+export interface FixedPoint {
+  point: RationalInterval;
+  /** g′ at the fixed point. */
+  multiplier: RationalInterval | null;
+  kind: "attracting" | "repelling" | "neutral or undecided";
+  unique: boolean | null;
+}
+export class RecursiveSequence {
+  constructor(next: ExpressionLike, options: { start: RationalLike; variable?: string; params?: Params });
+  /** Exact Rationals while the fractions stay short, then certified enclosures. */
+  terms(count?: number, options?: { digits?: number; maxDigits?: number }): Array<Rational | RationalInterval>;
+  fixedPoints(interval: IntervalLike, options?: { digits?: number }): FixedPoint[];
+  /** The limit, proven by contraction on `basin`; `enters` is the first term proven to lie in it. */
+  limit(interval: IntervalLike, options?: { digits?: number; maxSteps?: number }): { limit: RationalInterval; enters: number; rate: Rational; basin: RationalInterval };
+}
+export function recursive(next: ExpressionLike, options: { start: RationalLike; variable?: string; params?: Params }): RecursiveSequence;
+
+export interface TestResult {
+  test: "nth term" | "ratio" | "root" | "comparison" | "integral" | "alternating";
+  verdict: "convergent" | "divergent" | "inconclusive";
+  reason: string;
+  /** The limit that decided (nth term, ratio, root). */
+  limit?: RationalInterval | number;
+  /** comparison: the scale n^p·log(n)^m the term behaves like. */
+  like?: string;
+  exponent?: Rational;
+  log?: Rational;
+  coefficient?: RationalInterval | null;
+  /** integral, alternating: the index from which the hypothesis is proven. */
+  from?: number;
+  integral?: RationalInterval;
+}
+export interface SeriesSum {
+  /** Holds the sum. */
+  enclosure: RationalInterval;
+  /** How many terms were added. */
+  terms: number;
+  upTo: number;
+  partial: Rational | RationalInterval;
+  /** Holds the sum of all later terms. */
+  tail: RationalInterval;
+  /** The argument that bounds the tail. */
+  by: string;
+  /** Whether the width asked for was reached. */
+  met: boolean;
+}
+export class Series {
+  constructor(term: ExpressionLike, options?: SequenceOptions);
+  term(n: number, options?: { digits?: number }): Rational | RationalInterval;
+  partial(N: number, options?: { digits?: number }): Rational | RationalInterval;
+  divergenceTest(options?: { digits?: number }): TestResult;
+  ratioTest(options?: { digits?: number }): TestResult;
+  rootTest(options?: { digits?: number }): TestResult;
+  comparisonTest(options?: { digits?: number }): TestResult;
+  integralTest(options?: { digits?: number }): TestResult;
+  alternatingTest(options?: { digits?: number }): TestResult;
+  tests(options?: { digits?: number }): TestResult[];
+  convergence(options?: { digits?: number }): { convergence: "absolutely convergent" | "conditionally convergent" | "convergent" | "divergent" | "undecided"; by: string | null; reason: string; test?: TestResult };
+  /** Throws AnalyticError for a divergent or undecided series. */
+  sum(options?: { digits?: number; maxTerms?: number }): SeriesSum;
+}
+export function sum(term: ExpressionLike, options?: SequenceOptions): Series;
+
+export interface EndPoint {
+  point: Rational;
+  convergence: string;
+  by: string | null;
+  reason: string;
+}
+export class PowerSeries {
+  constructor(coefficient: ExpressionLike, options?: { index?: string; from?: number; centre?: RationalLike; variable?: string });
+  coefficient(n: number): Rational | RationalInterval;
+  radius(options?: { digits?: number }): { radius: RationalInterval | number; limit: RationalInterval | number; by: string };
+  /** `text` is the interval of convergence, with "?" at an end no test decided. */
+  interval(options?: { digits?: number }): { radius: Rational | RationalInterval | number; left: EndPoint | null; right: EndPoint | null; text: string };
+  at(x: RationalLike): Series;
+  value(x: RationalLike, options?: { digits?: number; maxTerms?: number }): SeriesSum;
+  partial(N: number): AnalyticFunction;
+  derivative(): PowerSeries;
+  integral(): PowerSeries;
+}
+export function powerSeries(coefficient: ExpressionLike, options?: { index?: string; from?: number; centre?: RationalLike; variable?: string }): PowerSeries;
+
+/** Lagrange's bound M·r^(n+1)/(n+1)! beside the true maximum of |f − T_n| on the interval. */
+export function taylorRemainder(
+  f: ExpressionLike | AnalyticFunction,
+  options: { about?: RationalLike; order?: number; on: [RationalLike, RationalLike]; variable?: string; digits?: number },
+): { coefficients: RationalInterval[]; M: RationalInterval; radius: Rational; bound: Rational; actual: RationalInterval; holds: boolean };
+
+export class FunctionSequence {
+  constructor(term: ExpressionLike, options?: { variable?: string; index?: string });
+  member(n: number): AnalyticFunction;
+  pointwise(x: RationalLike, options?: { digits?: number }): RationalInterval | number;
+  /** sup |f_n − limit| on the interval: the upper end is a proven bound, the lower end a value that is taken. */
+  supDistance(n: number, interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { digits?: number; samples?: number }): RationalInterval;
+  uniform(interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { ns?: number[]; digits?: number }): { verdict: "uniform" | "not uniform so far" | "undecided"; table: Array<{ n: number; sup: RationalInterval }>; reason: string; from?: number };
+}
+export function functionSequence(term: ExpressionLike, options?: { variable?: string; index?: string }): FunctionSequence;
+
+// ---- theorems of vector calculus
+
+export type Bounds = Record<string, [RationalLike | string, RationalLike | string]>;
+export interface TheoremSide {
+  name: string;
+  value: RationalInterval;
+  pieces?: Array<{ side?: string; face?: string; curve?: Record<string, string>; integrand?: string; value: RationalInterval }>;
+  integrand?: ScalarField | string;
+  curl?: ScalarField[];
+  normal?: string[];
+}
+export interface TheoremCheck {
+  statement: string;
+  left: TheoremSide;
+  right: TheoremSide;
+  /** Whether the two enclosures meet, as the theorem says they must. */
+  agree: boolean;
+  overlap: RationalInterval | null;
+}
+export function greens(F: [ExpressionLike, ExpressionLike], variables: [string, string], region: Bounds, options?: { digits?: number; flux?: boolean }): TheoremCheck;
+export function stokes(F: ExpressionLike[], variables: string[], surface: Record<string, ExpressionLike>, parameters: [string, string], region: Bounds, options?: { digits?: number }): TheoremCheck;
+export function divergenceTheorem(
+  F: ExpressionLike[],
+  variables: string[],
+  solid: Bounds,
+  options?: { digits?: number; surface?: Array<{ name?: string; r: Record<string, ExpressionLike>; parameters: [string, string]; region: Bounds; orientation?: 1 | -1 }> },
+): TheoremCheck;
+export function changeOfVariables(
+  f: ExpressionLike,
+  variables: string[],
+  map: Record<string, ExpressionLike>,
+  newVariables: string[],
+  region: Bounds,
+  options?: { digits?: number; original?: RegionLike; directDigits?: number },
+): { jacobian: string[][]; determinant: string; sign: string; factor: string; integrand: string; value: RationalInterval; direct?: RationalInterval; overlap?: RationalInterval | null; agree?: boolean };
+export function potential(
+  F: ExpressionLike[],
+  variables: string[],
+  options?: { digits?: number },
+): {
+  /** true: the curl multiplies out to 0. false: it is proven nonzero at `witness`. null: undecided. */
+  conservative: boolean | null;
+  curl: string[];
+  witness: { point: Record<string, Rational>; curl: RationalInterval } | null;
+  /** In closed form for polynomial fields. */
+  potential: ScalarField | null;
+  check: string[] | null;
+  /** φ(p) − φ(from), by a certified line integral along the segment. */
+  value(p: Array<RationalLike | string>, from?: Array<RationalLike | string>, options?: { digits?: number }): RationalInterval;
+};
+export interface LagrangeCandidate {
+  point: Record<string, RationalInterval>;
+  multiplier: RationalInterval;
+  value: RationalInterval;
+  unique: boolean | null;
+  proven: boolean;
+}
+export function lagrange(
+  f: ExpressionLike,
+  constraint: ExpressionLike,
+  variables: string[],
+  box: Bounds,
+  options?: { multiplier?: [RationalLike, RationalLike]; multiplierName?: string; digits?: number; maxBoxes?: number },
+): { lagrangian: string; candidates: LagrangeCandidate[]; max: { value: RationalInterval; at: Array<Record<string, RationalInterval>> } | null; min: { value: RationalInterval; at: Array<Record<string, RationalInterval>> } | null; complete: boolean };
+
+// ---- differential geometry (also "@ratmath/analytic/geometry")
+/** A quotient of polynomials in variables and calls, with sin² + cos² = 1 used and common factors cancelled. */
+export function tidy(tree: Ast): Ast;
+export type PointLike = RationalLike | string | RationalInterval;
+export interface CurvePoint {
+  point: RationalInterval[];
+  velocity: RationalInterval[];
+  speed: RationalInterval;
+  tangent: RationalInterval[];
+  normal: RationalInterval[] | null;
+  binormal?: RationalInterval[] | null;
+  /** Signed for a plane curve: positive where it turns left. */
+  curvature: RationalInterval;
+  torsion?: RationalInterval | null;
+  /** Radius and centre of the osculating circle; null where the curvature may vanish. */
+  radius: RationalInterval | null;
+  centre: RationalInterval[] | null;
+}
+export class Curve {
+  constructor(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, PointLike> });
+  readonly parameter: string;
+  readonly dimension: 2 | 3;
+  readonly position: string[];
+  readonly velocity: string[];
+  readonly acceleration: string[];
+  speed(): string;
+  curvature(): string;
+  curvatureAst(): Ast;
+  torsion(): string;
+  torsionAst(): Ast;
+  evolute(): Curve;
+  length(interval: [PointLike, PointLike], options?: { digits?: number }): RationalInterval;
+  totalCurvature(interval: [PointLike, PointLike], options?: { digits?: number }): RationalInterval;
+  at(t: PointLike, options?: { digits?: number }): CurvePoint;
+}
+export function curve(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, PointLike> }): Curve;
+export interface GaussBonnetReport {
+  statement: string;
+  curvature: { name: string; value: RationalInterval };
+  boundary: { name: string; value: RationalInterval; pieces: Array<{ side: string; path: Record<string, string>; value: RationalInterval }> };
+  angles: { name: string; value: RationalInterval; corners: Array<{ at: RationalInterval[]; exterior: RationalInterval }> };
+  total: RationalInterval;
+  expected: RationalInterval;
+  agree: boolean;
+}
+export class Metric {
+  constructor(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, PointLike> });
+  readonly parameters: [string, string];
+  first(): { E: string; F: string; G: string };
+  /** Keys such as "u_uv" for Γᵘ_uv. */
+  christoffel(): Record<string, string>;
+  christoffelAst(): Ast[][][];
+  gaussian(): string;
+  gaussianAst(): Ast;
+  area(region: Bounds, options?: { digits?: number }): RationalInterval;
+  totalCurvature(region: Bounds, options?: { digits?: number }): RationalInterval;
+  /** State (u, v, u′, v′). */
+  geodesic(spec: { from: [PointLike, PointLike]; direction: [PointLike, PointLike]; until: RationalLike | string; unit?: boolean; order?: number; tol?: RationalLike | string; track?: boolean; step?: RationalLike | string }): Refinement<{ t: Float64Array; y: Float64Array[] } | null, ODESolution>;
+  transport(
+    path: Record<string, ExpressionLike>,
+    interval: [RationalLike | string, RationalLike | string],
+    vector: [PointLike, PointLike],
+    options?: { parameter?: string; order?: number; tol?: RationalLike | string; step?: RationalLike | string },
+  ): { start: RationalInterval[]; vector: RationalInterval[]; length: RationalInterval; lengthAfter: RationalInterval | null; angle: RationalInterval | null; solution: ODESolution };
+  geodesicCurvature(path: Record<string, ExpressionLike>): string;
+  geodesicCurvature(path: Record<string, ExpressionLike>, t: PointLike, options?: { parameter?: string; digits?: number }): RationalInterval;
+  gaussBonnet(region: Bounds, options?: { digits?: number }): GaussBonnetReport;
+}
+export function metric(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Metric;
+export interface SurfacePoint {
+  point: RationalInterval[];
+  normal: RationalInterval[];
+  E: RationalInterval; F: RationalInterval; G: RationalInterval;
+  L: RationalInterval; M: RationalInterval; N: RationalInterval;
+  gaussian: RationalInterval;
+  mean: RationalInterval;
+  principal: [RationalInterval, RationalInterval];
+  /** null when the enclosures cannot tell. */
+  kind: "elliptic" | "hyperbolic" | "parabolic" | "planar" | null;
+}
+export class Surface extends Metric {
+  constructor(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> });
+  readonly position: string[];
+  normal(): string[];
+  second(): { L: string; M: string; N: string };
+  mean(): string;
+  meanAst(): Ast;
+  intrinsicGaussian(): string;
+  at(u: PointLike, v: PointLike, options?: { digits?: number }): SurfacePoint;
+}
+export function surface(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Surface;
+
+// ---- differential equations: methods
+export interface MethodStep { what: string; formula: string }
+export interface CheckReport { agree: boolean; numeric: RationalInterval; formula?: RationalInterval; relation?: RationalInterval; constant?: RationalInterval }
+export interface ParticularSolution {
+  x0: RationalLike | string;
+  y0: RationalLike | string;
+  constant: string;
+  /** The explicit solution, or null when the method gives only a relation. */
+  solution: string | null;
+  relation: string | null;
+  at(x: PointLike, options?: { digits?: number }): RationalInterval;
+  /** The formula against the validated numerical solution at x1. */
+  check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string; track?: boolean }): CheckReport;
+}
+export interface FirstOrderSolution {
+  equation: string;
+  type: "linear" | "separable" | "bernoulli" | "homogeneous" | "exact" | null;
+  types: string[];
+  steps: MethodStep[];
+  /** "y = …" with the constant C, or null. */
+  general: string | null;
+  /** "G(x, y) = C", or null. */
+  implicit: string | null;
+  singular: string[];
+  through(x0: RationalLike | string, y0: RationalLike | string): ParticularSolution;
+}
+export function firstOrder(rhs: ExpressionLike, options?: { x?: string; y?: string; method?: "linear" | "separable" | "bernoulli" | "homogeneous" }): FirstOrderSolution;
+export function exactEquation(M: ExpressionLike, N: ExpressionLike, options?: { x?: string; y?: string }): FirstOrderSolution & { exact: boolean; factor: string | null; potential: string | null };
+export interface LinearODESolution {
+  order: number;
+  characteristic: string;
+  roots: Array<{ root: string; kind: "real" | "complex"; multiplicity: number }>;
+  basis: string[];
+  homogeneous: string;
+  particular: string | null;
+  method: "undetermined coefficients" | "variation of parameters" | null;
+  verified?: boolean;
+  steps: MethodStep[];
+  general: string | null;
+  initial(values: Array<RationalLike | string>, x0?: RationalLike | string): { constants: string[]; solution: string; tree: Ast; at(x: PointLike, options?: { digits?: number }): RationalInterval; check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string }): CheckReport };
+}
+/** Coefficients highest derivative first: linearODE([1, -3, 2], "exp(x)") is y″ − 3y′ + 2y = eˣ. */
+export function linearODE(coefficients: Array<RationalLike | string>, forcing?: ExpressionLike | number, options?: { x?: string; y?: string }): LinearODESolution;
+export function laplace(f: ExpressionLike, options?: { t?: string; s?: string; delay?: RationalLike | string }): string;
+export function inverseLaplace(F: ExpressionLike, options?: { t?: string; s?: string }): { partialFractions: string; result: string; tree: Ast };
+export function linearSystem(matrix: Array<Array<RationalLike | string>>, options?: { t?: string }): {
+  matrix: Rational[][];
+  trace: Rational;
+  determinant: Rational;
+  discriminant: Rational;
+  eigenvalues: string[];
+  eigenvectors: Array<string[] | null> | null;
+  kind: string;
+  stability: string;
+  exponential: string[][];
+  solution(x0: Array<RationalLike | string>): string[];
+};
+export interface Equilibrium {
+  point: RationalInterval[];
+  unique: boolean;
+  jacobian: RationalInterval[][];
+  trace: RationalInterval;
+  determinant: RationalInterval;
+  kind: string | null;
+  stability: string | null;
+  hyperbolic: boolean | null;
+}
+export class PlanarSystem {
+  constructor(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, PointLike> });
+  jacobian(): string[][];
+  nullclines(): Record<string, string>;
+  equilibria(box: Bounds, options?: { digits?: number; tol?: RationalLike | string; maxBoxes?: number }): Equilibrium[] & { complete: boolean };
+  conserves(H: ExpressionLike): boolean;
+  along(V: ExpressionLike): string;
+  orbit(spec: { from: Array<RationalLike | string>; until: RationalLike | string; order?: number; tol?: RationalLike | string }): Refinement<unknown, ODESolution>;
+}
+export function planarSystem(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, PointLike> }): PlanarSystem;
+export function seriesSolution(spec: { p?: ExpressionLike | number; q?: ExpressionLike | number; about?: RationalLike | string; order?: number; x?: string }): {
+  about: Rational;
+  kind: "ordinary" | "regular singular" | "irregular singular";
+  indicial?: string;
+  exponents?: Array<Rational | string> | null;
+  solutions: Array<{ exponent: Rational; coefficients: Rational[]; text: string }>;
+  notes: string[];
+  /** Distance to the nearest other singular point (a floating-point estimate; Infinity when there is none). */
+  radius?: number;
+};
+export interface SeriesValue { value: RationalInterval | null; partial: RationalInterval; tail: Rational | null }
+export interface SeparatedSolution {
+  equation: string;
+  terms: number;
+  at(...point: Array<RationalLike | string>): SeriesValue;
+  formula(terms?: number, digits?: number): string;
+}
+export function heat(spec: { k?: RationalLike | string; length?: RationalLike | string; initial: ExpressionLike; ends?: "fixed" | "insulated"; terms?: number; digits?: number; x?: string }): SeparatedSolution & { coefficients: RationalInterval[]; modes: Array<{ n: number; coefficient: RationalInterval; rate: string }> };
+export function laplaceRectangle(spec: { width?: RationalLike | string; height?: RationalLike | string; top: ExpressionLike; terms?: number; digits?: number; x?: string }): SeparatedSolution & { coefficients: RationalInterval[] };
+export function laplaceDisc(spec: { radius?: RationalLike | string; boundary: ExpressionLike; terms?: number; digits?: number; angle?: string }): SeparatedSolution & { coefficients: { a: RationalInterval[]; b: RationalInterval[] }; mean: RationalInterval };
+export function wave(spec: { c?: RationalLike | string; length?: RationalLike | string | null; position?: ExpressionLike; velocity?: ExpressionLike; digits?: number; x?: string }): {
+  equation: string;
+  speed: Rational;
+  length: Rational | null;
+  at(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+  travelling: { right: string; left: string } | null;
+  modes(N?: number): Array<{ n: number; frequency: string; cos: RationalInterval; sin: RationalInterval }>;
+};
+export function sturmLiouville(spec: { p?: ExpressionLike; q?: ExpressionLike; w?: ExpressionLike; interval: [RationalLike | string, RationalLike | string]; count?: number; from?: number; to?: number; width?: RationalLike | string; certify?: boolean; x?: string }): Array<{ index: number; eigenvalue: RationalInterval; estimate: number; proven: boolean }>;
+export function antiderivative(tree: Ast, name?: string): { tree: Ast; trust: "proven" | "checked" } | null;
+export function partialFractions(N: Rational[], D: Rational[]): { poly: Rational[]; linear: Array<{ root: Rational; power: number; coeff: Rational }>; quadratic: Array<{ p: Rational; q: Rational; alpha: Rational; beta: Rational }> } | null;
+
+// ---- numerical methods for teaching (also "@ratmath/analytic/methods")
+export function exactOf(x: number): Rational;
+export function nearestDouble(q: RationalLike | string): number;
+export function floatParts(x: number, intended?: string): {
+  value: number; sign: number; exponent: number; mantissa: bigint; bits: string; exact: Rational; ulp: Rational; next: number; previous: number;
+  intended?: Rational; error?: Rational; relativeError?: Rational;
+};
+export function floatOp(op: "+" | "-" | "*" | "/", a: number, b: number): { result: number; exact: Rational; error: Rational; relativeError: Rational | null; exactlyRepresentable: boolean };
+export function roundoff(expression: ExpressionLike, inputs?: Record<string, number>, options?: { digits?: number }): {
+  float: number; exact: RationalInterval; error: number; relativeError: number; digitsLost: number;
+  steps: Array<{ expression: string; float: number; exact: RationalInterval; relativeError: number }>;
+};
+export interface RootIteration { n: number; x: number; fx?: number; dfx?: number; a?: number; b?: number; bound?: number; error: number | null }
+export interface RootRun { method: string; iterations: RootIteration[]; root: RationalInterval | null; estimate: number; order: number | null; derivative?: string; multiplier?: RationalInterval | null; ratio?: number | null }
+export interface RootOptions { variable?: string; steps?: number; tol?: number; digits?: number }
+export function bisection(f: ExpressionLike, bracket: [number, number], options?: RootOptions): RootRun;
+export function newton(f: ExpressionLike, x0: number, options?: RootOptions): RootRun;
+export function secant(f: ExpressionLike, x0: number, x1: number, options?: RootOptions): RootRun;
+export function fixedPoint(g: ExpressionLike, x0: number, options?: RootOptions): RootRun;
+export interface Interpolant {
+  nodes: Rational[]; values: Rational[]; degree: number; dividedDifferences: Rational[][]; newton: string; lagrange: string; polynomial: string; coefficients: Rational[];
+  at(x: RationalLike | string): Rational;
+  error(x: RationalLike | string): RationalInterval;
+  maxError(interval: [RationalLike | string, RationalLike | string]): { value: RationalInterval; attained: Rational; at: Rational; textbook: Rational | null };
+}
+export function interpolate(source: Array<[RationalLike | string, RationalLike | string]> | ExpressionLike, options?: { nodes?: Array<RationalLike | string>; variable?: string }): Interpolant;
+export function equallySpaced(a: RationalLike | string, b: RationalLike | string, n: number): Rational[];
+export function chebyshevNodes(a: RationalLike | string, b: RationalLike | string, n: number, bits?: number): Rational[];
+export function spline(points: Array<[RationalLike | string, RationalLike | string]>): { pieces: Array<{ from: Rational; to: Rational; coefficients: Rational[]; polynomial: string }>; moments: Rational[]; at(x: RationalLike | string): Rational };
+export function leastSquares(points: Array<[RationalLike | string, RationalLike | string]>, degree?: number): { coefficients: Rational[]; polynomial: string; residual: Rational; at(x: RationalLike | string): Rational };
+export function differences(f: ExpressionLike, x: number, options?: { kind?: "forward" | "backward" | "central" | "second"; steps?: number[]; variable?: string }): { exact: RationalInterval; rows: Array<{ h: number; value: number; error: number; truncation: number | null }>; best: { h: number; value: number; error: number } };
+export function richardson(f: ExpressionLike, x: number, options?: { h?: number; levels?: number; variable?: string }): { table: number[][]; errors: number[][]; exact: RationalInterval };
+export function quadratureRule(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], options?: { rule?: "midpoint" | "trapezoid" | "simpson"; n?: number; variable?: string }): { rule: string; panels: number; h: Rational; order: number; value: RationalInterval; exact: RationalInterval; error: RationalInterval; bound: Rational | null };
+export function romberg(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], options?: { levels?: number; variable?: string }): { table: number[][]; errors: number[][]; exact: RationalInterval };
+export function legendre(n: number): Rational[];
+export function gaussLegendre(n: number, options?: { digits?: number }): { polynomial: Rational[]; nodes: RationalInterval[]; weights: RationalInterval[] };
+export function gaussRule(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], n?: number, options?: { digits?: number; variable?: string }): { value: RationalInterval; exact: RationalInterval; error: RationalInterval; nodes: RationalInterval[]; weights: RationalInterval[] };
+export type OneStepMethod = "euler" | "heun" | "midpoint" | "rk4" | "ab2";
+export interface OdeMethodSpec { method?: OneStepMethod; t0?: number; y0: number; until: number; steps?: number; variables?: [string, string] }
+export function odeMethod(f: ExpressionLike, spec: OdeMethodSpec): { method: string; order: number; h: number; steps: Array<{ n: number; t: number; y: number; exact: RationalInterval | null; error: number | null }>; finalError: number | null };
+export function stepSizeStudy(f: ExpressionLike, spec: OdeMethodSpec & { counts?: number[] }): { rows: Array<{ steps: number; h: number; error: number | null; ratio: number | null; observedOrder: number | null }> };
+export function stability(method?: "euler" | "heun" | "midpoint" | "rk4"): { method: string; polynomial: string; interval: [RationalInterval, RationalInterval]; largestStep(lambda: RationalLike | string | number): RationalInterval };
+
+// ---- Fourier transforms (also "@ratmath/analytic/transform")
+export interface ComplexEnclosure { re: RationalInterval; im: RationalInterval; toString(): string }
+export type FourierConvention = "angular" | "unitary" | "frequency";
+export type TransformEnd = RationalLike | string | number;
+export interface FourierTransformOptions { variable?: string; frequency?: string; convention?: FourierConvention; support?: [TransformEnd, TransformEnd]; digits?: number; formula?: boolean }
+export class FourierTransform {
+  constructor(f: ExpressionLike, options?: FourierTransformOptions);
+  readonly variable: string;
+  readonly frequency: string;
+  readonly convention: FourierConvention;
+  readonly text: string;
+  readonly kernel: string;
+  /** The transform as a formula when f is a sum of standard pairs; it has agreed with the certified integrals at two frequencies. */
+  readonly formula: { re: string; im: string; text: string; trust: "checked" } | null;
+  readonly pairs: string[];
+  at(w: RationalLike | string, options?: { digits?: number }): ComplexEnclosure;
+  formulaAt(w: RationalLike | string, options?: { digits?: number }): ComplexEnclosure;
+  check(w: RationalLike | string, options?: { digits?: number }): { integral: ComplexEnclosure; formula: ComplexEnclosure; agrees: boolean };
+  inversion(x: RationalLike | string, options?: { digits?: number }): { inverse: ComplexEnclosure; value: RationalInterval; agrees: boolean };
+  parseval(options?: { digits?: number }): { time: RationalInterval; frequency: RationalInterval; agrees: boolean };
+}
+export function fourierTransform(f: ExpressionLike, options?: FourierTransformOptions): FourierTransform;
+export interface InverseFourierOptions { variable?: string; to?: string; convention?: FourierConvention; digits?: number }
+export class InverseFourier {
+  constructor(F: ExpressionLike | { re: ExpressionLike; im?: ExpressionLike }, options?: InverseFourierOptions);
+  at(x: RationalLike | string, options?: { digits?: number }): ComplexEnclosure;
+}
+export function inverseFourier(F: ExpressionLike | { re: ExpressionLike; im?: ExpressionLike }, options?: InverseFourierOptions): InverseFourier;
+export function convolution(f: ExpressionLike, g: ExpressionLike, options?: { variable?: string; digits?: number }): {
+  at(x: RationalLike | string): RationalInterval;
+  theorem(x: RationalLike | string): { convolution: RationalInterval; viaTransforms: RationalInterval; transform: { re: string; im: string }; agrees: boolean };
+};
+export function heatLine(spec: { k?: RationalLike | string; initial: ExpressionLike; support?: [TransformEnd, TransformEnd]; digits?: number; x?: string }): {
+  equation: string;
+  at(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+  viaTransform(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+  check(x: RationalLike | string, t: RationalLike | string): { kernel: RationalInterval; viaTransform: RationalInterval; agrees: boolean };
+  heat(): RationalInterval;
+};
+export function cyclotomic(n: number): Rational[];
+export class Cyclotomic {
+  constructor(n: number, coefficients: Array<RationalLike | string>);
+  readonly n: number;
+  readonly coefficients: Rational[];
+  static root(n: number, k?: number): Cyclotomic;
+  static of(n: number, q: Cyclotomic | RationalLike | string): Cyclotomic;
+  add(o: Cyclotomic | RationalLike | string): Cyclotomic;
+  subtract(o: Cyclotomic | RationalLike | string): Cyclotomic;
+  multiply(o: Cyclotomic | RationalLike | string): Cyclotomic;
+  scale(q: RationalLike | string): Cyclotomic;
+  rotate(k: number): Cyclotomic;
+  conjugate(): Cyclotomic;
+  norm2(): Cyclotomic;
+  equals(o: Cyclotomic | RationalLike | string): boolean;
+  isRational(): boolean;
+  rational(): Rational | null;
+  enclose(digits?: number): ComplexEnclosure;
+  toNumber(): { re: number; im: number };
+  toString(): string;
+}
+export function rootOfUnity(n: number, k?: number): Cyclotomic;
+export interface DiscreteSpectrum {
+  n: number;
+  values: Cyclotomic[];
+  text: string[];
+  enclose(digits?: number): ComplexEnclosure[];
+  power(): Array<Rational | Cyclotomic>;
+  multiplications: number;
+  inverse: boolean;
+}
+export function dft(values: Array<Cyclotomic | RationalLike | string>, options?: { inverse?: boolean }): DiscreteSpectrum;
+export function fft(values: Array<Cyclotomic | RationalLike | string>, options?: { inverse?: boolean; check?: boolean }): DiscreteSpectrum & { definition: number; levels: number; perLevel: number[]; agrees: boolean | null };
+export function alias(frequency: RationalLike | string, rate: RationalLike | string): { frequency: Rational; rate: Rational; nyquist: Rational; alias: Rational; sign: 1 | -1; aliased: boolean };
+export function sinusoidSamples(spec: { frequency: RationalLike | string; rate: RationalLike | string; count: number; kind?: "cos" | "sin" }): Cyclotomic[];
+export function sample(f: ExpressionLike, spec: { rate: RationalLike | string; count: number; from?: RationalLike | string; variable?: string; digits?: number }): { times: Rational[]; values: RationalInterval[] };

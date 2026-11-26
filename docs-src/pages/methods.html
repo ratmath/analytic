@@ -1,0 +1,71 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>First-order equations: the methods</h1>
+  <p>The <a href="#odes">validated solver</a> answers "what is y(2)?" with a proof and no formula. A course asks for the formula and for the method that finds it. <code>firstOrder</code> recognises the standard types of equation \(y' = f(x, y)\), carries out the method, and reports every step. <code>exactEquation</code> does the same for \(M\,dx + N\,dy = 0\).</p>
+<pre><code>const s = firstOrder("x - 2*y");          // y' = x - 2y
+s.type;       // "linear"
+s.general;    // "y = 1/2*x - 1/4 + C*exp(-2*x)"
+s.steps;      // [{ what, formula }, …]
+
+const p = s.through(0, 1);                // the solution with y(0) = 1
+p.solution;   // "1/2*x - 1/4 + 5/4*exp(-2*x)"
+p.check(1);   // { agree: true, numeric: […], formula: […] }</code></pre>
+  <h2>A formula that has been checked</h2>
+  <p>Every closed form here can be compared with the validated numerical solution. <code>check(x1)</code> solves the initial value problem to \(x_1\) with proven error bounds and evaluates the formula there with proven error bounds; the two enclosures of \(y(x_1)\) must meet. For a solution given only as a relation \(G(x, y) = C\), the relation is evaluated on the numerical enclosure and must contain the constant. A wrong formula fails this test, so a mistake in the algebra cannot pass unnoticed. A check takes from a fraction of a second to some seconds, depending on the equation.</p>
+
+  <h2>The types</h2>
+  <table class="ref">
+    <tr><th>type</th><th>form</th><th>method</th></tr>
+    <tr><td>linear</td><td>\(y' = a(x) + b(x)\,y\)</td><td>multiply by \(\mu = e^{-\int b\,dx}\); then \((\mu y)' = \mu a\)</td></tr>
+    <tr><td>separable</td><td>\(y' = g(x)\,h(y)\)</td><td>\(\int dy/h(y) = \int g(x)\,dx + C\)</td></tr>
+    <tr><td>Bernoulli</td><td>\(y' = p(x)\,y + q(x)\,y^n\)</td><td>\(v = y^{1-n}\) makes it linear</td></tr>
+    <tr><td>homogeneous</td><td>\(y' = F(y/x)\)</td><td>\(y = vx\) makes it separable: \(x v' = F(v) - v\)</td></tr>
+    <tr><td>exact</td><td>\(M\,dx + N\,dy = 0\) with \(M_y = N_x\)</td><td>find \(\varphi\) with \(\varphi_x = M\), \(\varphi_y = N\); solutions are \(\varphi = C\)</td></tr>
+  </table>
+  <p>An equation can be of several types: \(y' = xy\) is linear and separable. <code>types</code> lists all that apply and <code>type</code> is the one used; pass <code>{ method }</code> to choose. A linear equation is solved as linear because that gives \(y\) outright. A separable equation gives a relation between \(x\) and \(y\), reported as <code>implicit</code>, and where the relation is easily solved (a logarithm, a reciprocal, an arctangent) also as <code>general</code>.</p>
+  <p>Dividing by \(h(y)\) loses the constant solutions \(y = y_0\) with \(h(y_0) = 0\). They are listed in <code>singular</code>.</p>
+
+  <h2>Why the integrating factor works</h2>
+  <p>For \(y' - b\,y = a\), multiply by \(\mu(x)\). The left side becomes \(\mu y' - \mu b\,y\), which is the derivative of the product \(\mu y\) exactly when \(\mu' = -\mu b\), that is \(\mu = e^{-\int b}\). Then \((\mu y)' = \mu a\) is solved by one integration:</p>
+  \[ y = \frac{1}{\mu}\Bigl(\int \mu\,a\,dx + C\Bigr). \]
+
+  <h2>Exact equations</h2>
+  <p>If \(\varphi(x, y)\) is constant along a solution then \(\varphi_x\,dx + \varphi_y\,dy = 0\). So \(M\,dx + N\,dy = 0\) is solved at once if \(M = \varphi_x\) and \(N = \varphi_y\) for some \(\varphi\), and since mixed partials agree that requires \(M_y = N_x\). When the test fails, a factor \(\mu\) may repair it: if \((M_y - N_x)/N\) depends on \(x\) alone then \(\mu(x) = e^{\int (M_y - N_x)/N\,dx}\) works, and likewise with the roles exchanged. <code>exactEquation</code> tries both.</p>
+<pre><code>const e = exactEquation("3*x*y + y^2", "x^2 + x*y");
+e.exact;       // false
+e.factor;      // "x"
+e.potential;   // "y*x^3 + 1/2*y^2*x^2"     solutions: that = C</code></pre>
+  <h2>The integrals</h2>
+  <p>The methods need antiderivatives. <code>antiderivative(tree, name)</code> covers polynomials, rational functions by partial fractions, exponentials and sines of linear arguments with polynomial factors, and one level of substitution; it returns nothing unless differentiating its answer gives the integrand back. When an integral is not found, <code>type</code> is <code>null</code> and the validated solver is still there. The fuller engine is in the symbolic package.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>firstOrder(rhs, { x = "x", y = "y", method })</td><td>{ equation, type, types, steps, general, implicit, singular, through }</td></tr>
+    <tr><td>exactEquation(M, N, { x, y })</td><td>the same, with { exact, factor, potential }</td></tr>
+    <tr><td>s.through(x0, y0)</td><td>{ constant, solution, relation, at(x), check(x1) }</td></tr>
+    <tr><td>antiderivative(tree, name)</td><td>{ tree, trust: "proven" | "checked" } or null</td></tr>
+  </table></div>
+<template data-runbox>
+// Four equations, four methods; each formula checked against the validated solution.
+const show = (s) =&gt; {
+  PRINT(`${s.equation}    [${s.type}; also fits: ${s.types.filter((t) =&gt; t !== s.type).join(", ") || "none"}]`);
+  for (const step of s.steps) PRINT(`    ${step.what}:  ${step.formula}`);
+};
+
+const linear = firstOrder("x - 2*y");
+show(linear);
+const p = linear.through(0, 1);
+const c = p.check(1);
+PRINT(`  through (0, 1): y = ${p.solution}`);
+PRINT(`  at x = 1 the formula gives ${c.formula.low.toDecimal(12)}, the validated solver [${c.numeric.low.toDecimal(9)}, ${c.numeric.high.toDecimal(9)}]: agree ${c.agree}`);
+
+const logistic = firstOrder("y*(1 - y)");
+show(logistic);
+PRINT("  through (0, 1/10): y =", logistic.through(0, "1/10").solution, "  constant solutions:", logistic.singular.join(", "));
+
+show(firstOrder("x*y^2", { method: "separable" }));
+
+const exact = exactEquation("2*x*y + 1", "x^2 + 3*y^2");
+show(exact);
+exact.through(0, 1).relation;
+</template>

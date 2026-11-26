@@ -1,0 +1,66 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Sequences</h1>
+  <p>A sequence is a formula in a whole number n, or a rule that makes each term from the one before. <code>sequence</code> and <code>recursive</code> give terms exactly, limits with a proof, and statements such as "decreasing from n = 3 on" that hold for every later term and not only the ones looked at.</p>
+<pre><code>const a = sequence("(1 + 1/n)^n");
+a.terms(3);            // [2, 9/4, 64/27]   exact
+a.limit();             // an interval of width 10^-20 around e
+a.bounds();            // { lower, upper, bounded: true }: every term lies between them
+
+const b = sequence("n/(n^2 + 10)");
+b.monotone();          // { direction: "decreasing", from: 3, proven: "for every n ≥ 3" }
+sequence("n^2/(n + 1)").limit();   // Infinity
+sequence("2^n/n!").limit();        // 0, by the ratio of successive terms</code></pre>
+  <p>Factorials are written <code>n!</code> or <code>(2n)!</code>. The index is <code>n</code> unless you pass <code>{ variable }</code>, and starts at 1 unless you pass <code>{ from }</code>.</p>
+
+  <h2>What a limit means here</h2>
+  <p>A sequence \(a_n\) has limit \(L\) when for every \(\varepsilon > 0\) there is an \(N\) with \(|a_n - L| < \varepsilon\) for all \(n \ge N\). Computing many terms can suggest a limit and cannot prove one: the definition is about all the terms that were not computed.</p>
+  <p>The library proves limits from the formula. On a ray \(x \ge X\) it writes the term as</p>
+  \[ a(x) = e^{kx}\,x^{p}\,(\log x)^{m}\,\bigl(\ell + \rho(x)\bigr), \qquad |\rho(x)| \le \text{a bound that decreases to } 0, \]
+  <p>with exact exponents and an interval for \(\ell\). The limit, or the fact that the sequence grows without bound, is read off the exponents, and the bound on \(\rho\) holds for every \(x \ge X\) at once. This is the same machinery as <a href="#improper">limits at infinity</a>. Where it finds no such form, as for \(\sin n\), <code>limit</code> refuses.</p>
+
+  <h2>Monotone and bounded</h2>
+  <p>A sequence that is monotone and bounded converges; that theorem is how many limits are shown to exist before they are found. <code>monotone()</code> proves the direction by showing that the derivative of the formula has one sign on a ray \([N, \infty)\), then compares the terms before \(N\) one by one and moves \(N\) back as far as they agree. <code>bounds()</code> combines a bound valid on a ray with the finitely many terms before it.</p>
+  <p>If no proof is found the call refuses. For example the derivative of \((1 + 1/n)^n\) is a difference of two terms that nearly cancel, and its sign is not settled by this method, although its limit and bounds are.</p>
+
+  <h2>Recursive sequences</h2>
+<pre><code>const heron = recursive("x/2 + 1/x", { start: 2 });   // x₀ = 2, x_{k+1} = x_k/2 + 1/x_k
+heron.terms(5);              // [2, 3/2, 17/12, 577/408, 665857/470832]
+heron.fixedPoints([1, 2]);   // [{ point: [1.41421…], multiplier: [≈ 0], kind: "attracting", unique: true }]
+heron.limit([1, 2]);         // { limit: [1.41421…], enters: 1, rate: 0.696…, basin: [0.914…, 1.914…] }</code></pre>
+  <p>If \(x_{k+1} = g(x_k)\) converges and \(g\) is continuous, the limit is a fixed point, \(g(x^*) = x^*\). The <em>multiplier</em> \(g'(x^*)\) says what happens nearby: errors are multiplied by about \(g'(x^*)\) each step, so the fixed point attracts when \(|g'(x^*)| < 1\) and repels when \(|g'(x^*)| > 1\).</p>
+  <p><code>limit</code> turns that into a proof by the contraction principle. It finds an interval \(I\) around a fixed point such that \(g(I) \subset I\) and \(|g'| \le q < 1\) on \(I\); then \(g\) has exactly one fixed point in \(I\) and every sequence that enters \(I\) converges to it, with \(|x_{k+1} - x^*| \le q\,|x_k - x^*|\). It then follows the sequence with interval arithmetic until a term is proven to lie in \(I\). The answer reports the step at which that happened and the rate \(q\).</p>
+  <p>Terms are exact fractions while they stay short (Heron's iteration doubles the number of digits each step) and certified intervals after that.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>sequence(term, { variable = "n", from = 1, params })</td><td>Sequence</td></tr>
+    <tr><td>a.term(n), a.terms(count)</td><td>Rational where the formula is rational at n, else RationalInterval</td></tr>
+    <tr><td>a.limit({ digits = 20 })</td><td>RationalInterval, or ±Infinity; refuses with <code>no-limit</code> or <code>undecided</code></td></tr>
+    <tr><td>a.monotone()</td><td>{ direction, from, proven }</td></tr>
+    <tr><td>a.bounds()</td><td>{ lower, upper, bounded }; <code>null</code> for a bound that does not exist</td></tr>
+    <tr><td>a.series()</td><td>the <a href="#sums">series</a> Σ a(n)</td></tr>
+    <tr><td>recursive(next, { start, variable = "x" })</td><td>RecursiveSequence</td></tr>
+    <tr><td>r.terms(count, { maxDigits = 300 })</td><td>Rationals, then RationalIntervals</td></tr>
+    <tr><td>r.fixedPoints([a, b])</td><td>records { point, multiplier, kind, unique }</td></tr>
+    <tr><td>r.limit([a, b], { maxSteps = 400 })</td><td>{ limit, enters, rate, basin }; refuses when no contraction is proven</td></tr>
+  </table></div>
+<template data-runbox>
+// A limit, a direction and bounds, each proven for every term.
+const a = sequence("(2n^2 + 3)/(n^2 + n)");
+PRINT("terms:", a.terms(5).map(String).join(", "));
+PRINT("limit:", a.limit().low.toDecimal(12));
+const m = a.monotone();
+PRINT(`${m.direction} ${m.proven}`);
+const b = a.bounds();
+PRINT("every term lies between", b.lower.toDecimal(6), "and", b.upper.toDecimal(6));
+
+// Heron's iteration for sqrt(2): exact terms, then the proof that it converges
+const heron = recursive("x/2 + 1/x", { start: 2 });
+for (const [k, x] of heron.terms(6).entries()) PRINT(`x${k} =`, x.toDecimal ? x.toDecimal(30) : x.low.toDecimal(30));
+const L = heron.limit([1, 2]);
+PRINT("enters the basin at step", L.enters, "and then shrinks by at least the factor", L.rate.toDecimal(4), "each step");
+
+// the logistic map at r = 3.2 has two fixed points and neither attracts
+recursive("3.2*x*(1 - x)", { start: "1/2" }).fixedPoints([0, 1]).map((p) =&gt; `${p.point.low.toDecimal(4)}: ${p.kind}, multiplier ${p.multiplier.low.toDecimal(3)}`)
+</template>

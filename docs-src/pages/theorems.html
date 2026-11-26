@@ -1,0 +1,77 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Green, Stokes and the divergence theorem</h1>
+  <p>Each of the three theorems says that an integral over a region equals an integral over its boundary. <code>greens</code>, <code>stokes</code> and <code>divergenceTheorem</code> compute both sides, separately and with certified enclosures, and report whether the enclosures meet. The boundary is built from the description of the region, piece by piece, and each piece is returned.</p>
+<pre><code>const g = greens(["-y^3", "x^3"], ["x", "y"], { x: [0, 1], y: [0, 1] });
+g.statement;      // "∮ P dx + Q dy = ∬ (∂Q/∂x − ∂P/∂y) dA"
+g.left.value;     // [2, 2]   the circulation, four sides added
+g.left.pieces;    // [{ side: "y = 0", curve: { x: "t", y: "0" }, value }, …]
+g.right.value;    // [2, 2]   the double integral of 3x² + 3y²
+g.agree;          // true</code></pre>
+
+  <h2>Green's theorem</h2>
+  <p>For a region \(D\) in the plane with boundary \(C\) traversed counter-clockwise,</p>
+  \[ \oint_C P\,dx + Q\,dy \;=\; \iint_D \left(\frac{\partial Q}{\partial x} - \frac{\partial P}{\partial y}\right) dA . \]
+  <p>The region is given the way a double integral is written: <code>{ x: [a, b], y: [lo, hi] }</code>, where the bounds for <code>y</code> may be formulas in <code>x</code>. Its boundary is then four curves: the bottom \(y = lo(x)\) from left to right, the right side upward, the top \(y = hi(x)\) from right to left and the left side downward. A side of no length, such as the corner of a triangle, is left out.</p>
+<pre><code>// the triangle 0 ≤ y ≤ x ≤ 1
+greens(["x*y", "x^2"], ["x", "y"], { x: [0, 1], y: [0, "x"] });
+
+// the area of a region as a line integral: P = -y/2, Q = x/2 makes the right side ∬ 1 dA
+greens(["-y/2", "x/2"], ["x", "y"], { x: [0, 1], y: ["x^2", "x"] }).left.value;   // 1/6
+
+// the flux form  ∮ F·n ds = ∬ div F dA
+greens(["x^2", "y^2"], ["x", "y"], { x: [0, 1], y: [0, 2] }, { flux: true });</code></pre>
+
+  <h2>Stokes' theorem</h2>
+  <p>For a surface \(S\) with boundary curve \(C\),</p>
+  \[ \oint_C \mathbf F\cdot d\mathbf r \;=\; \iint_S (\nabla\times\mathbf F)\cdot\mathbf n\,dS . \]
+  <p>The surface is a parametrisation \(\mathbf r(u, v)\) over a region of the \((u, v)\) plane, and \(\mathbf n\,dS = \mathbf r_u \times \mathbf r_v\,du\,dv\). The boundary is the image of the boundary of the parameter region, taken counter-clockwise there, which is the orientation that matches this normal.</p>
+<pre><code>// the paraboloid z = u² over the unit disc, in polar parameters
+const s = stokes(["z", "x", "y"], ["x", "y", "z"],
+  { x: "u*cos(v)", y: "u*sin(v)", z: "u^2" }, ["u", "v"], { u: [0, 1], v: [0, "2*pi"] });
+s.left.value;     // [3.14159247…, 3.14159283…]
+s.right.value;    // [3.14158913…, 3.14159623…]   both hold π
+s.right.normal;   // the components of r_u × r_v</code></pre>
+  <p>In that example two of the four sides are the same segment traversed in opposite directions (\(v = 0\) and \(v = 2\pi\)) and one is the single point \(u = 0\). Their contributions cancel or vanish, and the pieces show it.</p>
+
+  <h2>The divergence theorem</h2>
+  <p>For a solid \(V\) with closed surface \(S\) and outward normal \(\mathbf n\),</p>
+  \[ \oiint_S \mathbf F\cdot\mathbf n\,dS \;=\; \iiint_V \nabla\cdot\mathbf F\,dV . \]
+  <p>The solid is <code>{ x: [a, b], y: [c, d], z: [e, f] }</code> with the bounds for <code>y</code> formulas in <code>x</code> and those for <code>z</code> formulas in <code>x</code> and <code>y</code>. Its surface is a top, a bottom and up to four walls. On the top \(z = f(x, y)\) the outward normal times the area element is \((-f_x, -f_y, 1)\,dx\,dy\), on a wall \(y = d(x)\) it is \((-d'(x), 1, 0)\,dx\,dz\), and so on; each face is one double integral.</p>
+<pre><code>const d = divergenceTheorem(["x", "y^2", "z"], ["x", "y", "z"],
+  { x: [0, 1], y: [0, "1 - x"], z: [0, "1 - x - y"] });      // a tetrahedron
+d.left.pieces.map((p) =&gt; p.face);   // top, bottom, and the walls; two walls have no height
+d.left.value;                       // 5/12
+d.right.value;                      // 5/12</code></pre>
+  <p>For a surface that is easier to parametrise than to cut into graphs, pass the pieces yourself as <code>{ surface: [{ r, parameters, region, orientation }] }</code>, with <code>orientation: -1</code> where \(\mathbf r_u\times\mathbf r_v\) points inward.</p>
+
+  <h2>What "agree" means</h2>
+  <p>The two sides are computed by different integrals over different sets, so their enclosures are independent. The theorem says the two numbers are equal, hence the enclosures must have a point in common, and <code>overlap</code> is their intersection, which contains the common value. If they did not meet, either the hypotheses would be violated (a field that is not smooth on the region, a wrong orientation) or the library would have a bug. That makes these functions useful as checks of a hand calculation: compute one side yourself and see whether it lies in <code>overlap</code>.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>greens([P, Q], [x, y], region, { digits = 8, flux })</td><td>{ statement, left, right, agree, overlap }</td></tr>
+    <tr><td>stokes(F, [x, y, z], surface, [u, v], region, { digits = 6 })</td><td>the same shape; <code>right</code> also has <code>curl</code>, <code>normal</code>, <code>integrand</code></td></tr>
+    <tr><td>divergenceTheorem(F, [x, y, z], solid, { digits = 5, surface })</td><td>the same shape; <code>left.pieces</code> lists each face</td></tr>
+    <tr><td>left.value, right.value, overlap</td><td>RationalInterval</td></tr>
+  </table></div>
+  <p>See also <a href="#multipliers">change of variables, potentials and Lagrange multipliers</a>, and the tools these are built on in <a href="#several">Several variables</a>.</p>
+<template data-runbox>
+const line = (name, r) =&gt; PRINT(name.padEnd(34), "left", r.left.value.low.toDecimal(8), " right", r.right.value.low.toDecimal(8), " agree:", r.agree);
+
+// Green on a region between two curves
+const g = greens(["exp(x)*y", "sin(x) + x*y"], ["x", "y"], { x: [0, 1], y: ["x^2", "x"] });
+line("Green, between y = x² and y = x", g);
+for (const p of g.left.pieces) PRINT("   ", p.side.padEnd(22), p.value.low.toDecimal(8));
+
+// Stokes on a tilted graph
+line("Stokes, z = 1 − u² − v²", stokes(["-y", "x", "z"], ["x", "y", "z"], { x: "u", y: "v", z: "1 - u^2 - v^2" }, ["u", "v"], { u: [-1, 1], v: [-1, 1] }));
+
+// the divergence theorem under a paraboloid
+const d = divergenceTheorem(["x", "y", "z^2"], ["x", "y", "z"], { x: [-1, 1], y: [-1, 1], z: [0, "2 - x^2 - y^2"] }, { digits: 4 });
+line("Divergence, under z = 2 − x² − y²", d);
+for (const p of d.left.pieces) PRINT("   ", p.face.padEnd(26), p.value.low.toDecimal(6));
+
+// area of the region between the curves, by a line integral
+"area between y = x² and y = x: " + greens(["-y/2", "x/2"], ["x", "y"], { x: [0, 1], y: ["x^2", "x"] }).left.value.low.toDecimal(10)
+</template>

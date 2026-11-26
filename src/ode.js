@@ -77,6 +77,7 @@ function problem(spec) {
     };
     // the variational system (y, J) with J′ = F_y(t, y)·J, when every partial derivative has a formula
     try {
+      if (spec.track === false) refuse("untracked", "asked not to track the initial value");
       const dF = fs.map((ast) => vars.map((name) => dAst(ast, name)));
       variational = (t, all) => {
         const ys = all.slice(0, n);

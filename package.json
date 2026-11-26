@@ -9,6 +9,18 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
+    "./methods": {
+      "types": "./index.d.ts",
+      "default": "./src/methods.js"
+    },
+    "./transform": {
+      "types": "./index.d.ts",
+      "default": "./src/transform.js"
+    },
+    "./geometry": {
+      "types": "./index.d.ts",
+      "default": "./src/geometry.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

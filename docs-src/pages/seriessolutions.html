@@ -1,0 +1,55 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Series solutions</h1>
+  <p>Many equations of physics have no solution in elementary functions: Airy's, Bessel's, Legendre's. Their solutions are defined by power series. <code>seriesSolution</code> builds those series for \(y'' + p(x)\,y' + q(x)\,y = 0\) about a point, with exact rational coefficients, and says what kind of point it is.</p>
+<pre><code>seriesSolution({ q: "-x", order: 7 });            // Airy: y'' = x y
+// kind "ordinary", solutions "1 + 1/6*x^3 + 1/180*x^6 + …" and "x + 1/12*x^4 + 1/504*x^7 + …"
+
+seriesSolution({ p: "1/x", q: "(x^2 - 1/4)/x^2" });   // Bessel of order 1/2
+// kind "regular singular", indicial "r^2 - 1/4 = 0", exponents [1/2, -1/2], two series</code></pre>
+  <h2>Ordinary points</h2>
+  <p>If \(p\) and \(q\) are analytic at \(x_0\), every solution is a power series \(\sum a_n (x - x_0)^n\) there, and it converges at least as far as the nearest singularity of \(p\) or \(q\) in the complex plane. Substituting the series and matching powers gives a recurrence that determines every \(a_n\) from \(a_0\) and \(a_1\):</p>
+  \[ (n+2)(n+1)\,a_{n+2} = -\sum_{k=0}^{n} \bigl( p_k\,(n-k+1)\,a_{n-k+1} + q_k\,a_{n-k} \bigr). \]
+  <p>The two solutions returned are the ones with \((y, y')(x_0) = (1, 0)\) and \((0, 1)\). <code>radius</code> estimates the distance to the nearest singularity.</p>
+
+  <h2>Regular singular points and Frobenius</h2>
+  <p>If \(p\) has at most a simple pole and \(q\) at most a double pole at \(x_0\), the point is a <em>regular singular point</em>. Write \(x p(x) = \sum P_k x^k\) and \(x^2 q(x) = \sum Q_k x^k\) (taking \(x_0 = 0\)). Frobenius' method looks for \(y = x^r \sum a_n x^n\); the lowest power gives the <em>indicial equation</em></p>
+  \[ r(r - 1) + P_0\,r + Q_0 = 0, \]
+  <p>and for each root \(r\) the recurrence</p>
+  \[ \bigl[(n+r)(n+r-1) + P_0 (n+r) + Q_0\bigr]\,a_n = -\sum_{k=1}^{n} \bigl(P_k (n-k+r) + Q_k\bigr)\,a_{n-k}. \]
+  <p>The larger root always gives a series. The smaller root gives a second one unless the roots are equal or differ by a whole number, in which case the bracket on the left can vanish for some \(n\); then the second solution contains \(\log x\), and <code>notes</code> says so. (When the right side happens to vanish too, the series exists after all, as for Bessel's equation of order one half.)</p>
+  <p>A point where the poles are worse is an <em>irregular</em> singular point, and the method does not apply.</p>
+
+  <h2>Checking a series</h2>
+  <p>The coefficients are exact, and a partial sum is a polynomial whose value at a rational point is an exact rational. Comparing it with the validated solution of the same initial value problem shows the true truncation error, as in the box below.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>seriesSolution({ p, q, about = 0, order = 8, x = "x" })</td><td>{ about, kind, indicial, exponents, solutions, notes, radius }</td></tr>
+    <tr><td>solutions[i]</td><td>{ exponent, coefficients, text }, coefficients exact</td></tr>
+  </table></div>
+<template data-runbox>
+// Airy's equation y'' = x·y about 0.
+const airy = seriesSolution({ q: "-x", order: 12 });
+PRINT(airy.kind, "point");
+for (const s of airy.solutions) PRINT("  ", s.text);
+
+// The partial sum at x = 1 against the validated solution of y'' = x·y, y(0) = 1, y'(0) = 0.
+const a = airy.solutions[0].coefficients;
+let partial = new Rational(0);
+for (const c of a) partial = partial.add(c);            // x = 1: just add the coefficients
+const exact = ode.solve({ f: ["v", "x*y"], vars: ["y", "v"], time: "x", y0: [1, 0], until: 1 }).exact().final[0];
+PRINT("partial sum at 1:", partial.toDecimal(12), " validated:", exact.low.toDecimal(12));
+PRINT("truncation error about", exact.low.subtract(partial).toDecimal(10));
+
+// Bessel's equation of order 0: equal exponents, so one series and a logarithm.
+const j0 = seriesSolution({ p: "1/x", q: "1", order: 8 });
+PRINT(j0.kind, " indicial:", j0.indicial);
+PRINT("  J0 =", j0.solutions[0].text);
+PRINT("  note:", j0.notes[0]);
+
+// Legendre's equation with n = 2: one solution is a polynomial, and the radius is 1.
+const leg = seriesSolution({ p: "-2*x/(1 - x^2)", q: "6/(1 - x^2)", order: 8 });
+PRINT("Legendre:", leg.solutions[0].text, "  radius", leg.radius.toFixed(3));
+seriesSolution({ p: "1/x^2", q: "1" }).kind;
+</template>

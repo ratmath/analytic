@@ -1,0 +1,84 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Power series and uniform convergence</h1>
+  <p><code>powerSeries(c)</code> is \(\sum c_n (x - a)^n\) for a formula \(c_n\). It finds the radius of convergence, examines each end of the interval, and evaluates the series with a proven tail. <code>taylorRemainder</code> puts Lagrange's bound beside the true error, and <code>functionSequence</code> measures the distance between a sequence of functions and its limit.</p>
+<pre><code>const p = powerSeries("1/n", { from: 1 });      // x + x^2/2 + x^3/3 + …  = -log(1 - x)
+p.radius();          // { radius: 1, limit: 1, by: "ratio" }
+p.interval().text;   // "[-1, 1)"
+p.interval().left;   // { point: -1, convergence: "conditionally convergent", by: "alternating", … }
+p.interval().right;  // { point: 1,  convergence: "divergent", by: "comparison", … }
+
+powerSeries("1/n!").interval().text;            // "(-inf, inf)"
+powerSeries("n!").interval().text;              // "{0}"
+powerSeries("2^n/n^2", { from: 1 }).interval().text;   // "[-1/2, 1/2]"
+powerSeries("1/n!").value(1, { digits: 15 }).enclosure;   // e, to 15 digits</code></pre>
+
+  <h2>Radius and end points</h2>
+  <p>A power series converges absolutely for \(|x - a| < R\) and diverges for \(|x - a| > R\), where</p>
+  \[ \frac1R = \lim_{n\to\infty}\left|\frac{c_{n+1}}{c_n}\right| \]
+  <p>when that limit exists. At the two points \(|x - a| = R\) the theorem is silent, and anything can happen: \(\sum x^n/n\) converges at \(-1\) and diverges at \(1\), \(\sum x^n/n^2\) converges at both, \(\sum x^n\) at neither. So when \(R\) is an exact rational number, <code>interval()</code> forms the two numerical series \(\sum c_n(\pm R)^n\) and runs the <a href="#sums">convergence tests</a> on each. The bracket in <code>text</code> is square where the series is proven to converge, round where it is proven to diverge, and <code>?</code> where no test decided.</p>
+
+  <h2>Operations</h2>
+  <p>Inside its interval a power series can be differentiated and integrated term by term, and the radius does not change (the ends may).</p>
+<pre><code>const d = p.derivative();      // Σ x^n, the geometric series
+d.interval().text;             // "(-1, 1)": both ends are lost
+p.integral();                  // Σ x^n/(n(n - 1)) from n = 2
+p.partial(4);                  // x + 1/2*x^2 + 1/3*x^3 + 1/4*x^4 as a function, to plot or evaluate
+p.at("1/2").sum();             // the numerical series at x = 1/2: encloses log 2</code></pre>
+
+  <h2>Taylor's remainder against the true error</h2>
+  <p>Taylor's theorem bounds the error of the polynomial \(T_n\) of order \(n\) about \(a\):</p>
+  \[ |f(x) - T_n(x)| \le \frac{M\,|x-a|^{n+1}}{(n+1)!}, \qquad M \ge \max |f^{(n+1)}| \text{ between } a \text{ and } x . \]
+  <p><code>taylorRemainder</code> computes both sides on an interval. \(M\) is the certified range of the next derivative, so the bound is a proven one. The true maximum of \(|f - T_n|\) is enclosed as well, so you can see how much the bound overestimates.</p>
+<pre><code>const r = taylorRemainder("exp(x)", { about: 0, order: 4, on: [-1, 1] });
+r.M;        // [0.3678…, 2.7182…]: the range of |f⁽⁵⁾| = exp on [-1, 1]
+r.bound;    // 0.02265… = e/120
+r.actual;   // [0.009948…, 0.009948…]: the true largest error, at x = 1
+r.holds;    // true</code></pre>
+
+  <h2>Pointwise and uniform convergence</h2>
+  <p>A sequence of functions \(f_n\) converges to \(f\) <em>pointwise</em> on a set if \(f_n(x) \to f(x)\) for each \(x\), and <em>uniformly</em> if the largest error goes to zero:</p>
+  \[ \sup_x |f_n(x) - f(x)| \to 0 . \]
+  <p>The difference matters: a uniform limit of continuous functions is continuous and can be integrated term by term, and a pointwise limit need not be. The standard example is \(x^n\) on \([0, 1]\), whose pointwise limit jumps at 1.</p>
+<pre><code>const f = functionSequence("x^n");
+f.pointwise("1/2");                  // 0
+f.supDistance(5, [0, "9/10"]);       // [0.59049, 0.59049]: sup |x^5 - 0| on the interval
+f.uniform(["1/10", "9/10"]).verdict; // "uniform": a bound for every x at once that tends to 0
+f.uniform([0, 1]).verdict;           // "not uniform so far": the supremum is 1 for every n tried</code></pre>
+  <p><code>supDistance</code> returns an interval for the supremum: the upper end is a proven bound from a certified <a href="#ranges">range</a>, the lower end a value the difference really takes. <code>uniform</code> returns the table of these for several \(n\), and a verdict. It says <code>"uniform"</code> only with a proof, which is the asymptotic bound of the <a href="#sequences">sequences</a> page carried out with \(x\) standing for the whole interval. When the suprema stay away from 0 it says <code>"not uniform so far"</code>, which is evidence about the \(n\) tried and is labelled as that. Otherwise the verdict is <code>"undecided"</code> and the table is what you have.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>powerSeries(coefficient, { index = "n", from = 0, centre = 0 })</td><td>PowerSeries</td></tr>
+    <tr><td>p.radius()</td><td>{ radius, limit, by }; radius is a RationalInterval, 0 or Infinity</td></tr>
+    <tr><td>p.interval()</td><td>{ radius, left, right, text }</td></tr>
+    <tr><td>p.coefficient(n), p.partial(N), p.at(x), p.value(x, { digits })</td><td>Rational; AnalyticFunction; Series; the result of <code>sum()</code></td></tr>
+    <tr><td>p.derivative(), p.integral()</td><td>PowerSeries</td></tr>
+    <tr><td>taylorRemainder(f, { about, order, on: [a, b] })</td><td>{ coefficients, M, radius, bound, actual, holds }</td></tr>
+    <tr><td>functionSequence(term, { variable = "x", index = "n" })</td><td>FunctionSequence</td></tr>
+    <tr><td>f.member(n), f.pointwise(x), f.supDistance(n, [a, b], limit = "0")</td><td>AnalyticFunction; RationalInterval or ±Infinity; RationalInterval</td></tr>
+    <tr><td>f.uniform([a, b], limit = "0", { ns })</td><td>{ verdict, table, reason }</td></tr>
+  </table></div>
+<template data-runbox>
+// Intervals of convergence, ends examined.
+for (const [c, from] of [["1", 0], ["1/n", 1], ["1/n^2", 1], ["n", 0], ["1/n!", 0], ["n!", 0], ["3^n/n", 1], ["(-1)^n/(2n + 1)", 0]]) {
+  const i = powerSeries(c, { from }).interval();
+  PRINT(`Σ (${c})·x^n`.padEnd(26), i.text);
+}
+
+// log 2 two ways: the series for -log(1 - x) at x = 1/2 (fast) and at x = -1 (slow)
+const p = powerSeries("1/n", { from: 1 });
+const fast = p.at("1/2").sum({ digits: 12 });
+const slow = p.at(-1).sum({ digits: 6 });
+PRINT("at  1/2:", fast.terms, "terms give", fast.enclosure.low.toDecimal(13));
+PRINT("at -1:  ", slow.terms, "terms give", slow.enclosure.low.toDecimal(8), "(this is -log 2)");
+
+// Lagrange's bound and the true error for sin about 0 on [-2, 2]
+for (const n of [3, 5, 7, 9]) {
+  const r = taylorRemainder("sin(x)", { order: n, on: [-2, 2] });
+  PRINT(`order ${n}: bound ${r.bound.toNumber().toExponential(2)}, true error ${r.actual.high.toNumber().toExponential(2)}`);
+}
+
+// x^n on [0, 1]: the largest distance to the limit 0 does not shrink
+functionSequence("x^n").uniform([0, 1], "0", { ns: [1, 5, 25] }).table.map((r) =&gt; `n = ${r.n}: sup = ${r.sup.low.toDecimal(3)}`)
+</template>

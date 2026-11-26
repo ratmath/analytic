@@ -23,6 +23,64 @@
 
 ### Added
 
+- Sequences and series (roadmap 13.4): `sequence` (exact terms, proven
+  limits, `monotone`, `bounds`), `recursive` (fixed points with their
+  multipliers, limits proven by contraction), `sum` (the nth-term, ratio,
+  root, comparison, integral and alternating tests as methods that return
+  their verdict and the quantity that decided it; `convergence()`; `sum()` as
+  finitely many terms plus a proven interval for the tail), `powerSeries`
+  (radius, interval of convergence with each end examined, term-by-term
+  derivative and integral), `taylorRemainder` (Lagrange's bound beside the
+  true error) and `functionSequence` (pointwise limits, the supremum of
+  |f_n − f| enclosed, uniform convergence only with a proof).
+- Theorems of vector calculus (roadmap 13.5): `greens`, `stokes` and
+  `divergenceTheorem` enclose both sides of each theorem independently, with
+  the boundary built from the region piece by piece, and report whether the
+  enclosures meet. `changeOfVariables` returns the Jacobian, its determinant
+  and the transformed integrand. `potential` decides whether a field is a
+  gradient (true, false with a witness, or undecided) and finds the potential.
+  `lagrange` returns certified candidates for constrained extremes.
+- Differential equations (roadmap 13.1). Solution methods with their steps:
+  `firstOrder` (linear, separable, Bernoulli, homogeneous), `exactEquation`
+  (with integrating factors) and `linearODE` (characteristic roots,
+  undetermined coefficients with resonance, variation of parameters, initial
+  values); each formula has a `check` against the validated numerical
+  solution. `laplace` and `inverseLaplace`. `linearSystem` (2 by 2: exact
+  e^{At}, the equilibrium classified) and `planarSystem` (every equilibrium in
+  a box proven and classified, conserved quantities). `seriesSolution` at
+  ordinary and regular singular points (Frobenius). `heat`, `laplaceRectangle`
+  and `laplaceDisc` by separation of variables with a proven bound on the
+  tail; `wave` by d'Alembert's formula; `sturmLiouville` eigenvalues by
+  shooting, each bracketed by two validated solutions. `antiderivative` and
+  `partialFractions` are the integrals the methods use.
+- Fourier transforms (roadmap 13.6), also at `@ratmath/analytic/transform`:
+  `fourierTransform` gives F(ω) as two certified improper integrals and, for
+  the standard pairs with the shift and multiply-by-x rules, a formula that
+  is checked against those integrals before it is returned; three
+  conventions. `parseval()` and `inversion(x)` are checked statements,
+  `convolution(f, g).theorem(x)` checks the convolution theorem, and
+  `heatLine` solves the heat equation on the whole line two ways. `dft` and
+  `fft` work exactly in the field of n-th roots of unity (`Cyclotomic`,
+  `rootOfUnity`, `cyclotomic`), with the fast algorithm's count beside n²;
+  `alias`, `sinusoidSamples` and `sample` for sampling.
+- Numerical analysis for teaching (roadmap 13.3), also at
+  `@ratmath/analytic/methods`: the textbook methods run as a program would
+  run them, each beside the certified answer so the error shown is the true
+  one. `floatParts`, `exactOf`, `nearestDouble`, `floatOp` and `roundoff`
+  for floating point; `bisection`, `newton`, `secant`, `fixedPoint` with the
+  observed order; `interpolate` (divided differences, Newton and Lagrange
+  forms, the true maximum error beside the textbook bound), `equallySpaced`,
+  `chebyshevNodes`, `spline`, `leastSquares`; `differences`, `richardson`,
+  `quadratureRule`, `romberg`, `legendre`, `gaussLegendre`, `gaussRule`;
+  `odeMethod`, `stepSizeStudy` and `stability`.
+- Differential geometry (roadmap 13.2), also at `@ratmath/analytic/geometry`:
+  `curve` (speed, arc length, Frenet frame, curvature, torsion, osculating
+  circle, evolute), `surface` (both fundamental forms, normal, Gaussian, mean
+  and principal curvatures, each point classified) and `metric` (Christoffel
+  symbols, Gaussian curvature from the metric alone, geodesics and parallel
+  transport as validated solutions, geodesic curvature, and `gaussBonnet` as
+  a checked statement). Formulas come out tidied by the new `tidy`.
+- `ode.solve({ ..., track: false })` skips tracking the initial value.
 - `enclose.gammaP(a, x)`, `enclose.gammaQ(a, x)` and `enclose.betaI(x, a, b)`:
   certified regularized incomplete gamma and beta functions, the cumulative
   probabilities behind the gamma, chi-square, beta, t and F distributions.

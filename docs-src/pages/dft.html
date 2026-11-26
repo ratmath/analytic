@@ -1,0 +1,52 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>The discrete Fourier transform</h1>
+  <p>For n numbers in a row, the transform is a finite sum, and the frequencies are the n-th roots of unity. With \(\zeta = e^{2\pi i/n}\),</p>
+  \[ X_k = \sum_{j=0}^{n-1} x_j\,\zeta^{-jk}, \qquad x_j = \frac1n\sum_{k=0}^{n-1} X_k\,\zeta^{jk} . \]
+<pre><code>dft([1, 2, 3, 4]).text;            // ["10", "-2 + 2ζ", "-2", "-2 - 2ζ"]   (ζ = i here)
+dft(X.values, { inverse: true });  // back to the rationals, exactly
+fft([1, 2, 3, 4, 5, 6, 7, 8]);     // the same values, 12 multiplications instead of 64
+alias(7, 8);                       // 7 Hz sampled at 8 Hz looks like 1 Hz</code></pre>
+  <h2>Exact arithmetic with roots of unity</h2>
+  <p>Floating point makes the transform of a pure tone a spike surrounded by entries like 1e-16. Here the entries are exact. Every power of ζ is a root of the cyclotomic polynomial \(\Phi_n\), whose degree is φ(n), so each number built from rationals and powers of ζ can be written in exactly one way as a polynomial in ζ of degree below φ(n). <code>Cyclotomic</code> stores those coefficients. Two such numbers are equal exactly when their coefficients are, a zero is the number 0, and the inverse transform returns the rationals it started from.</p>
+  <p>For n = 4, ζ is i and \(\Phi_4 = \zeta^2 + 1\), so the entries are Gaussian rationals a + bζ. For n = 5, \(\Phi_5 = \zeta^4 + \zeta^3 + \zeta^2 + \zeta + 1\) and an entry is a combination of 1, ζ, ζ², ζ³. <code>enclose(digits)</code> turns any entry into certified real and imaginary parts, and <code>power()</code> gives \(|X_k|^2\), which is the product with the conjugate (ζ ↦ ζ⁻¹) and is computed exactly too.</p>
+
+  <h2>The fast algorithm beside the definition</h2>
+  <p>The definition does n multiplications by a root of unity for each of n outputs: n² in all. When n is even, the sum splits into the even-numbered and the odd-numbered inputs,</p>
+  \[ X_k = E_k + \zeta^{-k} O_k, \qquad X_{k + n/2} = E_k - \zeta^{-k} O_k, \]
+  <p>where E and O are transforms of half the length. So one transform of length n costs two of length n/2 and n/2 multiplications, and for n a power of two that is \(\tfrac n2 \log_2 n\) in all. <code>fft</code> runs this recursion in the same exact arithmetic, counts its multiplications, and compares its output with <code>dft</code>, exactly. For n = 1024 the counts are 5120 against 1048576.</p>
+
+  <h2>Sampling and aliasing</h2>
+  <p>Sampling at rate r reads a signal only at the times k/r. At those times \(\cos 2\pi f t\) and \(\cos 2\pi (f + r) t\) are the same list of numbers, because the extra term adds a whole number of turns at every sample. So every frequency has an <em>alias</em> between 0 and r/2 (the Nyquist frequency) that gives identical samples, and <code>alias(f, r)</code> computes it with exact rationals. A sine comes back with <code>sign: -1</code> when the fold reverses it: 7 Hz sampled at 8 Hz is a 1 Hz sine upside down.</p>
+  <p><code>sinusoidSamples({ frequency, rate, count })</code> gives the samples exactly, as Cyclotomic numbers (it needs the samples to cover whole periods). Their transform is exactly two spikes, one at the alias and one at its mirror image, and nothing else. <code>sample(f, { rate, count })</code> samples any formula as enclosures.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>dft(values, { inverse })</td><td>{ n, values, text, enclose(digits), power(), multiplications }</td></tr>
+    <tr><td>fft(values, { inverse, check })</td><td>the same, with multiplications, definition, levels, perLevel, agrees</td></tr>
+    <tr><td>rootOfUnity(n, k), cyclotomic(n)</td><td>Cyclotomic ζᵏ; the coefficients of Φₙ</td></tr>
+    <tr><td>z.add, subtract, multiply, scale, rotate(k), conjugate(), norm2()</td><td>Cyclotomic</td></tr>
+    <tr><td>z.equals(w), z.rational(), z.enclose(digits), z.toNumber(), z.toString()</td><td></td></tr>
+    <tr><td>alias(frequency, rate)</td><td>{ frequency, rate, nyquist, alias, sign, aliased }</td></tr>
+    <tr><td>sinusoidSamples({ frequency, rate, count, kind }), sample(f, { rate, count, from })</td><td>Cyclotomic[]; { times, values }</td></tr>
+  </table></div>
+<template data-runbox>
+const X = dft([1, 2, 0, 0, 1]);
+PRINT("n = 5:", X.text.join("  |  "));
+PRINT("X₁ ≈", X.enclose(8)[1].re.low.toDecimal(8), "+", X.enclose(8)[1].im.low.toDecimal(8), "i");
+PRINT("inverse:", dft(X.values, { inverse: true }).text.join(", "));
+PRINT("|X_k|²:", X.power().map(String).join("  |  "));
+
+const fast = fft([1, 2, 3, 4, 5, 6, 7, 8]);
+PRINT("fft, n = 8:", fast.text.join("  |  "));
+PRINT(`multiplications: ${fast.multiplications} against ${fast.definition}; equal to the definition exactly: ${fast.agrees}`);
+const big = fft(Array.from({ length: 256 }, (_, i) =&gt; i % 7));
+PRINT(`n = 256: ${big.multiplications} against ${big.definition}, agrees: ${big.agrees}`);
+
+const a = alias(7, 8);
+PRINT(`7 Hz at 8 samples a second: alias ${a.alias} Hz, sine sign ${a.sign}`);
+const seven = sinusoidSamples({ frequency: 7, rate: 8, count: 8 });
+PRINT("samples of cos(2π·7t):", seven.map(String).join(", "));
+PRINT("their transform:", dft(seven).text.join(", "));
+dft(sinusoidSamples({ frequency: 1, rate: 8, count: 8 })).text.join(", ")
+</template>

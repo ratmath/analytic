@@ -1,0 +1,61 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Systems in the plane</h1>
+  <p><code>linearSystem</code> solves \(x' = Ax\) for a 2 by 2 matrix exactly and names the kind of equilibrium. <code>planarSystem</code> takes a nonlinear system, finds every equilibrium in a box with proof, and classifies each from its linearisation.</p>
+<pre><code>const s = linearSystem([[1, 2], [3, 2]]);
+s.eigenvalues;      // ["-1", "4"]
+s.kind;             // "saddle"
+s.exponential;      // e^{At} as four formulas in t
+s.solution([1, 0]); // ["2/5*exp(4*t) + 3/5*exp(-t)", "3/5*exp(4*t) - 3/5*exp(-t)"]
+
+const pendulum = planarSystem(["y", "-sin(x) - y/2"], ["x", "y"]);
+pendulum.equilibria({ x: [-4, 4], y: [-2, 2] });
+// three records: saddle at (-π, 0), stable spiral at (0, 0), saddle at (π, 0)</code></pre>
+  <h2>Linear systems</h2>
+  <p>With \(\tau = \operatorname{tr} A\) and \(\Delta = \det A\), the eigenvalues are \(\lambda = \tfrac12\bigl(\tau \pm \sqrt{\tau^2 - 4\Delta}\bigr)\), and the origin is</p>
+  <table class="ref">
+    <tr><th>condition</th><th>kind</th></tr>
+    <tr><td>\(\Delta < 0\)</td><td>saddle: real eigenvalues of opposite signs</td></tr>
+    <tr><td>\(\Delta > 0,\ \tau^2 > 4\Delta\)</td><td>node: stable if \(\tau < 0\), unstable if \(\tau > 0\)</td></tr>
+    <tr><td>\(\Delta > 0,\ \tau^2 < 4\Delta,\ \tau \ne 0\)</td><td>spiral: stable if \(\tau < 0\), unstable if \(\tau > 0\)</td></tr>
+    <tr><td>\(\Delta > 0,\ \tau = 0\)</td><td>centre: closed orbits</td></tr>
+    <tr><td>\(\Delta > 0,\ \tau^2 = 4\Delta\)</td><td>degenerate node, or a star when \(A\) is a multiple of the identity</td></tr>
+    <tr><td>\(\Delta = 0\)</td><td>a line of equilibria</td></tr>
+  </table>
+  <p>The entries are rational, so the signs of \(\tau\), \(\Delta\) and \(\tau^2 - 4\Delta\) are decided exactly and the borderline cases are recognised for what they are.</p>
+  <p>The solution is \(x(t) = e^{At}x(0)\). For a 2 by 2 matrix, with \(\mu = \tau/2\) and \(\delta = \mu^2 - \Delta\),</p>
+  \[ e^{At} = e^{\mu t}\Bigl(c(t)\,I + s(t)\,(A - \mu I)\Bigr), \qquad (c, s) = \begin{cases} (\cosh\omega t,\ \sinh(\omega t)/\omega) & \delta = \omega^2 > 0 \\ (1,\ t) & \delta = 0 \\ (\cos\omega t,\ \sin(\omega t)/\omega) & \delta = -\omega^2 < 0, \end{cases} \]
+  <p>which follows from \((A - \mu I)^2 = \delta I\) (Cayley-Hamilton). Larger systems use the matrix exponential in the linear algebra package.</p>
+
+  <h2>Nonlinear systems</h2>
+  <p>An equilibrium of \(x' = f(x, y),\ y' = g(x, y)\) is a common zero of \(f\) and \(g\). <code>equilibria(box)</code> bisects the box, discards pieces where interval arithmetic shows \(f\) or \(g\) has no zero, and applies a Krawczyk test to the rest: when the test succeeds there is exactly one equilibrium in that piece. The returned list has <code>complete: true</code> when every part of the box was either proven empty or proven to hold exactly one equilibrium.</p>
+  <p>Near an equilibrium the system looks like its linearisation, \(x' = Jx\) with \(J\) the Jacobian matrix there. If no eigenvalue of \(J\) has zero real part (the equilibrium is <em>hyperbolic</em>), the nonlinear system has the same kind of equilibrium with the same stability (Hartman-Grobman). The trace and determinant of \(J\) are enclosed over the small box that holds the equilibrium, so a reported saddle, node or spiral is proven. When the linear part is a centre, the nonlinear terms decide, and the record says so.</p>
+  <p>Two tools settle such cases. <code>conserves(H)</code> checks that \(H_x f + H_y g\) is identically zero: a conserved quantity with a strict extremum at the equilibrium makes it a centre. <code>along(V)</code> gives \(\dot V = V_x f + V_y g\) for a candidate Lyapunov function.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>linearSystem([[a, b], [c, d]])</td><td>{ trace, determinant, discriminant, eigenvalues, eigenvectors, kind, stability, exponential, solution(x0) }</td></tr>
+    <tr><td>planarSystem([f, g], [x, y], { params })</td><td>PlanarSystem</td></tr>
+    <tr><td>s.jacobian(), s.nullclines()</td><td>formulas</td></tr>
+    <tr><td>s.equilibria({ x: [a, b], y: [c, d] })</td><td>records { point, unique, jacobian, trace, determinant, kind, stability, hyperbolic }, with <code>complete</code> on the list</td></tr>
+    <tr><td>s.conserves(H), s.along(V)</td><td>boolean, formula</td></tr>
+    <tr><td>s.orbit({ from, until })</td><td>a Refinement like <a href="#odes">ode.solve</a></td></tr>
+  </table></div>
+<template data-runbox>
+// Linear systems across the trace-determinant plane.
+for (const A of [[[1, 2], [3, 2]], [[-2, 1], [1, -2]], [[-1, -2], [2, -1]], [[0, 1], [-1, 0]], [[-1, 1], [0, -1]]]) {
+  const s = linearSystem(A);
+  PRINT(`${JSON.stringify(A)}: eigenvalues ${s.eigenvalues.join(" and ")} -&gt; ${s.kind}`);
+}
+PRINT("rotation:", JSON.stringify(linearSystem([[0, 1], [-1, 0]]).exponential));
+
+// Competing species: every equilibrium in the box, proven and classified.
+const species = planarSystem(["x*(3 - x - 2*y)", "y*(2 - x - y)"], ["x", "y"]);
+const eq = species.equilibria({ x: [-1, 4], y: [-1, 4] });
+PRINT("searched the whole box:", eq.complete);
+for (const e of eq) PRINT(`  (${e.point.map((c) =&gt; c.low.toDecimal(4)).join(", ")}): ${e.kind}`);
+
+// Predator and prey: the linear part at (1, 1) is a centre, and a conserved quantity shows the orbits close.
+const lv = planarSystem(["x*(1 - y)", "y*(x - 1)"], ["x", "y"]);
+lv.conserves("x - log(x) + y - log(y)");
+</template>

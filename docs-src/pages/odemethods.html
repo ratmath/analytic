@@ -1,0 +1,57 @@
+<!-- wide: no -->
+<div class="eyebrow">Numerical methods</div>
+  <h1>Euler to Runge-Kutta</h1>
+  <p>The one-step methods for \(y' = f(t, y)\) and a two-step method, run in doubles with their table of steps. The <a href="#odes">validated solver</a> supplies the true solution at every step, so the global error is in the table, and halving the step shows each method's order.</p>
+<pre><code>const r = odeMethod("y - t^2 + 1", { y0: "1/2", until: 2, steps: 10, method: "rk4" });
+r.steps;        // [{ n, t, y, exact, error }, …]
+r.finalError;   // the true error at t = 2
+
+stepSizeStudy("y - t^2 + 1", { y0: "1/2", until: 2, method: "euler" }).rows;
+// [{ steps, h, error, ratio, observedOrder }, …]
+
+stability("rk4").interval;   // [-2.785…, 0]</code></pre>
+  <h2>The methods</h2>
+  <table class="ref">
+    <tr><th>method</th><th>step from \((t, y)\) with size \(h\)</th><th>order</th></tr>
+    <tr><td>euler</td><td>\(y + h\,f(t, y)\)</td><td>1</td></tr>
+    <tr><td>heun</td><td>\(y + \tfrac h2\,(k_1 + f(t + h,\ y + h k_1))\), \(k_1 = f(t, y)\)</td><td>2</td></tr>
+    <tr><td>midpoint</td><td>\(y + h\,f(t + \tfrac h2,\ y + \tfrac h2 k_1)\)</td><td>2</td></tr>
+    <tr><td>rk4</td><td>\(y + \tfrac h6\,(k_1 + 2k_2 + 2k_3 + k_4)\), the classical four stages</td><td>4</td></tr>
+    <tr><td>ab2</td><td>\(y + \tfrac h2\,(3f_n - f_{n-1})\), Adams-Bashforth, started with one Heun step</td><td>2</td></tr>
+  </table>
+
+  <h2>Local and global error</h2>
+  <p>A method of order \(p\) makes an error of size \(h^{p+1}\) in one step (the <em>local</em> error). Over the \(1/h\) steps needed to cross a fixed interval these add up, and the <em>global</em> error at the end is of size \(h^p\). So halving \(h\) divides the final error by about \(2^p\): by 2 for Euler, by 16 for the classical Runge-Kutta method. <code>stepSizeStudy</code> runs the same problem with several step counts and reports the ratio of successive errors and the order it implies.</p>
+  <p>The errors are true ones: at each step the method's double is compared with the validated enclosure of \(y(t_n)\), and <code>error</code> is the largest possible distance between them.</p>
+
+  <h2>Stability</h2>
+  <p>On the test equation \(y' = \lambda y\) each of these methods multiplies \(y\) by a polynomial \(R(h\lambda)\) per step: \(1 + z\) for Euler, \(1 + z + \tfrac12 z^2\) for the second-order methods, and the degree-4 Taylor polynomial of \(e^z\) for rk4. The true solution decays when \(\lambda < 0\); the numerical one decays only when \(|R(h\lambda)| < 1\). For real negative \(z\) that is an interval, \((-2, 0)\) for Euler and \((-2.785\ldots, 0)\) for rk4, with the left end enclosed here as a root of \(R(z) = 1\). A step size outside it makes the computed solution grow although the true one dies away: the reason stiff equations force small steps on explicit methods.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>odeMethod(f, { y0, t0 = 0, until, steps = 10, method })</td><td>{ method, order, h, steps: [{ n, t, y, exact, error }], finalError }</td></tr>
+    <tr><td>stepSizeStudy(f, { …, counts })</td><td>{ rows: [{ steps, h, error, ratio, observedOrder }] }</td></tr>
+    <tr><td>stability(method)</td><td>{ polynomial, interval, largestStep(lambda) }</td></tr>
+  </table></div>
+<template data-runbox>
+// y' = y - t^2 + 1, y(0) = 1/2 on [0, 2]: five methods, ten steps each.
+const problem = { y0: "1/2", until: 2, steps: 10 };
+for (const method of ["euler", "heun", "midpoint", "ab2", "rk4"]) {
+  const r = odeMethod("y - t^2 + 1", { ...problem, method });
+  PRINT(`${method.padEnd(8)} y(2) = ${r.steps.at(-1).y.toFixed(10)}   true error ${r.finalError.toExponential(3)}`);
+}
+PRINT("validated y(2):", odeMethod("y - t^2 + 1", { ...problem }).steps.at(-1).exact.low.toDecimal(12));
+
+// Halving the step: the error ratio shows the order.
+for (const method of ["euler", "heun", "rk4"]) {
+  const s = stepSizeStudy("y - t^2 + 1", { y0: "1/2", until: 2, method, counts: [10, 20, 40, 80] });
+  PRINT(`${method.padEnd(6)} observed orders: ${s.rows.slice(1).map((r) =&gt; r.observedOrder.toFixed(3)).join(", ")}`);
+}
+
+// A stiff problem: y' = -50(y - cos t). Euler is stable only for h &lt; 2/50.
+for (const steps of [20, 30, 100]) {
+  const r = odeMethod("-50*(y - cos(t))", { y0: 0, until: 1, steps, method: "euler" });
+  PRINT(`Euler with h = ${r.h}: error at t = 1 is ${r.finalError.toExponential(2)}`);
+}
+`largest stable Euler step for λ = -50: ${stability("euler").largestStep(-50).low}; for rk4: ${stability("rk4").largestStep(-50).low.toDecimal(5)}`;
+</template>

@@ -1,0 +1,69 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>The Fourier transform</h1>
+  <p>A Fourier series describes a function on an interval by a list of coefficients. The Fourier transform does the same for a function on the whole line, and the list becomes a function of a continuous frequency. <code>fourierTransform(f)</code> gives its values as certified enclosures, and, when f is one of the standard pairs, the formula as well.</p>
+<pre><code>const T = fourierTransform("exp(-x^2)");
+T.at(2);                 // { re, im }: two certified integrals
+T.formula.text;          // "sqrt(pi)*exp(-1/4*w^2)"
+T.check("1/3").agrees;   // formula and integral side by side
+T.parseval();            // { time, frequency, agrees }
+T.inversion("1/2");      // the inverse transform beside f(1/2)</code></pre>
+  \[ F(\omega) = \int_{-\infty}^{\infty} f(x)\,e^{-i\omega x}\,dx, \qquad f(x) = \frac{1}{2\pi}\int_{-\infty}^{\infty} F(\omega)\,e^{i\omega x}\,d\omega . \]
+  <p>That is the default convention, <code>"angular"</code>. <code>convention: "unitary"</code> puts \(1/\sqrt{2\pi}\) on both integrals, and <code>"frequency"</code> uses \(e^{-2\pi i \xi x}\) with no factor on either. Whichever is chosen is used consistently by the inverse, by Parseval and by the checks.</p>
+
+  <h2>Values</h2>
+  <p>Since \(e^{-i\omega x} = \cos\omega x - i\sin\omega x\), the real part of F(ω) is the integral of f(x) cos ωx and the imaginary part is minus the integral of f(x) sin ωx. Each is an <a href="#improper">improper integral</a>, and <code>at(ω)</code> returns the two enclosures. They are proven: the part of the line far out is bounded from the leading behaviour of f, which is the reason the function must be absolutely integrable. For 1/(1 + |x|) the integral of |f| diverges and <code>at</code> refuses. A function that is zero outside an interval is given with <code>support: [a, b]</code>; an end may be <code>"inf"</code>.</p>
+  <p>When f decays only like a power of x, the far part is known only by a bound and the enclosure is correspondingly wider (a few digits for 1/(1 + x²)). It is still an enclosure.</p>
+
+  <h2>The standard pairs</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>f(x)</th><th>F(ω)</th><th>name</th></tr>
+    <tr><td>\(e^{-ax^2}\)</td><td>\(\sqrt{\pi/a}\;e^{-\omega^2/4a}\)</td><td>Gaussian</td></tr>
+    <tr><td>\(e^{-a|x|}\)</td><td>\(\dfrac{2a}{a^2 + \omega^2}\)</td><td>two-sided exponential</td></tr>
+    <tr><td>\(\dfrac{1}{x^2 + s^2}\)</td><td>\(\dfrac{\pi}{s}\,e^{-s|\omega|}\)</td><td>Lorentzian</td></tr>
+    <tr><td>\(e^{-ax}\) for x &gt; 0, else 0</td><td>\(\dfrac{1}{a + i\omega}\)</td><td>one-sided exponential</td></tr>
+    <tr><td>1 on [a, b], else 0</td><td>\(\dfrac{e^{-ia\omega} - e^{-ib\omega}}{i\omega}\)</td><td>box</td></tr>
+  </table></div>
+  <p>Three rules extend the table. A shift f(x − c) multiplies the transform by \(e^{-ic\omega}\). Multiplying f by x differentiates the transform: \(x f(x) \mapsto i\,F'(\omega)\). And the transform is linear, so sums go term by term. With these, <code>fourierTransform</code> recognises any sum of terms of the form polynomial times \(e^{-ax^2 + bx + c}\) or polynomial times \(e^{-a|x - m|}\), the Lorentzian with any centre, polynomial times \(e^{-ax}\) on [0, ∞), and constants on a finite interval.</p>
+  <p>A formula found this way is compared with the certified integrals at two frequencies before it is returned, so its trust is <code>"checked"</code>: a wrong formula cannot come back. When f is not in the table, <code>formula</code> is <code>null</code> and the values are still available.</p>
+
+  <h2>Parseval and inversion</h2>
+  \[ \int_{-\infty}^{\infty} |f(x)|^2\,dx = \frac{1}{2\pi}\int_{-\infty}^{\infty} |F(\omega)|^2\,d\omega . \]
+  <p><code>parseval()</code> encloses both sides, the right one from the formula, and reports whether the enclosures meet. <code>inversion(x)</code> does the same for the inversion theorem: the inverse transform of the formula at x beside f(x). <code>inverseFourier(F)</code> is the inverse on its own, for a formula F you supply (a string for a real F, or <code>{ re, im }</code>).</p>
+
+  <h2>Convolution</h2>
+  \[ (f * g)(x) = \int_{-\infty}^{\infty} f(t)\,g(x - t)\,dt, \qquad \widehat{f * g} = \hat f\,\hat g . \]
+  <p><code>convolution(f, g).at(x)</code> is the integral, enclosed. <code>.theorem(x)</code> computes the same number a second way, as the inverse transform of the product of the two formulas, and checks that the two enclosures meet.</p>
+
+  <h2>The heat equation on the whole line</h2>
+  <p>Transforming \(u_t = k\,u_{xx}\) in x turns it into \(\hat u_t = -k\omega^2 \hat u\), so each frequency simply decays: \(\hat u(\omega, t) = F(\omega)\,e^{-k\omega^2 t}\). Multiplying by a Gaussian in ω is convolving with a Gaussian in x:</p>
+  \[ u(x, t) = \int_{-\infty}^{\infty} f(y)\,\frac{e^{-(x - y)^2/4kt}}{\sqrt{4\pi k t}}\,dy . \]
+  <p><code>heatLine({ k, initial })</code> gives <code>at(x, t)</code> from that integral, <code>viaTransform(x, t)</code> from the decaying frequencies, and <code>check(x, t)</code> for both together. <code>heat()</code> is the total \(\int u\,dx\), which does not change with time. On an interval the same equation is solved by <a href="#pdes">Fourier series</a>, and the wave equation on the whole line is <code>wave({ c, position, velocity })</code> with no length, by d'Alembert's formula.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>fourierTransform(f, { variable = "x", frequency = "w", convention, support, digits = 15 })</td><td>FourierTransform</td></tr>
+    <tr><td>T.at(ω), T.formulaAt(ω)</td><td>{ re, im } of RationalInterval</td></tr>
+    <tr><td>T.formula, T.pairs</td><td>{ re, im, text, trust } or null; the names of the pairs used</td></tr>
+    <tr><td>T.check(ω), T.parseval(), T.inversion(x)</td><td>both sides and <code>agrees</code></td></tr>
+    <tr><td>inverseFourier(F, { variable = "w", convention }).at(x)</td><td>{ re, im }</td></tr>
+    <tr><td>convolution(f, g).at(x), .theorem(x)</td><td>RationalInterval; { convolution, viaTransforms, transform, agrees }</td></tr>
+    <tr><td>heatLine({ k = 1, initial, support }).at(x, t), .viaTransform(x, t), .check(x, t), .heat()</td><td>RationalInterval</td></tr>
+  </table></div>
+<template data-runbox>
+const show = (iv) =&gt; iv.low.toDecimal(10);
+const T = fourierTransform("exp(-x^2)");
+PRINT("F(ω) =", T.formula.text, " pair:", T.pairs[0]);
+PRINT("F(2) from the integral:", show(T.at(2).re), " and √π/e =", Math.sqrt(Math.PI) / Math.E);
+for (const f of ["x*exp(-x^2)", "exp(-(x-1)^2)", "3*exp(-2*abs(x))", "1/(x^2+2*x+5)"]) PRINT(f, " ↦ ", fourierTransform(f).formula.text);
+PRINT("exp(-x) on [0, ∞) ↦ ", fourierTransform("exp(-x)", { support: [0, "inf"] }).formula.text);
+PRINT("exp(-x^4) has no formula:", fourierTransform("exp(-x^4)").formula, " but F(1) =", show(fourierTransform("exp(-x^4)").at(1).re));
+const p = T.parseval();
+PRINT("Parseval:", show(p.time), "=", show(p.frequency), p.agrees);
+const c = convolution("exp(-x^2)", "exp(-abs(x))").theorem(1);
+PRINT("(f∗g)(1):", show(c.convolution), " via transforms:", show(c.viaTransforms), c.agrees);
+const h = heatLine({ initial: "exp(-x^2)" });
+const u = h.check(1, "1/2");
+PRINT("heat: u(1, 1/2) =", show(u.kernel), "=", show(u.viaTransform), " exact:", Math.exp(-1 / 3) / Math.sqrt(3));
+`total heat ${show(h.heat())} = √π`
+</template>

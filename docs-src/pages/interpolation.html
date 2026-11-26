@@ -1,0 +1,60 @@
+<!-- wide: no -->
+<div class="eyebrow">Numerical methods</div>
+  <h1>Interpolation and approximation</h1>
+  <p>The polynomial through a set of points, in Newton's and Lagrange's forms with exact divided differences; the error formula beside the true error; Chebyshev nodes and the Runge phenomenon; natural cubic splines and least-squares polynomials, all with exact rational coefficients.</p>
+<pre><code>const p = interpolate([[0, 1], [1, 3], [2, 2]]);
+p.polynomial;            // "-3/2*x^2 + 7/2*x + 1"
+p.newton;                // "1 + 2*x - 3/2*x*(x - 1)"
+p.dividedDifferences;    // [[1, 3, 2], [2, -1], [-3/2]]   exact
+p.at("1/2");             // 19/8
+
+const q = interpolate("sin(x)", { nodes: equallySpaced(0, 1, 4) });
+q.maxError([0, 1]);      // { value, attained, at, textbook }</code></pre>
+  <h2>Divided differences</h2>
+  <p>Through \(n + 1\) points with distinct \(x_i\) there is exactly one polynomial of degree at most \(n\). Newton's form builds it one node at a time:</p>
+  \[ p(x) = f[x_0] + f[x_0, x_1](x - x_0) + f[x_0, x_1, x_2](x - x_0)(x - x_1) + \dots, \qquad f[x_i, \dots, x_{i+k}] = \frac{f[x_{i+1}, \dots, x_{i+k}] - f[x_i, \dots, x_{i+k-1}]}{x_{i+k} - x_i}. \]
+  <p>The table of divided differences is computed in exact rational arithmetic, so for data given as rationals the polynomial is the true one, with no rounding. Lagrange's form writes the same polynomial as \(\sum y_i\,\ell_i(x)\), where \(\ell_i\) is 1 at \(x_i\) and 0 at the other nodes.</p>
+
+  <h2>The error formula</h2>
+  <p>If \(f\) has \(n + 1\) continuous derivatives, then for each \(x\) there is a \(\xi\) with</p>
+  \[ f(x) - p(x) = \frac{f^{(n+1)}(\xi)}{(n+1)!}\,\prod_{i=0}^{n}(x - x_i). \]
+  <p><code>maxError</code> reports the true maximum of \(|f - p|\) on an interval, bracketed between a value attained and a proven upper bound, and beside it the bound the formula gives, \(\max|f^{(n+1)}| / (n+1)! \cdot \max|\prod (x - x_i)|\), with both maxima enclosed.</p>
+
+  <h2>Runge's example and Chebyshev nodes</h2>
+  <p>More nodes need not mean a better fit. For \(f(x) = 1/(1 + 25x^2)\) on \([-1, 1]\) with equally spaced nodes the error near the ends grows without bound as the degree rises. The product \(\prod(x - x_i)\) is the part of the error formula that the choice of nodes controls, and it is smallest in maximum when the nodes are the Chebyshev points</p>
+  \[ x_i = \cos\frac{(2i + 1)\pi}{2n}, \qquad i = 0, \dots, n - 1, \]
+  <p>which crowd towards the ends. <code>chebyshevNodes(a, b, n)</code> returns them rounded to nearby rationals.</p>
+
+  <h2>Splines and least squares</h2>
+  <p>A natural cubic spline is a cubic on each interval between nodes, with two continuous derivatives across the nodes and zero second derivative at the two ends. The second derivatives at the nodes solve a tridiagonal system, here exactly. A least-squares polynomial of degree \(d\) minimises \(\sum (p(x_i) - y_i)^2\); its coefficients solve the normal equations \(A^{\mathsf T}A\,c = A^{\mathsf T}y\), again exactly, and the residual is returned as an exact rational.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>interpolate(points) or interpolate(f, { nodes })</td><td>{ nodes, values, dividedDifferences, newton, lagrange, polynomial, coefficients, at(x), error(x), maxError([a, b]) }</td></tr>
+    <tr><td>equallySpaced(a, b, n), chebyshevNodes(a, b, n)</td><td>arrays of Rationals</td></tr>
+    <tr><td>spline(points)</td><td>{ pieces: [{ from, to, coefficients, polynomial }], moments, at(x) }</td></tr>
+    <tr><td>leastSquares(points, degree = 1)</td><td>{ coefficients, polynomial, residual, at(x) }</td></tr>
+  </table></div>
+<template data-runbox>
+// The table of divided differences for four values of 1/x.
+const p = interpolate("1/x", { nodes: [1, 2, 3, 4] });
+p.dividedDifferences.forEach((row, k) =&gt; PRINT(`order ${k}:`, row.map(String).join("   ")));
+PRINT("Newton form:", p.newton);
+PRINT("expanded:   ", p.polynomial);
+const e = p.maxError([1, 4]);
+PRINT(`max |1/x - p| on [1, 4]: between ${e.attained.toDecimal(6)} and ${e.value.toDecimal(6)}; the error formula promises at most ${e.textbook.toDecimal(6)}`);
+
+// Runge's example: equally spaced nodes against Chebyshev nodes.
+const f = "1/(1 + 25*x^2)";
+for (const n of [5, 9]) {
+  const equal = interpolate(f, { nodes: equallySpaced(-1, 1, n) }).maxError([-1, 1], { tolerance: 0.05 });
+  const cheb = interpolate(f, { nodes: chebyshevNodes(-1, 1, n) }).maxError([-1, 1], { tolerance: 0.05 });
+  PRINT(`${n} nodes: equally spaced max error ${equal.value.toDecimal(4)}, Chebyshev ${cheb.value.toDecimal(4)}`);
+}
+
+// A natural spline and a least-squares line through the same points.
+const pts = [[0, 0], [1, 1], [2, 0], [3, 1]];
+for (const piece of spline(pts).pieces) PRINT(`spline on [${piece.from}, ${piece.to}]: ${piece.polynomial}`);
+const line = leastSquares(pts, 1);
+`least-squares line ${line.polynomial}, sum of squares ${line.residual}`;
+</template>

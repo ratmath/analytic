@@ -16,4 +16,13 @@ export { field, ScalarField, jet, divergence, curl, jacobian, lineIntegral, surf
 export { bernoulli } from "./src/special.js";
 export { quad1 as quadrature } from "./src/quad.js";
 export { fourier, FourierSeries } from "./src/fourier.js";
+export { fourierTransform, FourierTransform, inverseFourier, InverseFourier, convolution, heatLine, cyclotomic, Cyclotomic, rootOfUnity, dft, fft, alias, sinusoidSamples, sample } from "./src/transform.js";
 export { bvp, BVPSolution } from "./src/bvp.js";
+export { sequence, Sequence, recursive, RecursiveSequence, sum, Series, powerSeries, PowerSeries, taylorRemainder, functionSequence, FunctionSequence } from "./src/sequences.js";
+export { greens, stokes, divergenceTheorem, changeOfVariables, potential, lagrange } from "./src/theorems.js";
+export { curve, Curve, surface, Surface, metric, Metric } from "./src/geometry.js";
+export { tidy } from "./src/tidy.js";
+export { firstOrder, exactEquation, linearODE, laplace, inverseLaplace, linearSystem, planarSystem, PlanarSystem, seriesSolution } from "./src/diffeq.js";
+export { heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville } from "./src/pde.js";
+export { antiderivative, partialFractions } from "./src/antiderivative.js";
+export { exactOf, nearestDouble, floatParts, floatOp, roundoff, bisection, newton, secant, fixedPoint, interpolate, equallySpaced, chebyshevNodes, spline, leastSquares, differences, richardson, quadratureRule, romberg, legendre, gaussLegendre, gaussRule, odeMethod, stepSizeStudy, stability } from "./src/methods.js";
