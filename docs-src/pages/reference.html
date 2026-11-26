@@ -102,6 +102,28 @@
     <tr><td>S.meanSquare(), S.meanSquareError(N)</td><td>RationalInterval</td><td>(1/L)∫f² and (1/L)∫(f − S<sub>N</sub>)², by Parseval</td></tr>
   </table></div>
 
+  <h2>Sequences and series</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>sequence(term, { variable = "n", from = 1 })</td><td>Sequence</td><td><code>term(n)</code>, <code>terms(count)</code>, <code>limit()</code>, <code>monotone()</code>, <code>bounds()</code>, <code>series()</code>. <code>n!</code> is read as a factorial. See <a href="#sequences">Sequences</a></td></tr>
+    <tr><td>recursive(next, { start, variable = "x" })</td><td>RecursiveSequence</td><td><code>terms(count)</code>, <code>fixedPoints([a, b])</code>, <code>limit([a, b])</code> proven by contraction</td></tr>
+    <tr><td>sum(term, { variable = "n", from = 1 })</td><td>Series</td><td><code>partial(N)</code>; <code>divergenceTest</code>, <code>ratioTest</code>, <code>rootTest</code>, <code>comparisonTest</code>, <code>integralTest</code>, <code>alternatingTest</code>, <code>tests()</code>; <code>convergence()</code>; <code>sum({ digits })</code> with a proven tail. See <a href="#sums">Series and convergence tests</a></td></tr>
+    <tr><td>powerSeries(coefficient, { index = "n", from = 0, centre = 0 })</td><td>PowerSeries</td><td><code>radius()</code>, <code>interval()</code> with both ends examined, <code>partial(N)</code>, <code>at(x)</code>, <code>value(x)</code>, <code>derivative()</code>, <code>integral()</code>. See <a href="#power">Power series</a></td></tr>
+    <tr><td>taylorRemainder(f, { about, order, on })</td><td>{ coefficients, M, radius, bound, actual, holds }</td><td>Lagrange's bound beside the true maximum error</td></tr>
+    <tr><td>functionSequence(term, { variable = "x", index = "n" })</td><td>FunctionSequence</td><td><code>member(n)</code>, <code>pointwise(x)</code>, <code>supDistance(n, [a, b], limit)</code>, <code>uniform([a, b], limit)</code></td></tr>
+  </table></div>
+
+  <h2>Theorems of vector calculus</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>greens([P, Q], [x, y], region, { flux })</td><td>{ statement, left, right, agree, overlap }</td><td>both sides enclosed; the boundary is built from the region. See <a href="#theorems">Green, Stokes and the divergence theorem</a></td></tr>
+    <tr><td>stokes(F, vars, surface, [u, v], region)</td><td>the same shape</td><td>circulation around the image of the parameter region's boundary against the flux of the curl</td></tr>
+    <tr><td>divergenceTheorem(F, vars, solid, { surface })</td><td>the same shape</td><td>flux through top, bottom and walls against the triple integral of the divergence</td></tr>
+    <tr><td>changeOfVariables(f, vars, map, newVars, region, { original })</td><td>{ jacobian, determinant, sign, factor, integrand, value }</td><td>See <a href="#multipliers">Change of variables, potentials, multipliers</a></td></tr>
+    <tr><td>potential(F, vars)</td><td>{ conservative, curl, witness, potential, check, value }</td><td>conservative is true, false or null</td></tr>
+    <tr><td>lagrange(f, g, vars, box, { multiplier })</td><td>{ lagrangian, candidates, max, min, complete }</td><td>candidates are certified critical points of f − λg</td></tr>
+  </table></div>
+
   <h2>Taylor models</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>notes</th></tr>

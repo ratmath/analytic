@@ -1,0 +1,68 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Change of variables, potentials, Lagrange multipliers</h1>
+  <p>Three more tools from the same chapter of the course. <code>changeOfVariables</code> transforms a multiple integral and shows the Jacobian it used. <code>potential</code> decides whether a vector field is a gradient and finds the function it is the gradient of. <code>lagrange</code> finds the candidates for constrained extremes and proves each one exists.</p>
+
+  <h2>Change of variables</h2>
+  <p>If \(T\) maps a region \(S\) one-to-one onto \(T(S)\), then</p>
+  \[ \iint_{T(S)} f(x, y)\,dx\,dy \;=\; \iint_S f\bigl(T(u, v)\bigr)\,\left|\det T'(u, v)\right| du\,dv . \]
+  <p>The factor \(|\det T'|\) is the local ratio of areas, and forgetting it is the classic mistake. The function returns the matrix, its determinant, and the new integrand, so the step is visible.</p>
+<pre><code>const c = changeOfVariables("x^2 + y^2", ["x", "y"],
+  { x: "r*cos(t)", y: "r*sin(t)" }, ["r", "t"], { r: [0, 1], t: [0, "2*pi"] });
+c.jacobian;      // [["cos(t)", "-(r*sin(t))"], ["sin(t)", "r*cos(t)"]]
+c.determinant;   // "r"       (cos² + sin² has been used)
+c.sign;          // "positive on the region"
+c.integrand;     // "r^3"
+c.value;         // an interval around π/2</code></pre>
+  <p>The sign of the determinant is proven on the region before the absolute value is dropped; if it changes sign there, <code>abs(…)</code> stays in the integrand and <code>sign</code> says so. With <code>{ original: region }</code>, the integral is also computed directly in the old variables and <code>agree</code> reports that the two enclosures meet. Three variables work the same way (cylindrical and spherical coordinates).</p>
+
+  <h2>Conservative fields and potentials</h2>
+  <p>A field \(\mathbf F\) is conservative when \(\mathbf F = \nabla\varphi\) for some function \(\varphi\), its potential. Then line integrals depend only on the end points: \(\int_C \mathbf F\cdot d\mathbf r = \varphi(B) - \varphi(A)\). On a region without holes the test is \(\nabla\times\mathbf F = 0\) (in the plane, \(\partial Q/\partial x = \partial P/\partial y\)).</p>
+<pre><code>const p = potential(["2*x*y + z", "x^2", "x + 3*z^2"], ["x", "y", "z"]);
+p.conservative;        // true: every component of the curl multiplies out to 0
+String(p.potential);   // "x^2*y + x*z + z^3"
+p.check;               // ["0", "0", "0"]: each ∂φ/∂xᵢ − Fᵢ
+p.value([1, 2, 3]);    // 32 = φ(1, 2, 3) − φ(0, 0, 0), by a certified line integral
+
+const q = potential(["-y", "x"], ["x", "y"]);
+q.conservative;        // false
+q.witness;             // { point: { x: 1/2, y: 1 }, curl: [2, 2] }: the curl is not 0 there</code></pre>
+  <p><code>conservative</code> has three values. It is <code>true</code> when the curl multiplies out to zero identically, <code>false</code> when a certified evaluation finds a point where it is not zero, and <code>null</code> when neither is shown. For polynomial fields the potential is given in closed form, from \(\varphi(\mathbf x) = \int_0^1 \mathbf F(t\mathbf x)\cdot\mathbf x\,dt\), and then differentiated as a check. For other conservative fields <code>value(p, from)</code> encloses \(\varphi(p) - \varphi(\text{from})\) by the line integral along the segment.</p>
+
+  <h2>Lagrange multipliers</h2>
+  <p>At an extreme of \(f\) on the set \(g = 0\), where \(\nabla g \ne 0\), the gradients are parallel: \(\nabla f = \lambda\nabla g\). Together with \(g = 0\) that is a system of equations for the point and \(\lambda\), and it is exactly the statement that the Lagrangian \(L = f - \lambda g\) has a critical point in all its variables. So the candidates are found by the certified critical-point search of <a href="#several">Several variables</a>, applied to \(L\).</p>
+<pre><code>const r = lagrange("x*y", "x^2 + y^2 - 1", ["x", "y"], { x: [-2, 2], y: [-2, 2] });
+r.lagrangian;          // "x*y - lambda_*(x^2 + y^2 - 1)"
+r.candidates.length;   // 4, each proven to exist and to be alone in its small box
+r.candidates[0];       // { point: { x: […], y: […] }, multiplier: […], value: […], unique: true, proven: true }
+r.max;                 // { value: [0.5, 0.5], at: [two points] }
+r.min;                 // { value: [-0.5, -0.5], at: [two points] }</code></pre>
+  <p>Each candidate comes with an interval for every coordinate, for the multiplier and for the value of \(f\). <code>max</code> and <code>min</code> are the candidates with the largest and smallest values. They are the extremes of \(f\) on the constraint set when that set is closed and bounded, lies inside the box searched, and \(\nabla g\) does not vanish on it. Those are the hypotheses of the method and are not checked by the function. The multiplier is searched in \([-16, 16]\) unless you pass <code>{ multiplier: [a, b] }</code>.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>changeOfVariables(f, vars, map, newVars, region, { digits = 8, original })</td><td>{ jacobian, determinant, sign, factor, integrand, value, direct?, agree? }</td></tr>
+    <tr><td>potential(F, vars)</td><td>{ conservative, curl, witness, potential, check, value(p, from) }</td></tr>
+    <tr><td>lagrange(f, g, vars, box, { multiplier, digits = 10 })</td><td>{ lagrangian, candidates, max, min, complete }</td></tr>
+  </table></div>
+<template data-runbox>
+// The area of an ellipse x²/4 + y²/9 ≤ 1 by x = 2r·cos t, y = 3r·sin t
+const e = changeOfVariables("1", ["x", "y"], { x: "2*r*cos(t)", y: "3*r*sin(t)" }, ["r", "t"], { r: [0, 1], t: [0, "2*pi"] });
+PRINT("Jacobian", JSON.stringify(e.jacobian), " determinant", e.determinant);
+PRINT("area in", `[${e.value.low.toDecimal(10)}, ${e.value.high.toDecimal(10)}]`, " and 6π ≈", 6 * Math.PI);
+
+// A shear, checked against the integral in the old variables
+const s = changeOfVariables("x*y", ["x", "y"], { x: "u", y: "u + v" }, ["u", "v"], { u: [0, 1], v: [0, 1] }, { original: { x: [0, 1], y: ["x", "x + 1"] } });
+PRINT("shear: new", s.value.low.toDecimal(8), " direct", s.direct.low.toDecimal(8), " agree:", s.agree);
+
+// Is it a gradient?
+for (const F of [["y*z", "x*z", "x*y"], ["y", "-x", "0"], ["2*x*exp(y)", "x^2*exp(y)", "1"]]) {
+  const p = potential(F, ["x", "y", "z"]);
+  PRINT(`F = (${F.join(", ")}):`, p.conservative ? `conservative${p.potential ? ", φ = " + p.potential : ""}` : `not conservative, curl ${JSON.stringify(p.curl)}`);
+}
+
+// The closest and farthest points of the ellipse x² + 4y² = 4 from (1, 0)
+const L = lagrange("(x - 1)^2 + y^2", "x^2 + 4*y^2 - 4", ["x", "y"], { x: [-3, 3], y: [-2, 2] });
+for (const c of L.candidates) PRINT("candidate", c.point.x.low.toDecimal(6), c.point.y.low.toDecimal(6), " distance²", c.value.low.toDecimal(6));
+"nearest distance² " + L.min.value.low.toDecimal(8) + ", farthest " + L.max.value.low.toDecimal(8)
+</template>

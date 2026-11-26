@@ -568,3 +568,6 @@ export function tailOf(node, ctx, text = "the integrand") {
   if (!node.osc && !node.L.containsZero()) larger("the sign is not yet settled");
   return refuse("undecided", `could not decide whether the integral converges: ${text} may change sign for ever while its size is not integrable`);
 }
+
+// the pieces series and sequences are built from (src/sequences.js)
+export { signE, spread, upperEnv, envAt, decreasing, tailUpper, termAt, integrable };

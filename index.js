@@ -17,3 +17,5 @@ export { bernoulli } from "./src/special.js";
 export { quad1 as quadrature } from "./src/quad.js";
 export { fourier, FourierSeries } from "./src/fourier.js";
 export { bvp, BVPSolution } from "./src/bvp.js";
+export { sequence, Sequence, recursive, RecursiveSequence, sum, Series, powerSeries, PowerSeries, taylorRemainder, functionSequence, FunctionSequence } from "./src/sequences.js";
+export { greens, stokes, divergenceTheorem, changeOfVariables, potential, lagrange } from "./src/theorems.js";

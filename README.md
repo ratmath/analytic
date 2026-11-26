@@ -82,6 +82,8 @@ f.describe();       // domain, order, remainder width, rules used
 | Special functions | `gamma`, `lgamma`, `digamma`, `trigamma`, `beta`, `besselJ`, `Si`, `fresnelS`, `fresnelC`, `erfc` in formulas and as `enclose.*`; `bernoulli(m)` |
 | Several variables | `field(text, vars)`: `.partial`, `.gradient`, `.hessian`, `.jet`, `.directional`, `.range`, `.integral`, `.criticalPoints` (Refinements); `divergence`, `curl`, `jacobian`, `lineIntegral`, `surfaceIntegral` |
 | Fourier series | `fourier(f, [a, b], { terms, kind })` (Refinement of a `FourierSeries`) |
+| Sequences and series | `sequence(term)`: `.limit`, `.monotone`, `.bounds`; `recursive(next, { start })`: `.fixedPoints`, `.limit` by contraction; `sum(term)`: the convergence tests as methods, `.convergence()`, `.sum()` with a proven tail; `powerSeries(c)`: `.radius`, `.interval` with the ends examined; `taylorRemainder`; `functionSequence` |
+| Theorems of vector calculus | `greens`, `stokes`, `divergenceTheorem` (both sides enclosed, and the enclosures must meet); `changeOfVariables` with its Jacobian; `potential`; `lagrange` |
 | ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
 | Boundary value problems | `bvp({ f, interval, left, right })` (Refinement of a `BVPSolution`) |
 | Features | `zeros`, `poles`, `extrema`, `inflections` (Refinements) |

@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 
-<link rel="stylesheet" href="assets/site.css?v=89c102b912">
+<link rel="stylesheet" href="assets/site.css?v=70afea05f4">
 </head>
 <body>
 <div class="shell">
@@ -38,6 +38,11 @@
     <option value="special.html">Special functions</option>
     <option value="fourier.html">Fourier series</option>
     <option value="series.html">Your own series</option>
+    <option value="sequences.html">Sequences</option>
+    <option value="sums.html">Series and convergence tests</option>
+    <option value="power.html">Power series and uniform convergence</option>
+    <option value="theorems.html">Green, Stokes and the divergence theorem</option>
+    <option value="multipliers.html">Change of variables, potentials, multipliers</option>
   </select>
   <nav class="toc" aria-label="Contents">
     <a href="index.html">Introduction</a>
@@ -59,6 +64,11 @@
     <a href="special.html">Special functions</a>
     <a href="fourier.html">Fourier series</a>
     <a href="series.html">Your own series</a>
+    <a href="sequences.html">Sequences</a>
+    <a href="sums.html">Series and convergence tests</a>
+    <a href="power.html">Power series and uniform convergence</a>
+    <a href="theorems.html">Green, Stokes and the divergence theorem</a>
+    <a href="multipliers.html">Change of variables, potentials, multipliers</a>
   </nav>
   <p class="sitelinks"><a href="https://github.com/ratmath/analytic">GitHub</a> · <a href="https://www.npmjs.com/package/@ratmath/analytic">npm</a> · <a href="https://ratmath.com/">ratmath.com</a><br><a href="https://ratmath.com/core/">core</a> · <a href="https://ratmath.com/algebraic/">algebraic</a> · <a href="https://ratmath.com/linalg/">linalg</a> · <a href="https://ratmath.com/graphics/">graphics</a></p>
 </aside>
@@ -167,6 +177,28 @@
     <tr><td>S.meanSquare(), S.meanSquareError(N)</td><td>RationalInterval</td><td>(1/L)∫f² and (1/L)∫(f − S<sub>N</sub>)², by Parseval</td></tr>
   </table></div>
 
+  <h2>Sequences and series</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>sequence(term, { variable = "n", from = 1 })</td><td>Sequence</td><td><code>term(n)</code>, <code>terms(count)</code>, <code>limit()</code>, <code>monotone()</code>, <code>bounds()</code>, <code>series()</code>. <code>n!</code> is read as a factorial. See <a href="sequences.html">Sequences</a></td></tr>
+    <tr><td>recursive(next, { start, variable = "x" })</td><td>RecursiveSequence</td><td><code>terms(count)</code>, <code>fixedPoints([a, b])</code>, <code>limit([a, b])</code> proven by contraction</td></tr>
+    <tr><td>sum(term, { variable = "n", from = 1 })</td><td>Series</td><td><code>partial(N)</code>; <code>divergenceTest</code>, <code>ratioTest</code>, <code>rootTest</code>, <code>comparisonTest</code>, <code>integralTest</code>, <code>alternatingTest</code>, <code>tests()</code>; <code>convergence()</code>; <code>sum({ digits })</code> with a proven tail. See <a href="sums.html">Series and convergence tests</a></td></tr>
+    <tr><td>powerSeries(coefficient, { index = "n", from = 0, centre = 0 })</td><td>PowerSeries</td><td><code>radius()</code>, <code>interval()</code> with both ends examined, <code>partial(N)</code>, <code>at(x)</code>, <code>value(x)</code>, <code>derivative()</code>, <code>integral()</code>. See <a href="power.html">Power series</a></td></tr>
+    <tr><td>taylorRemainder(f, { about, order, on })</td><td>{ coefficients, M, radius, bound, actual, holds }</td><td>Lagrange's bound beside the true maximum error</td></tr>
+    <tr><td>functionSequence(term, { variable = "x", index = "n" })</td><td>FunctionSequence</td><td><code>member(n)</code>, <code>pointwise(x)</code>, <code>supDistance(n, [a, b], limit)</code>, <code>uniform([a, b], limit)</code></td></tr>
+  </table></div>
+
+  <h2>Theorems of vector calculus</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>greens([P, Q], [x, y], region, { flux })</td><td>{ statement, left, right, agree, overlap }</td><td>both sides enclosed; the boundary is built from the region. See <a href="theorems.html">Green, Stokes and the divergence theorem</a></td></tr>
+    <tr><td>stokes(F, vars, surface, [u, v], region)</td><td>the same shape</td><td>circulation around the image of the parameter region's boundary against the flux of the curl</td></tr>
+    <tr><td>divergenceTheorem(F, vars, solid, { surface })</td><td>the same shape</td><td>flux through top, bottom and walls against the triple integral of the divergence</td></tr>
+    <tr><td>changeOfVariables(f, vars, map, newVars, region, { original })</td><td>{ jacobian, determinant, sign, factor, integrand, value }</td><td>See <a href="multipliers.html">Change of variables, potentials, multipliers</a></td></tr>
+    <tr><td>potential(F, vars)</td><td>{ conservative, curl, witness, potential, check, value }</td><td>conservative is true, false or null</td></tr>
+    <tr><td>lagrange(f, g, vars, box, { multiplier })</td><td>{ lagrangian, candidates, max, min, complete }</td><td>candidates are certified critical points of f − λg</td></tr>
+  </table></div>
+
   <h2>Taylor models</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>notes</th></tr>
@@ -230,6 +262,6 @@ f.range(R`0:5`, { digits: 6 }).exact()</textarea>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=89c102b912"></script>
+<script type="module" src="assets/pages.js?v=70afea05f4"></script>
 </body>
 </html>

@@ -29,6 +29,11 @@ export const PAGES = [
   { name: "special", title: "Special functions" },
   { name: "fourier", title: "Fourier series" },
   { name: "series", title: "Your own series" },
+  { name: "sequences", title: "Sequences" },
+  { name: "sums", title: "Series and convergence tests" },
+  { name: "power", title: "Power series and uniform convergence" },
+  { name: "theorems", title: "Green, Stokes and the divergence theorem" },
+  { name: "multipliers", title: "Change of variables, potentials, multipliers" },
 ];
 
 export function buildPages() {

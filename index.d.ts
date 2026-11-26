@@ -526,3 +526,193 @@ export class BVPSolution {
   slopeAt(x: RationalLike | RationalInterval): RationalInterval;
 }
 export function bvp(spec: BvpSpec): Refinement<{ t: Float64Array; y: Float64Array; dy: Float64Array; start: number } | null, BVPSolution>;
+
+// ---- sequences and series
+
+export interface SequenceOptions {
+  /** The index (default "n"). */
+  variable?: string;
+  /** The first index (default 1). */
+  from?: number;
+  params?: Params;
+}
+export class Sequence {
+  constructor(term: ExpressionLike, options?: SequenceOptions);
+  readonly variable: string;
+  readonly from: number;
+  /** An exact Rational where the formula is rational at n, else a certified enclosure. */
+  term(n: number, options?: { digits?: number }): Rational | RationalInterval;
+  terms(count?: number, options?: { digits?: number }): Array<Rational | RationalInterval>;
+  /** The limit as n → ∞, or ±Infinity. Throws AnalyticError ("no-limit", "undecided") where none is proven. */
+  limit(options?: { digits?: number }): RationalInterval | number;
+  /** The direction, proven for every n ≥ from. */
+  monotone(options?: { digits?: number }): { direction: "increasing" | "decreasing" | "constant"; from: number; proven: string };
+  /** Bounds on every term; null for a bound that does not exist. */
+  bounds(options?: { digits?: number }): { lower: Rational | null; upper: Rational | null; bounded: boolean };
+  series(): Series;
+}
+export function sequence(term: ExpressionLike, options?: SequenceOptions): Sequence;
+
+export interface FixedPoint {
+  point: RationalInterval;
+  /** g′ at the fixed point. */
+  multiplier: RationalInterval | null;
+  kind: "attracting" | "repelling" | "neutral or undecided";
+  unique: boolean | null;
+}
+export class RecursiveSequence {
+  constructor(next: ExpressionLike, options: { start: RationalLike; variable?: string; params?: Params });
+  /** Exact Rationals while the fractions stay short, then certified enclosures. */
+  terms(count?: number, options?: { digits?: number; maxDigits?: number }): Array<Rational | RationalInterval>;
+  fixedPoints(interval: IntervalLike, options?: { digits?: number }): FixedPoint[];
+  /** The limit, proven by contraction on `basin`; `enters` is the first term proven to lie in it. */
+  limit(interval: IntervalLike, options?: { digits?: number; maxSteps?: number }): { limit: RationalInterval; enters: number; rate: Rational; basin: RationalInterval };
+}
+export function recursive(next: ExpressionLike, options: { start: RationalLike; variable?: string; params?: Params }): RecursiveSequence;
+
+export interface TestResult {
+  test: "nth term" | "ratio" | "root" | "comparison" | "integral" | "alternating";
+  verdict: "convergent" | "divergent" | "inconclusive";
+  reason: string;
+  /** The limit that decided (nth term, ratio, root). */
+  limit?: RationalInterval | number;
+  /** comparison: the scale n^p·log(n)^m the term behaves like. */
+  like?: string;
+  exponent?: Rational;
+  log?: Rational;
+  coefficient?: RationalInterval | null;
+  /** integral, alternating: the index from which the hypothesis is proven. */
+  from?: number;
+  integral?: RationalInterval;
+}
+export interface SeriesSum {
+  /** Holds the sum. */
+  enclosure: RationalInterval;
+  /** How many terms were added. */
+  terms: number;
+  upTo: number;
+  partial: Rational | RationalInterval;
+  /** Holds the sum of all later terms. */
+  tail: RationalInterval;
+  /** The argument that bounds the tail. */
+  by: string;
+  /** Whether the width asked for was reached. */
+  met: boolean;
+}
+export class Series {
+  constructor(term: ExpressionLike, options?: SequenceOptions);
+  term(n: number, options?: { digits?: number }): Rational | RationalInterval;
+  partial(N: number, options?: { digits?: number }): Rational | RationalInterval;
+  divergenceTest(options?: { digits?: number }): TestResult;
+  ratioTest(options?: { digits?: number }): TestResult;
+  rootTest(options?: { digits?: number }): TestResult;
+  comparisonTest(options?: { digits?: number }): TestResult;
+  integralTest(options?: { digits?: number }): TestResult;
+  alternatingTest(options?: { digits?: number }): TestResult;
+  tests(options?: { digits?: number }): TestResult[];
+  convergence(options?: { digits?: number }): { convergence: "absolutely convergent" | "conditionally convergent" | "convergent" | "divergent" | "undecided"; by: string | null; reason: string; test?: TestResult };
+  /** Throws AnalyticError for a divergent or undecided series. */
+  sum(options?: { digits?: number; maxTerms?: number }): SeriesSum;
+}
+export function sum(term: ExpressionLike, options?: SequenceOptions): Series;
+
+export interface EndPoint {
+  point: Rational;
+  convergence: string;
+  by: string | null;
+  reason: string;
+}
+export class PowerSeries {
+  constructor(coefficient: ExpressionLike, options?: { index?: string; from?: number; centre?: RationalLike; variable?: string });
+  coefficient(n: number): Rational | RationalInterval;
+  radius(options?: { digits?: number }): { radius: RationalInterval | number; limit: RationalInterval | number; by: string };
+  /** `text` is the interval of convergence, with "?" at an end no test decided. */
+  interval(options?: { digits?: number }): { radius: Rational | RationalInterval | number; left: EndPoint | null; right: EndPoint | null; text: string };
+  at(x: RationalLike): Series;
+  value(x: RationalLike, options?: { digits?: number; maxTerms?: number }): SeriesSum;
+  partial(N: number): AnalyticFunction;
+  derivative(): PowerSeries;
+  integral(): PowerSeries;
+}
+export function powerSeries(coefficient: ExpressionLike, options?: { index?: string; from?: number; centre?: RationalLike; variable?: string }): PowerSeries;
+
+/** Lagrange's bound M·r^(n+1)/(n+1)! beside the true maximum of |f − T_n| on the interval. */
+export function taylorRemainder(
+  f: ExpressionLike | AnalyticFunction,
+  options: { about?: RationalLike; order?: number; on: [RationalLike, RationalLike]; variable?: string; digits?: number },
+): { coefficients: RationalInterval[]; M: RationalInterval; radius: Rational; bound: Rational; actual: RationalInterval; holds: boolean };
+
+export class FunctionSequence {
+  constructor(term: ExpressionLike, options?: { variable?: string; index?: string });
+  member(n: number): AnalyticFunction;
+  pointwise(x: RationalLike, options?: { digits?: number }): RationalInterval | number;
+  /** sup |f_n − limit| on the interval: the upper end is a proven bound, the lower end a value that is taken. */
+  supDistance(n: number, interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { digits?: number; samples?: number }): RationalInterval;
+  uniform(interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { ns?: number[]; digits?: number }): { verdict: "uniform" | "not uniform so far" | "undecided"; table: Array<{ n: number; sup: RationalInterval }>; reason: string; from?: number };
+}
+export function functionSequence(term: ExpressionLike, options?: { variable?: string; index?: string }): FunctionSequence;
+
+// ---- theorems of vector calculus
+
+export type Bounds = Record<string, [RationalLike | string, RationalLike | string]>;
+export interface TheoremSide {
+  name: string;
+  value: RationalInterval;
+  pieces?: Array<{ side?: string; face?: string; curve?: Record<string, string>; integrand?: string; value: RationalInterval }>;
+  integrand?: ScalarField | string;
+  curl?: ScalarField[];
+  normal?: string[];
+}
+export interface TheoremCheck {
+  statement: string;
+  left: TheoremSide;
+  right: TheoremSide;
+  /** Whether the two enclosures meet, as the theorem says they must. */
+  agree: boolean;
+  overlap: RationalInterval | null;
+}
+export function greens(F: [ExpressionLike, ExpressionLike], variables: [string, string], region: Bounds, options?: { digits?: number; flux?: boolean }): TheoremCheck;
+export function stokes(F: ExpressionLike[], variables: string[], surface: Record<string, ExpressionLike>, parameters: [string, string], region: Bounds, options?: { digits?: number }): TheoremCheck;
+export function divergenceTheorem(
+  F: ExpressionLike[],
+  variables: string[],
+  solid: Bounds,
+  options?: { digits?: number; surface?: Array<{ name?: string; r: Record<string, ExpressionLike>; parameters: [string, string]; region: Bounds; orientation?: 1 | -1 }> },
+): TheoremCheck;
+export function changeOfVariables(
+  f: ExpressionLike,
+  variables: string[],
+  map: Record<string, ExpressionLike>,
+  newVariables: string[],
+  region: Bounds,
+  options?: { digits?: number; original?: RegionLike; directDigits?: number },
+): { jacobian: string[][]; determinant: string; sign: string; factor: string; integrand: string; value: RationalInterval; direct?: RationalInterval; overlap?: RationalInterval | null; agree?: boolean };
+export function potential(
+  F: ExpressionLike[],
+  variables: string[],
+  options?: { digits?: number },
+): {
+  /** true: the curl multiplies out to 0. false: it is proven nonzero at `witness`. null: undecided. */
+  conservative: boolean | null;
+  curl: string[];
+  witness: { point: Record<string, Rational>; curl: RationalInterval } | null;
+  /** In closed form for polynomial fields. */
+  potential: ScalarField | null;
+  check: string[] | null;
+  /** φ(p) − φ(from), by a certified line integral along the segment. */
+  value(p: Array<RationalLike | string>, from?: Array<RationalLike | string>, options?: { digits?: number }): RationalInterval;
+};
+export interface LagrangeCandidate {
+  point: Record<string, RationalInterval>;
+  multiplier: RationalInterval;
+  value: RationalInterval;
+  unique: boolean | null;
+  proven: boolean;
+}
+export function lagrange(
+  f: ExpressionLike,
+  constraint: ExpressionLike,
+  variables: string[],
+  box: Bounds,
+  options?: { multiplier?: [RationalLike, RationalLike]; multiplierName?: string; digits?: number; maxBoxes?: number },
+): { lagrangian: string; candidates: LagrangeCandidate[]; max: { value: RationalInterval; at: Array<Record<string, RationalInterval>> } | null; min: { value: RationalInterval; at: Array<Record<string, RationalInterval>> } | null; complete: boolean };

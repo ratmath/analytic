@@ -23,6 +23,23 @@
 
 ### Added
 
+- Sequences and series (roadmap 13.4): `sequence` (exact terms, proven
+  limits, `monotone`, `bounds`), `recursive` (fixed points with their
+  multipliers, limits proven by contraction), `sum` (the nth-term, ratio,
+  root, comparison, integral and alternating tests as methods that return
+  their verdict and the quantity that decided it; `convergence()`; `sum()` as
+  finitely many terms plus a proven interval for the tail), `powerSeries`
+  (radius, interval of convergence with each end examined, term-by-term
+  derivative and integral), `taylorRemainder` (Lagrange's bound beside the
+  true error) and `functionSequence` (pointwise limits, the supremum of
+  |f_n − f| enclosed, uniform convergence only with a proof).
+- Theorems of vector calculus (roadmap 13.5): `greens`, `stokes` and
+  `divergenceTheorem` enclose both sides of each theorem independently, with
+  the boundary built from the region piece by piece, and report whether the
+  enclosures meet. `changeOfVariables` returns the Jacobian, its determinant
+  and the transformed integrand. `potential` decides whether a field is a
+  gradient (true, false with a witness, or undecided) and finds the potential.
+  `lagrange` returns certified candidates for constrained extremes.
 - `enclose.gammaP(a, x)`, `enclose.gammaQ(a, x)` and `enclose.betaI(x, a, b)`:
   certified regularized incomplete gamma and beta functions, the cumulative
   probabilities behind the gamma, chi-square, beta, t and F distributions.
