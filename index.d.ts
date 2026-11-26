@@ -960,3 +960,79 @@ export interface OdeMethodSpec { method?: OneStepMethod; t0?: number; y0: number
 export function odeMethod(f: ExpressionLike, spec: OdeMethodSpec): { method: string; order: number; h: number; steps: Array<{ n: number; t: number; y: number; exact: RationalInterval | null; error: number | null }>; finalError: number | null };
 export function stepSizeStudy(f: ExpressionLike, spec: OdeMethodSpec & { counts?: number[] }): { rows: Array<{ steps: number; h: number; error: number | null; ratio: number | null; observedOrder: number | null }> };
 export function stability(method?: "euler" | "heun" | "midpoint" | "rk4"): { method: string; polynomial: string; interval: [RationalInterval, RationalInterval]; largestStep(lambda: RationalLike | string | number): RationalInterval };
+
+// ---- Fourier transforms (also "@ratmath/analytic/transform")
+export interface ComplexEnclosure { re: RationalInterval; im: RationalInterval; toString(): string }
+export type FourierConvention = "angular" | "unitary" | "frequency";
+export type TransformEnd = RationalLike | string | number;
+export interface FourierTransformOptions { variable?: string; frequency?: string; convention?: FourierConvention; support?: [TransformEnd, TransformEnd]; digits?: number; formula?: boolean }
+export class FourierTransform {
+  constructor(f: ExpressionLike, options?: FourierTransformOptions);
+  readonly variable: string;
+  readonly frequency: string;
+  readonly convention: FourierConvention;
+  readonly text: string;
+  readonly kernel: string;
+  /** The transform as a formula when f is a sum of standard pairs; it has agreed with the certified integrals at two frequencies. */
+  readonly formula: { re: string; im: string; text: string; trust: "checked" } | null;
+  readonly pairs: string[];
+  at(w: RationalLike | string, options?: { digits?: number }): ComplexEnclosure;
+  formulaAt(w: RationalLike | string, options?: { digits?: number }): ComplexEnclosure;
+  check(w: RationalLike | string, options?: { digits?: number }): { integral: ComplexEnclosure; formula: ComplexEnclosure; agrees: boolean };
+  inversion(x: RationalLike | string, options?: { digits?: number }): { inverse: ComplexEnclosure; value: RationalInterval; agrees: boolean };
+  parseval(options?: { digits?: number }): { time: RationalInterval; frequency: RationalInterval; agrees: boolean };
+}
+export function fourierTransform(f: ExpressionLike, options?: FourierTransformOptions): FourierTransform;
+export interface InverseFourierOptions { variable?: string; to?: string; convention?: FourierConvention; digits?: number }
+export class InverseFourier {
+  constructor(F: ExpressionLike | { re: ExpressionLike; im?: ExpressionLike }, options?: InverseFourierOptions);
+  at(x: RationalLike | string, options?: { digits?: number }): ComplexEnclosure;
+}
+export function inverseFourier(F: ExpressionLike | { re: ExpressionLike; im?: ExpressionLike }, options?: InverseFourierOptions): InverseFourier;
+export function convolution(f: ExpressionLike, g: ExpressionLike, options?: { variable?: string; digits?: number }): {
+  at(x: RationalLike | string): RationalInterval;
+  theorem(x: RationalLike | string): { convolution: RationalInterval; viaTransforms: RationalInterval; transform: { re: string; im: string }; agrees: boolean };
+};
+export function heatLine(spec: { k?: RationalLike | string; initial: ExpressionLike; support?: [TransformEnd, TransformEnd]; digits?: number; x?: string }): {
+  equation: string;
+  at(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+  viaTransform(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+  check(x: RationalLike | string, t: RationalLike | string): { kernel: RationalInterval; viaTransform: RationalInterval; agrees: boolean };
+  heat(): RationalInterval;
+};
+export function cyclotomic(n: number): Rational[];
+export class Cyclotomic {
+  constructor(n: number, coefficients: Array<RationalLike | string>);
+  readonly n: number;
+  readonly coefficients: Rational[];
+  static root(n: number, k?: number): Cyclotomic;
+  static of(n: number, q: Cyclotomic | RationalLike | string): Cyclotomic;
+  add(o: Cyclotomic | RationalLike | string): Cyclotomic;
+  subtract(o: Cyclotomic | RationalLike | string): Cyclotomic;
+  multiply(o: Cyclotomic | RationalLike | string): Cyclotomic;
+  scale(q: RationalLike | string): Cyclotomic;
+  rotate(k: number): Cyclotomic;
+  conjugate(): Cyclotomic;
+  norm2(): Cyclotomic;
+  equals(o: Cyclotomic | RationalLike | string): boolean;
+  isRational(): boolean;
+  rational(): Rational | null;
+  enclose(digits?: number): ComplexEnclosure;
+  toNumber(): { re: number; im: number };
+  toString(): string;
+}
+export function rootOfUnity(n: number, k?: number): Cyclotomic;
+export interface DiscreteSpectrum {
+  n: number;
+  values: Cyclotomic[];
+  text: string[];
+  enclose(digits?: number): ComplexEnclosure[];
+  power(): Array<Rational | Cyclotomic>;
+  multiplications: number;
+  inverse: boolean;
+}
+export function dft(values: Array<Cyclotomic | RationalLike | string>, options?: { inverse?: boolean }): DiscreteSpectrum;
+export function fft(values: Array<Cyclotomic | RationalLike | string>, options?: { inverse?: boolean; check?: boolean }): DiscreteSpectrum & { definition: number; levels: number; perLevel: number[]; agrees: boolean | null };
+export function alias(frequency: RationalLike | string, rate: RationalLike | string): { frequency: Rational; rate: Rational; nyquist: Rational; alias: Rational; sign: 1 | -1; aliased: boolean };
+export function sinusoidSamples(spec: { frequency: RationalLike | string; rate: RationalLike | string; count: number; kind?: "cos" | "sin" }): Cyclotomic[];
+export function sample(f: ExpressionLike, spec: { rate: RationalLike | string; count: number; from?: RationalLike | string; variable?: string; digits?: number }): { times: Rational[]; values: RationalInterval[] };
