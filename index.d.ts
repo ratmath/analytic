@@ -174,6 +174,12 @@ export const enclose: Record<
   /** ψ⁽ᵐ⁾: m = 0 is digamma, m = 1 trigamma. */
   polygamma(m: number, x: RationalLike | RationalInterval, bits?: number): RationalInterval;
   beta(a: RationalLike | RationalInterval, b: RationalLike | RationalInterval, bits?: number): RationalInterval;
+  /** The regularized lower incomplete gamma function P(a, x) = γ(a, x)/Γ(a), for exact a > 0 and x ≥ 0. */
+  gammaP(a: RationalLike, x: RationalLike | RationalInterval, bits?: number): RationalInterval;
+  /** Q(a, x) = 1 − P(a, x). */
+  gammaQ(a: RationalLike, x: RationalLike | RationalInterval, bits?: number): RationalInterval;
+  /** The regularized incomplete beta function I_x(a, b), for exact a, b > 0 and 0 ≤ x ≤ 1. */
+  betaI(x: RationalLike | RationalInterval, a: RationalLike, b: RationalLike, bits?: number): RationalInterval;
   /** The Bessel function J_n for a whole number n. */
   besselJ(n: number, x: RationalLike | RationalInterval, bits?: number): RationalInterval;
 };

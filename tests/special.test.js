@@ -81,3 +81,71 @@ describe("special functions in formulas", () => {
     expect(num(v.low) <= 0.21666282 && num(v.high) >= 0.21666282).toBe(true);
   });
 });
+
+describe("incomplete gamma and beta functions", () => {
+  const inside = (iv, q) => iv.low.compareTo(q) <= 0 && iv.high.compareTo(q) >= 0;
+  const overlap = (a, b) => a.low.compareTo(b.high) <= 0 && b.low.compareTo(a.high) <= 0;
+  const narrow = (iv, bits = 90) => iv.high.subtract(iv.low).compareTo(R`1`.divide(R`2`.pow(bits))) < 0;
+  test("gammaP against closed forms", () => {
+    // P(1, x) = 1 − e^(−x)
+    const e = enclose.exp(R`-7/3`, 120);
+    const p1 = enclose.gammaP(1, R`7/3`);
+    expect(overlap(p1, { low: R`1`.subtract(e.high), high: R`1`.subtract(e.low) })).toBe(true);
+    expect(narrow(p1)).toBe(true);
+    // P(1/2, x²) = erf(x)
+    expect(overlap(enclose.gammaP(R`1/2`, R`9/4`), enclose.erf(R`3/2`, 120))).toBe(true);
+    // P(n, x) = 1 − e^(−x) Σ_{k<n} x^k/k!
+    const x = R`13/2`;
+    let s = R`0`;
+    let t = R`1`;
+    for (let k = 0; k < 6; k++) {
+      s = s.add(t);
+      t = t.multiply(x).divide(R`${k + 1}`);
+    }
+    const ex = enclose.exp(x.negate(), 120);
+    expect(overlap(enclose.gammaP(6, x), { low: R`1`.subtract(ex.high.multiply(s)), high: R`1`.subtract(ex.low.multiply(s)) })).toBe(true);
+    expect(near(enclose.gammaP(5, 3), 0.18473675547622792)).toBe(true);
+    expect(near(enclose.gammaP(500, 480), 0.1862819731903246, 1e-12)).toBe(true);
+  });
+  test("gammaP at the ends, far out and over intervals", () => {
+    expect(enclose.gammaP(R`7/2`, 0).toString()).toBe("0:0");
+    const far = enclose.gammaP(3, 300);
+    expect(far.high.toString()).toBe("1");
+    expect(narrow(far)).toBe(true);
+    const q = enclose.gammaQ(10, 50);
+    expect(num(q.low)).toBeGreaterThan(1.2e-12);
+    expect(num(q.high)).toBeLessThan(1.3e-12);
+    const iv = enclose.gammaP(2, [1, 2]);
+    expect(inside(iv, enclose.gammaP(2, R`3/2`).low)).toBe(true);
+    expect(() => enclose.gammaP(0, 1)).toThrow(/positive shape/);
+    expect(() => enclose.gammaP(1, -1)).toThrow(/x ≥ 0/);
+    expect(() => enclose.gammaP([1, 2], 1)).toThrow(/exact number/);
+  });
+  test("betaI against closed forms", () => {
+    // whole-number parameters give a binomial sum: I_x(2, 3) = 6x² − 8x³ + 3x⁴
+    const x = R`1/3`;
+    const exact = R`6`.multiply(x.pow(2)).subtract(R`8`.multiply(x.pow(3))).add(R`3`.multiply(x.pow(4)));
+    expect(exact.toString()).toBe("11/27");
+    expect(inside(enclose.betaI(x, 2, 3), exact)).toBe(true);
+    expect(narrow(enclose.betaI(x, 2, 3))).toBe(true);
+    // I_x(a, 1) = x^a
+    expect(inside(enclose.betaI(R`4/5`, 3, 1), R`64/125`)).toBe(true);
+    // I_x(1/2, 1/2) = (2/π)·asin(√x)
+    expect(near(enclose.betaI(R`3/10`, R`1/2`, R`1/2`), 0.36901011956554536, 1e-13)).toBe(true);
+    // reflection
+    const a = enclose.betaI(R`7/10`, R`5/2`, R`4/3`);
+    const b = enclose.betaI(R`3/10`, R`4/3`, R`5/2`);
+    expect(overlap(a, { low: R`1`.subtract(b.high), high: R`1`.subtract(b.low) })).toBe(true);
+    expect(near(enclose.betaI(R`1/4`, 100, 300), 0.5076806528982708, 1e-12)).toBe(true);
+  });
+  test("betaI at the ends, with large parameters and over intervals", () => {
+    expect(enclose.betaI(0, 2, 3).toString()).toBe("0:0");
+    expect(enclose.betaI(1, 2, 3).toString()).toBe("1:1");
+    expect(narrow(enclose.betaI(R`997/1000`, 500, R`1/2`))).toBe(true);
+    const iv = enclose.betaI([R`1/4`, R`1/3`], 2, 3);
+    expect(inside(iv, R`11/27`)).toBe(true);
+    expect(inside(iv, enclose.betaI(R`3/10`, 2, 3).high)).toBe(true);
+    expect(() => enclose.betaI(R`3/2`, 2, 3)).toThrow(/0 ≤ x ≤ 1/);
+    expect(() => enclose.betaI(R`1/2`, 0, 3)).toThrow(/positive parameters/);
+  });
+});

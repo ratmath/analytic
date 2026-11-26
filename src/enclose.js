@@ -6,7 +6,7 @@ import { Iv } from "./interval.js";
 import { ZERO, ONE, TWO, HALF, rat, le, lt, gt, isZero } from "./rat.js";
 import { expPoint, logPoint, atanPoint, sqrtPoint, sinCosPoint, piIv, asinPoint, acosPoint, rootPoint, erfPoint } from "./points.js";
 import { refuse } from "./errors.js";
-import { gammaIv, lgammaIv, polygammaIv, besselJIv, siIv, fresnelSIv, fresnelCIv } from "./special.js";
+import { gammaIv, lgammaIv, polygammaIv, besselJIv, siIv, fresnelSIv, fresnelCIv, gammaPPoint, betaIPoint } from "./special.js";
 import { TaylorModel, Domain } from "./model.js";
 import * as E from "./elementary.js";
 
@@ -71,6 +71,27 @@ enclose.beta = (a, b, bits = 96) => {
   const A = Iv.from(a);
   const B = Iv.from(b);
   return out(gammaIv(A, bits + 8).mul(gammaIv(B, bits + 8)).div(gammaIv(A.add(B), bits + 8)).roundOut(bits + 4));
+};
+const pointOnly = (v, name, what) => {
+  const iv = Iv.from(v);
+  if (!iv.isPoint) refuse("unsupported", `${name} takes ${what} as an exact number, not an interval`);
+  return iv.lo;
+};
+// incomplete gamma and beta functions, regularized; both increase with x
+enclose.gammaP = (a, x, bits = 96) => {
+  const A = pointOnly(a, "gammaP", "the shape a");
+  const v = Iv.from(x);
+  return out(v.isPoint ? gammaPPoint(A, v.lo, bits) : new Iv(gammaPPoint(A, v.lo, bits).lo, gammaPPoint(A, v.hi, bits).hi));
+};
+enclose.gammaQ = (a, x, bits = 96) => {
+  const p = enclose.gammaP(a, x, bits);
+  return new RationalInterval(ONE.subtract(p.high), ONE.subtract(p.low));
+};
+enclose.betaI = (x, a, b, bits = 96) => {
+  const A = pointOnly(a, "betaI", "the parameter a");
+  const B = pointOnly(b, "betaI", "the parameter b");
+  const v = Iv.from(x);
+  return out(v.isPoint ? betaIPoint(v.lo, A, B, bits) : new Iv(betaIPoint(v.lo, A, B, bits).lo, betaIPoint(v.hi, A, B, bits).hi));
 };
 enclose.besselJ = (n, x, bits = 96) => out(besselJIv(n, Iv.from(x), bits));
 enclose.Si = (x, bits = 96) => out(siIv(Iv.from(x), bits));

@@ -11,6 +11,8 @@
     <tr><td>besselJ(n, x)</td><td>J_n(x) for a whole number n</td><td>enclose.besselJ(n, x)</td></tr>
     <tr><td>Si(x)</td><td>∫₀ˣ sin(t)/t dt</td><td>enclose.Si</td></tr>
     <tr><td>fresnelS(x), fresnelC(x)</td><td>∫₀ˣ sin(πt²/2) dt and ∫₀ˣ cos(πt²/2) dt</td><td>enclose.fresnelS, enclose.fresnelC</td></tr>
+    <tr><td></td><td>P(a, x) and Q(a, x) = 1 − P, the regularized incomplete gamma functions</td><td>enclose.gammaP(a, x), enclose.gammaQ(a, x)</td></tr>
+    <tr><td></td><td>I_x(a, b), the regularized incomplete beta function</td><td>enclose.betaI(x, a, b)</td></tr>
     <tr><td>erfc(x)</td><td>1 − erf(x), written out as it is read</td><td>enclose.erfc</td></tr>
   </table></div>
 
@@ -25,6 +27,14 @@
   \[ J_n(x) = \sum_{k\ge 0}\frac{(-1)^k (x/2)^{2k+n}}{k!\,(k+n)!}, \qquad \mathrm{Si}(x) = \sum_{k\ge0}\frac{(-1)^k x^{2k+1}}{(2k+1)\,(2k+1)!}. \]
   <p>The terms are built in fixed point, each rounded both down and up, with as many guard bits as the largest term needs (about 1.45·|x| bits, since the terms reach e^|x| before they fall). Once they more than halve, the rest of the series is below twice the last term. This is exact about what it claims, but it limits the range: |x| ≤ 4096 for J_n and Si, |x| ≤ 43 for the Fresnel integrals. Over an interval, each of these has a derivative bounded by 1, so the value at the midpoint, give or take the radius, is an enclosure.</p>
 
+  <h2>Incomplete gamma and beta functions</h2>
+  <p>These are the gamma and beta integrals stopped part of the way, divided by the whole:</p>
+  \[ P(a, x) = \frac{1}{\Gamma(a)}\int_0^x t^{a-1}e^{-t}\,dt, \qquad I_x(a, b) = \frac{1}{B(a, b)}\int_0^x t^{a-1}(1-t)^{b-1}\,dt . \]
+  <p>They are the cumulative probabilities of the gamma, chi-square, beta, t and F distributions, which is what <code>@ratmath/stats</code> uses them for. Both come from series whose terms are all positive, so nothing cancels:</p>
+  \[ P(a, x) = \frac{x^a e^{-x}}{\Gamma(a)}\sum_{n\ge0}\frac{x^n}{a(a+1)\cdots(a+n)}, \qquad I_x(a, b) = \frac{x^a(1-x)^b}{a\,B(a, b)}\sum_{n\ge0}\frac{(a+b)_n}{(a+1)_n}\,x^n . \]
+  <p>The terms are carried as intervals rounded outward. Once the ratio of one term to the one before is below some ρ &lt; 1 for good, the rest of the series is at most the last term times ρ/(1 − ρ). For the beta function with x &gt; 1/2 the reflection I_x(a, b) = 1 − I_(1−x)(b, a) is used first, so the ratios tend to at most 1/2. Far to the right, where 1 − P(a, x) is smaller than the precision asked for, the bound Γ(a, x) ≤ x^(a−1)e^(−x)·x/(x − a + 1) settles the answer without the series.</p>
+  <p>The parameters a and b are exact positive rationals; x may be a point or an interval, since both functions increase with x. The precision is absolute: the enclosure is about 2^(−bits) wide wherever the value lies in [0, 1].</p>
+
   <h2>What works with them</h2>
   <p>Taylor models do not know these functions, so <code>integral</code> switches to Taylor series in fixed point on halved pieces (the <code>via</code> line says so), and ranges and zero searches use interval evaluation. The Bessel functions carry their neighbours along: the series of J_n needs J_(n−1) and J_(n+1) one order lower, from J_n′ = (J_(n−1) − J_(n+1))/2. Limits at infinity and improper tails do not follow special functions.</p>
   <p>The gamma function also appears without being named: Γ(5/2) is <code>fn("t^(3/2)*exp(-t)", { variable: "t" }).improperIntegral(0, "inf")</code>, and the two enclosures agree.</p>
@@ -34,6 +44,8 @@ PRINT("Γ(1/2)² =", enclose.gamma(R`1/2`).multiply(enclose.gamma(R`1/2`)), "(π
 PRINT("Γ(5) =", enclose.gamma(R`5`), " B₁₂ =", bernoulli(12));
 PRINT("first zeros of J₀:", zeros("besselJ(0, x)", [0, 10]).exact().map((z) => z.lo.toDecimal(8)));
 PRINT("the minimum of Γ on x > 0:", extrema("gamma(x)", ["1/2", 3]).exact().map((e) => `${e.kind} near ${e.lo.toDecimal(6)}`));
+PRINT("P(3, 2) =", enclose.gammaP(3, 2).low.toDecimal(20), " which is 1 − 5/e² =", R`1`.subtract(R`5`.divide(enclose.exp(2).low)).toDecimal(20));
+PRINT("I at 1/3 with a = 2, b = 3:", enclose.betaI(R`1/3`, 2, 3), "(exactly 11/27)");
 PRINT("∫₀¹⁰ J₀:", fn("besselJ(0, x)").integral(0, 10).exactStage().via);
 fn("besselJ(0, x)").integral(0, 10).exact()
 </template>
