@@ -42,6 +42,12 @@ export const PAGES = [
   { name: "curves", title: "Curves: length, curvature, torsion" },
   { name: "surfaces", title: "Surfaces and curvature" },
   { name: "geodesics", title: "Geodesics and Gauss-Bonnet" },
+  { group: "Numerical methods" },
+  { name: "floats", title: "Floating point, exactly" },
+  { name: "rootmethods", title: "Root-finding methods" },
+  { name: "interpolation", title: "Interpolation and approximation" },
+  { name: "quadraturerules", title: "Differences and quadrature rules" },
+  { name: "odemethods", title: "Euler to Runge-Kutta" },
 ];
 
 export function buildPages() {

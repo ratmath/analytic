@@ -1,0 +1,57 @@
+<!-- wide: no -->
+<div class="eyebrow">Numerical methods</div>
+  <h1>Floating point, exactly</h1>
+  <p>This library returns proven answers and so avoids floating-point arithmetic for its results. That makes it a good place to study floating point: every double is an exact rational number, Core can hold it, and so the rounding error of each operation is a number that can be computed exactly, not estimated.</p>
+<pre><code>exactOf(0.1);              // 3602879701896397/36028797018963968   what the double 0.1 IS
+floatParts(0.1, "0.1");    // sign, exponent, mantissa, bits, ulp, and the error against the 0.1 that was typed
+floatOp("+", 0.1, 0.2);    // { result: 0.30000000000000004, exact, error, relativeError, exactlyRepresentable: false }
+
+roundoff("(1 - cos(x))/x^2", { x: 1e-8 });
+// { float: 0, exact: [0.5, 0.5], relativeError: 1, digitsLost: 16, steps: […] }</code></pre>
+  <p>These and the other numerical methods are also at <code>@ratmath/analytic/methods</code>.</p>
+
+  <h2>What a double is</h2>
+  <p>A double is \(\pm m \cdot 2^{e}\) with a 53-bit mantissa \(1 \le m < 2\) and an exponent \(-1022 \le e \le 1023\) (plus zero, subnormals, infinities and NaN). So it is a fraction whose denominator is a power of two. The decimal 0.1 is not such a fraction, and the double written <code>0.1</code> is the nearest one that is:</p>
+  \[ 0.1_{\text{double}} = \frac{3602879701896397}{2^{55}} = 0.1 + \frac{1}{180143985094819840}. \]
+  <p><code>floatParts</code> shows the three bit fields, the exact value, and the <em>ulp</em>: the gap to the next double. Rounding to nearest makes a relative error of at most \(2^{-53} \approx 1.1 \times 10^{-16}\), the <em>unit roundoff</em>.</p>
+
+  <h2>One operation</h2>
+  <p>IEEE arithmetic computes the exact result of \(a \circ b\) on the two doubles and rounds it to the nearest double. <code>floatOp</code> gives both: <code>exact</code> is the true sum, difference, product or quotient of the two doubles as a rational, <code>result</code> is what the machine returns, and <code>error</code> is their exact difference. So \(0.1 + 0.2 \ne 0.3\) stops being a mystery: the two inputs are each slightly above their decimals, their exact sum is not a double, and it rounds up.</p>
+
+  <h2>Cancellation</h2>
+  <p>Each operation is accurate to one part in \(10^{16}\). A calculation is not. Subtracting two nearly equal numbers gives a small result whose leading digits have cancelled, and the rounding errors already present in the inputs are then large in proportion. <code>roundoff</code> follows a whole formula both ways, in doubles and with certified enclosures of the true value at the same inputs, and lists every subexpression with its relative error. The step where the error jumps is the step to rewrite:</p>
+  \[ \frac{1 - \cos x}{x^2} = \frac{2\sin^2(x/2)}{x^2}. \]
+  <p>The two sides are equal; at \(x = 10^{-8}\) the left gives 0 in doubles and the right gives 0.5, correct to the last bit.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>exactOf(x)</td><td>the Rational equal to the double x</td></tr>
+    <tr><td>nearestDouble(q)</td><td>the double nearest a Rational, ties to even</td></tr>
+    <tr><td>floatParts(x, intended)</td><td>{ sign, exponent, mantissa, bits, exact, ulp, next, previous, subnormal, intended, error, relativeError }</td></tr>
+    <tr><td>floatOp(op, a, b)</td><td>{ result, exact, error, relativeError, exactlyRepresentable }</td></tr>
+    <tr><td>roundoff(formula, inputs)</td><td>{ float, exact, error, relativeError, digitsLost, steps }</td></tr>
+  </table></div>
+<template data-runbox>
+// What is stored when you type 0.1?
+const p = floatParts(0.1, "0.1");
+PRINT("bits:    ", p.bits);
+PRINT("exact:   ", p.exact.toString());
+PRINT("too big by", p.error.toString(), "=", p.error.toNumber().toExponential(3));
+
+// 0.1 + 0.2: the exact sum of the two doubles, and what the machine returns.
+const s = floatOp("+", 0.1, 0.2);
+PRINT("0.1 + 0.2 =", s.result, " exact sum of the doubles:", s.exact.toDecimal(22));
+PRINT("rounding moved it by", s.error.toNumber().toExponential(3), "(half an ulp is", (floatParts(0.3).ulp.toNumber() / 2).toExponential(3) + ")");
+
+// Cancellation, step by step.
+for (const formula of ["(1 - cos(x))/x^2", "2*sin(x/2)^2/x^2"]) {
+  const r = roundoff(formula, { x: 1e-8 });
+  PRINT(`${formula} at x = 1e-8: double ${r.float}, true ${r.exact.low.toDecimal(12)}, digits lost ${r.digitsLost}`);
+  for (const step of r.steps) PRINT(`    ${step.expression.padEnd(22)} ${String(step.float).padEnd(24)} relative error ${step.relativeError === null ? "-" : step.relativeError.toExponential(1)}`);
+}
+
+// The quadratic formula for x^2 - 1e8 x + 1: the small root, two ways.
+const naive = roundoff("(b - sqrt(b^2 - 4))/2", { b: 1e8 });
+const stable = roundoff("2/(b + sqrt(b^2 - 4))", { b: 1e8 });
+`small root: naive ${naive.float} (lost ${naive.digitsLost} digits), rewritten ${stable.float} (lost ${stable.digitsLost})`;
+</template>

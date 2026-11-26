@@ -917,3 +917,46 @@ export function wave(spec: { c?: RationalLike | string; length?: RationalLike | 
 export function sturmLiouville(spec: { p?: ExpressionLike; q?: ExpressionLike; w?: ExpressionLike; interval: [RationalLike | string, RationalLike | string]; count?: number; from?: number; to?: number; width?: RationalLike | string; certify?: boolean; x?: string }): Array<{ index: number; eigenvalue: RationalInterval; estimate: number; proven: boolean }>;
 export function antiderivative(tree: Ast, name?: string): { tree: Ast; trust: "proven" | "checked" } | null;
 export function partialFractions(N: Rational[], D: Rational[]): { poly: Rational[]; linear: Array<{ root: Rational; power: number; coeff: Rational }>; quadratic: Array<{ p: Rational; q: Rational; alpha: Rational; beta: Rational }> } | null;
+
+// ---- numerical methods for teaching (also "@ratmath/analytic/methods")
+export function exactOf(x: number): Rational;
+export function nearestDouble(q: RationalLike | string): number;
+export function floatParts(x: number, intended?: string): {
+  value: number; sign: number; exponent: number; mantissa: bigint; bits: string; exact: Rational; ulp: Rational; next: number; previous: number;
+  intended?: Rational; error?: Rational; relativeError?: Rational;
+};
+export function floatOp(op: "+" | "-" | "*" | "/", a: number, b: number): { result: number; exact: Rational; error: Rational; relativeError: Rational | null; exactlyRepresentable: boolean };
+export function roundoff(expression: ExpressionLike, inputs?: Record<string, number>, options?: { digits?: number }): {
+  float: number; exact: RationalInterval; error: number; relativeError: number; digitsLost: number;
+  steps: Array<{ expression: string; float: number; exact: RationalInterval; relativeError: number }>;
+};
+export interface RootIteration { n: number; x: number; fx?: number; dfx?: number; a?: number; b?: number; bound?: number; error: number | null }
+export interface RootRun { method: string; iterations: RootIteration[]; root: RationalInterval | null; estimate: number; order: number | null; derivative?: string; multiplier?: RationalInterval | null; ratio?: number | null }
+export interface RootOptions { variable?: string; steps?: number; tol?: number; digits?: number }
+export function bisection(f: ExpressionLike, bracket: [number, number], options?: RootOptions): RootRun;
+export function newton(f: ExpressionLike, x0: number, options?: RootOptions): RootRun;
+export function secant(f: ExpressionLike, x0: number, x1: number, options?: RootOptions): RootRun;
+export function fixedPoint(g: ExpressionLike, x0: number, options?: RootOptions): RootRun;
+export interface Interpolant {
+  nodes: Rational[]; values: Rational[]; degree: number; dividedDifferences: Rational[][]; newton: string; lagrange: string; polynomial: string; coefficients: Rational[];
+  at(x: RationalLike | string): Rational;
+  error(x: RationalLike | string): RationalInterval;
+  maxError(interval: [RationalLike | string, RationalLike | string]): { value: RationalInterval; attained: Rational; at: Rational; textbook: Rational | null };
+}
+export function interpolate(source: Array<[RationalLike | string, RationalLike | string]> | ExpressionLike, options?: { nodes?: Array<RationalLike | string>; variable?: string }): Interpolant;
+export function equallySpaced(a: RationalLike | string, b: RationalLike | string, n: number): Rational[];
+export function chebyshevNodes(a: RationalLike | string, b: RationalLike | string, n: number, bits?: number): Rational[];
+export function spline(points: Array<[RationalLike | string, RationalLike | string]>): { pieces: Array<{ from: Rational; to: Rational; coefficients: Rational[]; polynomial: string }>; moments: Rational[]; at(x: RationalLike | string): Rational };
+export function leastSquares(points: Array<[RationalLike | string, RationalLike | string]>, degree?: number): { coefficients: Rational[]; polynomial: string; residual: Rational; at(x: RationalLike | string): Rational };
+export function differences(f: ExpressionLike, x: number, options?: { kind?: "forward" | "backward" | "central" | "second"; steps?: number[]; variable?: string }): { exact: RationalInterval; rows: Array<{ h: number; value: number; error: number; truncation: number | null }>; best: { h: number; value: number; error: number } };
+export function richardson(f: ExpressionLike, x: number, options?: { h?: number; levels?: number; variable?: string }): { table: number[][]; errors: number[][]; exact: RationalInterval };
+export function quadratureRule(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], options?: { rule?: "midpoint" | "trapezoid" | "simpson"; n?: number; variable?: string }): { rule: string; panels: number; h: Rational; order: number; value: RationalInterval; exact: RationalInterval; error: RationalInterval; bound: Rational | null };
+export function romberg(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], options?: { levels?: number; variable?: string }): { table: number[][]; errors: number[][]; exact: RationalInterval };
+export function legendre(n: number): Rational[];
+export function gaussLegendre(n: number, options?: { digits?: number }): { polynomial: Rational[]; nodes: RationalInterval[]; weights: RationalInterval[] };
+export function gaussRule(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], n?: number, options?: { digits?: number; variable?: string }): { value: RationalInterval; exact: RationalInterval; error: RationalInterval; nodes: RationalInterval[]; weights: RationalInterval[] };
+export type OneStepMethod = "euler" | "heun" | "midpoint" | "rk4" | "ab2";
+export interface OdeMethodSpec { method?: OneStepMethod; t0?: number; y0: number; until: number; steps?: number; variables?: [string, string] }
+export function odeMethod(f: ExpressionLike, spec: OdeMethodSpec): { method: string; order: number; h: number; steps: Array<{ n: number; t: number; y: number; exact: RationalInterval | null; error: number | null }>; finalError: number | null };
+export function stepSizeStudy(f: ExpressionLike, spec: OdeMethodSpec & { counts?: number[] }): { rows: Array<{ steps: number; h: number; error: number | null; ratio: number | null; observedOrder: number | null }> };
+export function stability(method?: "euler" | "heun" | "midpoint" | "rk4"): { method: string; polynomial: string; interval: [RationalInterval, RationalInterval]; largestStep(lambda: RationalLike | string | number): RationalInterval };

@@ -1,0 +1,65 @@
+<!-- wide: no -->
+<div class="eyebrow">Numerical methods</div>
+  <h1>Differences and quadrature rules</h1>
+  <p>The classical formulas for derivatives and integrals, with the true error of each beside the textbook estimate: difference quotients and the step size at which rounding takes over, Richardson extrapolation, the composite midpoint, trapezoid and Simpson rules, Romberg's table, and Gauss-Legendre rules with certified nodes and weights.</p>
+<pre><code>const d = differences("exp(x)", 1, { kind: "central" });
+d.rows;    // [{ h, value, error, truncation }, …]  for h = 1e-1 … 1e-12
+d.best;    // the h with the smallest true error
+
+quadratureRule("exp(x)", [0, 1], { rule: "simpson", n: 4 });
+// { value, exact, error, bound, order: 4 }
+
+gaussLegendre(3);   // { polynomial: "5/2*x^3 - 3/2*x", nodes, weights }  enclosures</code></pre>
+  <h2>Difference quotients</h2>
+  <table class="ref">
+    <tr><th>kind</th><th>formula</th><th>truncation error</th></tr>
+    <tr><td>forward</td><td>\(\dfrac{f(x + h) - f(x)}{h}\)</td><td>\(\tfrac12 f''(x)\,h\)</td></tr>
+    <tr><td>central</td><td>\(\dfrac{f(x + h) - f(x - h)}{2h}\)</td><td>\(\tfrac16 f^{(3)}(x)\,h^2\)</td></tr>
+    <tr><td>second</td><td>\(\dfrac{f(x + h) - 2f(x) + f(x - h)}{h^2}\)</td><td>\(\tfrac1{12} f^{(4)}(x)\,h^2\)</td></tr>
+  </table>
+  <p>The truncation error shrinks with \(h\). The rounding error grows: the numerator is a difference of nearly equal numbers, accurate to about \(\varepsilon|f|\) with \(\varepsilon \approx 10^{-16}\), and dividing by \(h\) makes that \(\varepsilon|f|/h\). The total is smallest near \(h \approx \sqrt\varepsilon\) for the forward difference and \(h \approx \varepsilon^{1/3}\) for the central one. <code>differences</code> evaluates the quotient in doubles for a range of \(h\) and reports the true error of each against the certified derivative, so the turn is visible in the table, with the predicted truncation term beside it.</p>
+
+  <h2>Richardson extrapolation</h2>
+  <p>The central difference has an error expansion in even powers, \(D(h) = f'(x) + c_2h^2 + c_4h^4 + \dots\). Then \(\bigl(4D(h/2) - D(h)\bigr)/3\) cancels the \(h^2\) term, and repeating the idea cancels \(h^4\), \(h^6\), and so on. <code>richardson</code> builds the triangular table; <code>romberg</code> does the same for the trapezoid rule, whose error has the same kind of expansion (Euler-Maclaurin).</p>
+
+  <h2>Composite rules</h2>
+  <table class="ref">
+    <tr><th>rule</th><th>on each panel of width h</th><th>error bound</th></tr>
+    <tr><td>midpoint</td><td>\(h\,f(\text{mid})\)</td><td>\(\dfrac{(b - a)h^2}{24}\max|f''|\)</td></tr>
+    <tr><td>trapezoid</td><td>\(\dfrac h2\bigl(f(\text{left}) + f(\text{right})\bigr)\)</td><td>\(\dfrac{(b - a)h^2}{12}\max|f''|\)</td></tr>
+    <tr><td>Simpson</td><td>\(\dfrac h6\bigl(f(\text{left}) + 4f(\text{mid}) + f(\text{right})\bigr)\)</td><td>\(\dfrac{(b - a)h^4}{2880}\max|f^{(4)}|\)</td></tr>
+  </table>
+  <p><code>quadratureRule</code> evaluates the rule with certified arithmetic, so <code>error</code> is the error of the method alone, with no rounding mixed in. <code>exact</code> is the certified integral and <code>bound</code> the textbook bound with the maximum of the derivative enclosed. The true error is always inside the bound, and usually well inside.</p>
+
+  <h2>Gauss rules</h2>
+  <p>With \(n\) points chosen freely, a rule can be exact for all polynomials of degree below \(2n\). The points are the roots of the Legendre polynomial \(P_n\), and the weights are \(w_i = 2/\bigl((1 - x_i^2)\,P_n'(x_i)^2\bigr)\). <code>gaussLegendre(n)</code> builds \(P_n\) with exact coefficients, isolates its roots with proof, and returns nodes and weights as enclosures to 25 digits.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>differences(f, x, { kind = "central", steps })</td><td>{ exact, order, rows: [{ h, value, error, truncation }], best }</td></tr>
+    <tr><td>richardson(f, x, { h = 0.5, levels = 5 })</td><td>{ table, errors, exact }</td></tr>
+    <tr><td>quadratureRule(f, [a, b], { rule, n })</td><td>{ value, exact, error, bound, order, h }</td></tr>
+    <tr><td>romberg(f, [a, b], { levels = 5 })</td><td>{ table, errors, exact }</td></tr>
+    <tr><td>gaussLegendre(n), legendre(n)</td><td>{ polynomial, nodes, weights }; coefficients of Pₙ</td></tr>
+    <tr><td>gaussRule(f, [a, b], n = 3)</td><td>{ value, exact, error, nodes, weights }</td></tr>
+  </table></div>
+<template data-runbox>
+// The derivative of exp at 1 by central differences: the error falls like h², then rounding wins.
+const d = differences("exp(x)", 1, { kind: "central" });
+for (const r of d.rows) PRINT(`h = ${r.h.toExponential(0)}   error ${r.error.toExponential(2)}   truncation term ${r.truncation.toExponential(2)}`);
+PRINT("best h:", d.best.h, " Richardson from h = 1/2, five levels: error", richardson("exp(x)", 1).errors.at(-1).at(-1).toExponential(1));
+
+// Rules on the integral of exp over [0, 1]: true error against the textbook bound.
+for (const rule of ["midpoint", "trapezoid", "simpson"]) {
+  for (const n of [4, 8]) {
+    const q = quadratureRule("exp(x)", [0, 1], { rule, n });
+    PRINT(`${rule.padEnd(9)} n = ${n}: error ${q.error.low.toNumber().toExponential(3)}   bound ${q.bound.toNumber().toExponential(3)}`);
+  }
+}
+
+// Three Gauss points beat eight Simpson panels.
+const g = gaussRule("exp(x)", [0, 1], 3);
+PRINT("Gauss, 3 points: error", g.error.low.toNumber().toExponential(3));
+PRINT("nodes:", gaussLegendre(3).nodes.map((x) =&gt; x.low.toDecimal(15)).join(", "));
+romberg("exp(x)", [0, 1], { levels: 4 }).errors.map((row) =&gt; row.map((e) =&gt; e.toExponential(1)).join("  "));
+</template>

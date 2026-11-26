@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="https://ratmath.com/assets/katex/0.19.1/katex.min.css">
-<link rel="stylesheet" href="assets/site.css?v=20ed5f3d56">
+<link rel="stylesheet" href="assets/site.css?v=aa48210cc2">
 </head>
 <body>
 <div class="shell">
@@ -51,6 +51,11 @@
     <option value="curves.html" selected>Curves: length, curvature, torsion</option>
     <option value="surfaces.html">Surfaces and curvature</option>
     <option value="geodesics.html">Geodesics and Gauss-Bonnet</option>
+    <option value="floats.html">Floating point, exactly</option>
+    <option value="rootmethods.html">Root-finding methods</option>
+    <option value="interpolation.html">Interpolation and approximation</option>
+    <option value="quadraturerules.html">Differences and quadrature rules</option>
+    <option value="odemethods.html">Euler to Runge-Kutta</option>
   </select>
   <nav class="toc" aria-label="Contents">
     <a href="index.html">Introduction</a>
@@ -85,6 +90,12 @@
     <a href="curves.html" class="on" aria-current="page">Curves: length, curvature, torsion</a>
     <a href="surfaces.html">Surfaces and curvature</a>
     <a href="geodesics.html">Geodesics and Gauss-Bonnet</a>
+    <div class="group">Numerical methods</div>
+    <a href="floats.html">Floating point, exactly</a>
+    <a href="rootmethods.html">Root-finding methods</a>
+    <a href="interpolation.html">Interpolation and approximation</a>
+    <a href="quadraturerules.html">Differences and quadrature rules</a>
+    <a href="odemethods.html">Euler to Runge-Kutta</a>
   </nav>
   <p class="sitelinks"><a href="https://github.com/ratmath/analytic">GitHub</a> · <a href="https://www.npmjs.com/package/@ratmath/analytic">npm</a> · <a href="https://ratmath.com/">ratmath.com</a><br><a href="https://ratmath.com/core/">core</a> · <a href="https://ratmath.com/algebraic/">algebraic</a> · <a href="https://ratmath.com/linalg/">linalg</a> · <a href="https://ratmath.com/graphics/">graphics</a></p>
 </aside>
@@ -174,6 +185,6 @@ PRINT("binormal at t = 1:", twisted.at(1).binormal.map((c) =&gt; c.low.toDecimal
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=20ed5f3d56"></script>
+<script type="module" src="assets/pages.js?v=aa48210cc2"></script>
 </body>
 </html>

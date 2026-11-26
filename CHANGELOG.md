@@ -53,6 +53,16 @@
   tail; `wave` by d'Alembert's formula; `sturmLiouville` eigenvalues by
   shooting, each bracketed by two validated solutions. `antiderivative` and
   `partialFractions` are the integrals the methods use.
+- Numerical analysis for teaching (roadmap 13.3), also at
+  `@ratmath/analytic/methods`: the textbook methods run as a program would
+  run them, each beside the certified answer so the error shown is the true
+  one. `floatParts`, `exactOf`, `nearestDouble`, `floatOp` and `roundoff`
+  for floating point; `bisection`, `newton`, `secant`, `fixedPoint` with the
+  observed order; `interpolate` (divided differences, Newton and Lagrange
+  forms, the true maximum error beside the textbook bound), `equallySpaced`,
+  `chebyshevNodes`, `spline`, `leastSquares`; `differences`, `richardson`,
+  `quadratureRule`, `romberg`, `legendre`, `gaussLegendre`, `gaussRule`;
+  `odeMethod`, `stepSizeStudy` and `stability`.
 - Differential geometry (roadmap 13.2), also at `@ratmath/analytic/geometry`:
   `curve` (speed, arc length, Frenet frame, curvature, torsion, osculating
   circle, evolute), `surface` (both fundamental forms, normal, Gaussian, mean

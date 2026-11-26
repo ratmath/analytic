@@ -86,6 +86,7 @@ f.describe();       // domain, order, remainder width, rules used
 | Theorems of vector calculus | `greens`, `stokes`, `divergenceTheorem` (both sides enclosed, and the enclosures must meet); `changeOfVariables` with its Jacobian; `potential`; `lagrange` |
 | Differential equations: methods | `firstOrder(rhs)` and `exactEquation(M, N)` with steps and a `check` against the validated solution; `linearODE(coefficients, forcing)`; `laplace`, `inverseLaplace`; `linearSystem(A)`, `planarSystem([f, g])` with proven equilibria; `seriesSolution({ p, q })`; `heat`, `wave`, `laplaceRectangle`, `laplaceDisc` with proven tails; `sturmLiouville` |
 | Differential geometry | `curve(components)`: `.curvature`, `.torsion`, `.length`, `.at(t)` with the Frenet frame and osculating circle; `surface(components)`: fundamental forms, Gaussian and mean curvature, `.at(u, v)` with the kind of point; `metric({ E, F, G })`: `.christoffel`, `.geodesic`, `.transport`, `.gaussBonnet` |
+| Numerical methods for teaching | `floatParts`, `roundoff` (where the digits go); `bisection`, `newton`, `secant`, `fixedPoint` with true errors and observed order; `interpolate`, `spline`, `leastSquares`; `differences`, `richardson`, `quadratureRule`, `romberg`, `gaussRule`; `odeMethod`, `stepSizeStudy`, `stability` |
 | ODEs | `ode.solve(spec)` (Refinement), `ode.step(spec)` |
 | Boundary value problems | `bvp({ f, interval, left, right })` (Refinement of a `BVPSolution`) |
 | Features | `zeros`, `poles`, `extrema`, `inflections` (Refinements) |

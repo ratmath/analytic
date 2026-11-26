@@ -1,0 +1,65 @@
+<!-- wide: no -->
+<div class="eyebrow">Numerical methods</div>
+  <h1>Root-finding methods</h1>
+  <p>Bisection, fixed-point iteration, Newton's method and the secant method, each run in doubles the way a textbook runs it, with its table of iterations. Because the root is also known with certainty (from <a href="#zeros">zeros</a>), every row carries the <em>true</em> error, and the order of convergence is measured, not assumed.</p>
+<pre><code>const n = newton("x^2 - 2", 1);
+n.iterations;   // [{ n, x, fx, dfx, error }, …]   error = |x − √2|, the real one
+n.order;        // 1.9998   observed
+n.root;         // the certified root the errors are measured against
+
+bisection("x^2 - 2", [1, 2], { steps: 10 }).iterations;   // each with bound (b − a)/2ⁿ⁺¹ and the true error
+secant("x^3 - x - 1", 1, 2).order;                         // about 1.6
+fixedPoint("cos(x)", 1).multiplier;                        // g′ at the fixed point: −0.6736…</code></pre>
+  <h2>Order of convergence</h2>
+  <p>With \(e_n = |x_n - x^*|\), a method has order \(p\) when \(e_{n+1} \approx C e_n^{\,p}\). Order 1 (with \(C < 1\)) gains a fixed number of digits each step; order 2 doubles the number of correct digits each step. From three successive errors,</p>
+  \[ p \approx \frac{\log(e_{n+1}/e_n)}{\log(e_n/e_{n-1})}, \]
+  <p>which is what <code>order</code> reports, using the last errors that are still well above rounding.</p>
+  <table class="ref">
+    <tr><th>method</th><th>step</th><th>order</th><th>needs</th></tr>
+    <tr><td>bisection</td><td>halve the bracket, keep the half with the sign change</td><td>1, with \(C = \tfrac12\)</td><td>a sign change; always converges</td></tr>
+    <tr><td>fixed point</td><td>\(x \leftarrow g(x)\)</td><td>1, with \(C = |g'(x^*)|\)</td><td>\(|g'(x^*)| < 1\)</td></tr>
+    <tr><td>Newton</td><td>\(x \leftarrow x - f(x)/f'(x)\)</td><td>2 at a simple root</td><td>the derivative, a good start</td></tr>
+    <tr><td>secant</td><td>\(x \leftarrow x - f(x)\dfrac{x - x_{\text{prev}}}{f(x) - f(x_{\text{prev}})}\)</td><td>\((1 + \sqrt5)/2 \approx 1.618\)</td><td>two starting points</td></tr>
+  </table>
+
+  <h2>Why Newton's method squares the error</h2>
+  <p>Expand \(f\) about \(x_n\) and evaluate at the root: \(0 = f(x_n) + f'(x_n)(x^* - x_n) + \tfrac12 f''(\xi)(x^* - x_n)^2\). Dividing by \(f'(x_n)\) and rearranging,</p>
+  \[ x_{n+1} - x^* = \frac{f''(\xi)}{2 f'(x_n)}\,(x_n - x^*)^2 . \]
+  <p>At a multiple root \(f'(x^*) = 0\), the argument fails, and the observed order drops to 1: try <code>newton("(x - 1)^2", 2)</code>.</p>
+
+  <h2>Fixed points and the multiplier</h2>
+  <p>For \(x \leftarrow g(x)\), \(x_{n+1} - x^* = g(x_n) - g(x^*) \approx g'(x^*)(x_n - x^*)\). So each step multiplies the error by about \(g'(x^*)\). <code>fixedPoint</code> returns an enclosure of that multiplier at the certified fixed point and the observed <code>ratio</code> of successive errors, which should agree with it. The proof of convergence by the contraction principle is in <a href="#sequences">recursive sequences</a>.</p>
+
+  <h2>What the true error shows</h2>
+  <p>A program cannot know its error, so in practice the step size \(|x_{n+1} - x_n|\) or the residual \(|f(x_n)|\) stands in for it. Here the error itself is in the table, measured against a root enclosed to 25 digits, so the stand-ins can be judged. The last rows show the floor that rounding sets: the error stops near \(10^{-16}\) times the size of the root however many more steps are taken.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>bisection(f, [a, b], { steps = 20 })</td><td>{ iterations: [{ n, a, b, x, fx, bound, error }], root, order }</td></tr>
+    <tr><td>newton(f, x0, { steps = 10 })</td><td>{ iterations: [{ n, x, fx, dfx, error }], root, order, derivative }</td></tr>
+    <tr><td>secant(f, x0, x1, { steps = 12 })</td><td>{ iterations: [{ n, x, fx, error }], root, order }</td></tr>
+    <tr><td>fixedPoint(g, x0, { steps = 25 })</td><td>{ iterations, root, multiplier, ratio, order }</td></tr>
+  </table></div>
+<template data-runbox>
+// Three methods on x^3 - x - 1 = 0, errors measured against the certified root.
+const f = "x^3 - x - 1";
+const table = (r) =&gt; r.iterations.map((row) =&gt; (row.error === null ? "?" : row.error.toExponential(1))).join("  ");
+
+const b = bisection(f, [1, 2], { steps: 8 });
+PRINT("bisection errors:", table(b));
+PRINT("   bounds:       ", b.iterations.map((row) =&gt; row.bound.toExponential(1)).join("  "));
+
+const n = newton(f, 1.5);
+PRINT("Newton errors:   ", table(n), "  observed order", n.order.toFixed(3));
+
+const s = secant(f, 1, 2);
+PRINT("secant errors:   ", table(s), "  observed order", s.order.toFixed(3));
+PRINT("root:", n.root.low.toDecimal(20));
+
+// Fixed-point iteration: the error shrinks by the multiplier each step.
+const c = fixedPoint("cos(x)", 1, { steps: 30 });
+PRINT(`x = cos(x): multiplier g'(x*) = ${c.multiplier.low.toDecimal(8)}, observed ratio of errors ${c.ratio.toFixed(6)}`);
+
+// A double root: Newton drops to order 1.
+newton("(x - 1)^2*(x + 2)", 2, { steps: 20 }).order.toFixed(2);
+</template>
