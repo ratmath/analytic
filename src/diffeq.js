@@ -691,62 +691,188 @@ const binom = (n, k) => {
   return new Rational(r);
 };
 
+const STEP_NAMES = new Set(["heaviside"]);
+const IMPULSE_NAMES = new Set(["dirac"]);
+/** the multiplicative factors of a term, with a sign and rational constant pulled out */
+const factorsOf = (ast) => {
+  if (ast.type === "op" && ast.op === "*") return [...factorsOf(ast.args[0]), ...factorsOf(ast.args[1])];
+  return [ast];
+};
+const productOf = (fs) => (fs.length ? fs.reduce((a, b) => mul(a, b)) : num(1));
+/** heaviside(t − c) or dirac(t − c): { kind, c }, or null */
+function switchOf(ast, t) {
+  if (ast.type !== "call" || ast.args.length !== 1) return null;
+  const kind = STEP_NAMES.has(ast.name) ? "step" : IMPULSE_NAMES.has(ast.name) ? "impulse" : null;
+  if (!kind) return null;
+  const arg = tidy(ast.args[0]);
+  const lin = arg.type === "var" && arg.name === t ? { a: ONE, b: ZERO } : linearInVar(arg, t);
+  if (!lin || !lin.a.equals(ONE)) refuse("no-transform", `write ${ast.name}(${t} - c) with a rational c ≥ 0`);
+  const c = lin.b.negate();
+  if (c.numerator < 0n) refuse("no-transform", `${ast.name}(${F(arg)}) switches at a negative time; the transform starts at ${t} = 0`);
+  return { kind, c };
+}
+function linearInVar(ast, name) {
+  const rf = P.rationalFunction(ast, name);
+  if (!rf || P.deg(rf.den) !== 0 || P.deg(rf.num) !== 1) return null;
+  return { a: rf.num[1].divide(rf.den[0]), b: rf.num[0].divide(rf.den[0]) };
+}
+
+/** L{c·t^k·e^{at}·trig(wt)} as a tree in s */
+function transformTerm(e, Sv) {
+  const u = isZero(e.a) ? Sv : tidy(sub(Sv, num(e.a)));
+  const power = (base, m) => (m === 1 ? base : pw(base, num(m)));
+  if (!e.trig || isZero(e.w)) {
+    if (e.trig === "sin") return num(ZERO);
+    return div(num(e.c.multiply(fact(e.k))), power(u, e.k + 1));
+  }
+  // k!/(u − iw)^{k+1} = k!·(u + iw)^{k+1}/(u² + w²)^{k+1}; cos takes the real part, sin the imaginary
+  const m = e.k + 1;
+  let top = null;
+  for (let j = e.trig === "cos" ? 0 : 1; j <= m; j += 2) {
+    const sgn = Math.floor(j / 2) % 2 === 0 ? ONE : ONE.negate();
+    const coef = binom(m, j).multiply(sgn);
+    let wj = ONE;
+    for (let i = 0; i < j; i++) wj = wj.multiply(e.w);
+    const piece = mul(num(coef.multiply(wj)), pw(u, num(m - j)));
+    top = top ? add(top, piece) : piece;
+  }
+  return div(tidy(mul(num(e.c.multiply(fact(e.k))), top)), power(add(pw(u, num(2)), num(e.w.multiply(e.w))), m));
+}
+
 /**
- * The Laplace transform of a sum of terms c·t^k·e^{at}·(cos | sin)(wt), as a
- * formula in s. With { delay: c } the function is taken to be
+ * L{g(t + c)} for g = C·t^k·e^{at}·trig(wt): expand (t + c)^k by the binomial
+ * theorem and trig(wt + wc) by the addition formulas. The constants e^{ac},
+ * cos(wc), sin(wc) stay as exact formulas.
+ */
+function shiftedTransform(e, c, Sv) {
+  const parts = [];
+  const expC = isZero(e.a) || isZero(c) ? null : call("exp", num(e.a.multiply(c)));
+  const wc = e.w.multiply(c);
+  const trigPieces = !e.trig || isZero(e.w)
+    ? [{ trig: e.trig, k: null }]
+    : isZero(wc)
+      ? [{ trig: e.trig, k: num(1) }]
+      : e.trig === "cos"
+        ? [{ trig: "cos", k: call("cos", num(wc)) }, { trig: "sin", k: neg(call("sin", num(wc))) }]
+        : [{ trig: "cos", k: call("sin", num(wc)) }, { trig: "sin", k: call("cos", num(wc)) }];
+  for (let j = 0; j <= e.k; j++) {
+    let cj = binom(e.k, j);
+    for (let i = 0; i < e.k - j; i++) cj = cj.multiply(c);
+    if (isZero(cj)) continue;
+    for (const tp of trigPieces) {
+      const inner = transformTerm({ c: e.c.multiply(cj), k: j, a: e.a, w: e.w, trig: tp.trig }, Sv);
+      let piece = inner;
+      if (tp.k) piece = mul(tp.k, piece);
+      if (expC) piece = mul(expC, piece);
+      parts.push(piece);
+    }
+  }
+  return sumAst(parts);
+}
+
+/**
+ * The pieces of the transform grouped by delay: Map(c → tree in s without
+ * the factor e^{−cs}). Terms are c·t^k·e^{at}·(cos | sin)(wt), optionally
+ * times heaviside(t − c) (a switch at time c), or dirac(t − c)·g(t) (an
+ * impulse at c).
+ */
+function transformGroups(f, t, s) {
+  const Sv = variable(s);
+  const groups = new Map();
+  const put = (c, ast) => {
+    const key = String(c);
+    const g = groups.get(key);
+    groups.set(key, g ? { c, parts: [...g.parts, ast] } : { c, parts: [ast] });
+  };
+  for (const term of additiveTerms(tidy(A(f)))) {
+    let sign = 1;
+    let body = tidy(term);
+    while (body.type === "op" && body.op === "neg") {
+      sign = -sign;
+      body = body.args[0];
+    }
+    const fs = factorsOf(body);
+    const switches = fs.map((x) => switchOf(x, t));
+    const rest = productOf(fs.filter((_, i) => !switches[i]));
+    const sw = switches.filter(Boolean);
+    const signed = (ast) => (sign < 0 ? neg(ast) : ast);
+    if (sw.length > 1) refuse("no-transform", "one switch (heaviside or dirac) per term; split the term");
+    if (sw.length === 1 && sw[0].kind === "impulse") {
+      // L{g(t)·δ(t − c)} = g(c)·e^{−cs}
+      put(sw[0].c, signed(tidy(subst(rest, { [t]: num(sw[0].c) }))));
+      continue;
+    }
+    let e = expTrigTerm(tidy(rest), t);
+    if (!e && sw.length === 1) {
+      // u(t − c)·f(t − c): read f from rest(t + c) and transform it unshifted
+      const moved = expTrigTerm(tidy(subst(rest, { [t]: add(variable(t), num(sw[0].c)) })), t);
+      if (moved) {
+        if (sign < 0) moved.c = moved.c.negate();
+        put(sw[0].c, transformTerm(moved, Sv));
+        continue;
+      }
+    }
+    if (!e) refuse("no-transform", `${F(rest)} is not a product of a power of ${t}, an exponential and a sine or cosine`);
+    if (sign < 0) e.c = e.c.negate();
+    if (sw.length === 1) put(sw[0].c, shiftedTransform(e, sw[0].c, Sv));
+    else put(ZERO, transformTerm(e, Sv));
+  }
+  return [...groups.values()].map((g) => ({ c: g.c, ast: sumAst(g.parts) })).sort((a, b) => a.c.compareTo(b.c));
+}
+/** f·ast, written tidily: no "*1", no "*-(…)" */
+function withFactor(f, ast, skip = false) {
+  if (skip) return ast;
+  if (ast.type === "op" && ast.op === "neg") return neg(withFactor(f, ast.args[0]));
+  if (ast.type === "num") {
+    if (ast.value.equals(ONE)) return f;
+    if (ast.value.numerator < 0n) return neg(withFactor(f, num(ast.value.negate())));
+    return mul(ast, f);
+  }
+  if (ast.type === "op" && ast.op === "/") {
+    const top = withFactor(f, ast.args[0]);
+    return top.type === "op" && top.op === "neg" ? neg(div(top.args[0], ast.args[1])) : div(top, ast.args[1]);
+  }
+  return mul(f, ast);
+}
+const delayFactor = (c, Sv) => call("exp", tidy(neg(mul(num(c), Sv))));
+function joinGroups(groups, Sv) {
+  const parts = groups.map(({ c, ast: raw }) => {
+    return withFactor(delayFactor(c, Sv), raw, isZero(c));
+  });
+  return sumAst(parts);
+}
+
+/**
+ * The Laplace transform, as a formula in s, of a sum of terms
+ * c·t^k·e^{at}·(cos | sin)(wt). A term may be switched on at time c by a
+ * factor heaviside(t − c), and dirac(t − c) is a unit
+ * impulse at time c. With { delay: c } the whole function is taken to be
  * u(t − c)·f(t − c), which multiplies the transform by e^{−cs}.
  */
 export function laplace(f, opts = {}) {
   const t = opts.t ?? "t";
   const s = opts.s ?? "s";
   const Sv = variable(s);
-  const parts = [];
-  for (const term of additiveTerms(tidy(A(f)))) {
-    const e = expTrigTerm(tidy(term), t);
-    if (!e) refuse("no-transform", `${F(term)} is not a product of a power of ${t}, an exponential and a sine or cosine`);
-    const u = isZero(e.a) ? Sv : tidy(sub(Sv, num(e.a)));
-    const power = (base, m) => (m === 1 ? base : pw(base, num(m)));
-    if (!e.trig) {
-      parts.push(div(num(e.c.multiply(fact(e.k))), power(u, e.k + 1)));
-      continue;
-    }
-    // k!/(u − iw)^{k+1} = k!·(u + iw)^{k+1}/(u² + w²)^{k+1}; cos takes the real part, sin the imaginary
-    const m = e.k + 1;
-    let top = null;
-    for (let j = e.trig === "cos" ? 0 : 1; j <= m; j += 2) {
-      // i^j = (−1)^{j/2} for even j, i·(−1)^{(j−1)/2} for odd j
-      const sgn = Math.floor(j / 2) % 2 === 0 ? ONE : ONE.negate();
-      const coef = binom(m, j).multiply(sgn);
-      let wj = ONE;
-      for (let i = 0; i < j; i++) wj = wj.multiply(e.w);
-      const piece = mul(num(coef.multiply(wj)), pw(u, num(m - j)));
-      top = top ? add(top, piece) : piece;
-    }
-    parts.push(div(tidy(mul(num(e.c.multiply(fact(e.k))), top)), power(add(pw(u, num(2)), num(e.w.multiply(e.w))), m)));
-  }
-  let out = sumAst(parts);
+  let groups = transformGroups(f, t, s);
   if (opts.delay !== undefined) {
-    const shift = call("exp", tidy(neg(mul(A(opts.delay), Sv))));
-    out = out.type === "op" && out.op === "/" ? div(tidy(mul(shift, out.args[0])), out.args[1]) : mul(shift, out);
+    const d = qOf(opts.delay);
+    groups = groups.map((g) => ({ c: g.c.add(d), ast: g.ast }));
   }
-  return F(out);
+  return F(joinGroups(groups, Sv));
 }
 
-/**
- * The inverse Laplace transform of a rational function of s, by partial
- * fractions over the rationals: { partialFractions, result }.
- */
-export function inverseLaplace(Fs, opts = {}) {
-  const t = opts.t ?? "t";
-  const s = opts.s ?? "s";
-  const rf = P.rationalFunction(tidy(A(Fs)), s);
-  if (!rf) refuse("no-transform", "the inverse here is for rational functions of s with rational coefficients");
+/** a rational function of s, inverted by partial fractions: { fractions, terms, impulse } */
+function inverseRational(rf, t, s) {
   const pf = partialFractions(rf.num, rf.den);
   if (!pf) refuse("no-transform", "the denominator does not split into linear factors and single quadratics over the rationals");
-  if (!P.isZeroPoly(pf.poly)) refuse("no-transform", "the degree of the numerator is not below that of the denominator: the inverse would contain impulses");
+  let impulse = null;
+  if (!P.isZeroPoly(pf.poly)) {
+    if (P.deg(pf.poly) > 0) refuse("no-transform", "the numerator's degree exceeds the denominator's: the inverse would contain derivatives of an impulse");
+    impulse = pf.poly[0];
+  }
   const Tv = variable(t);
   const Sv = variable(s);
-  const fractions = [];
+  const fractions = impulse ? [num(impulse)] : [];
   const terms = [];
   for (const L of pf.linear) {
     const u = isZero(L.root) ? Sv : sub(Sv, num(L.root));
@@ -769,8 +895,223 @@ export function inverseLaplace(Fs, opts = {}) {
     if (!isZero(qd.alpha)) terms.push(mul(num(qd.alpha), withE(call(pos ? "cos" : "cosh", arg))));
     if (!isZero(k)) terms.push(mul(div(num(k), root), withE(call(pos ? "sin" : "sinh", arg))));
   }
-  const result = sumAst(terms.map(tidy));
-  return { partialFractions: F(sumAst(fractions.map(tidy))), result: F(result), tree: result };
+  return { fractions: sumAst(fractions.map(tidy)), terms: sumAst(terms.map(tidy)), impulse };
+}
+
+/** split a term of F(s) into a delay c (from factors e^{as}, a ≤ 0 in total) and the rest */
+function splitDelay(ast, s) {
+  const walk = (x) => {
+    if (x.type === "call" && x.name === "exp") {
+      const lin = linearInVar(tidy(x.args[0]), s);
+      if (lin && isZero(lin.b)) return { a: lin.a, rest: num(1) };
+      return null;
+    }
+    if (x.type === "op" && (x.op === "*" || x.op === "/")) {
+      const l = walk(x.args[0]);
+      const r = walk(x.args[1]);
+      if (!l && !r) return null;
+      const a = (l?.a ?? ZERO)[x.op === "*" ? "add" : "subtract"](r?.a ?? ZERO);
+      return { a, rest: op(x.op, l ? l.rest : x.args[0], r ? r.rest : x.args[1]) };
+    }
+    if (x.type === "op" && x.op === "neg") {
+      const y = walk(x.args[0]);
+      return y && { a: y.a, rest: neg(y.rest) };
+    }
+    return null;
+  };
+  const w = walk(ast);
+  if (!w) return null;
+  if (w.a.numerator > 0n) refuse("no-transform", `a factor e^(${w.a}*${s}) would switch on before time 0`);
+  return { c: w.a.negate(), rest: w.rest };
+}
+
+/** the switched piece u(t − c)·g(t − c), as a tree */
+function switchedOn(c, ast, t, kind = "heaviside") {
+  const Tv = variable(t);
+  if (isZero(c)) return ast;
+  const shifted = tidy(subst(ast, { [t]: sub(Tv, num(c)) }));
+  return withFactor(call(kind, tidy(sub(Tv, num(c)))), shifted);
+}
+
+/**
+ * The inverse Laplace transform of a sum of terms e^{−cs}·R(s), each R a
+ * rational function of s with rational coefficients, by partial fractions
+ * over the rationals: { partialFractions, result }. A delay c gives
+ * heaviside(t − c)·r(t − c); a constant part of R gives an impulse dirac(t − c).
+ */
+export function inverseLaplace(Fs, opts = {}) {
+  const t = opts.t ?? "t";
+  const s = opts.s ?? "s";
+  const Sv = variable(s);
+  const Tv = variable(t);
+  const groups = new Map();
+  for (const term of additiveTerms(A(Fs))) {
+    const d = splitDelay(term, s) ?? { c: ZERO, rest: term };
+    const key = String(d.c);
+    const g = groups.get(key);
+    groups.set(key, { c: d.c, parts: [...(g?.parts ?? []), d.rest] });
+  }
+  const fractions = [];
+  const terms = [];
+  for (const { c, parts } of [...groups.values()].sort((a, b) => a.c.compareTo(b.c))) {
+    const rf = P.rationalFunction(tidy(sumAst(parts)), s);
+    if (!rf) refuse("no-transform", "the inverse here is for sums of e^(-c*s) times rational functions of s with rational coefficients");
+    const inv = inverseRational(rf, t, s);
+    fractions.push(withFactor(delayFactor(c, Sv), inv.fractions, isZero(c)));
+    if (inv.impulse) terms.push(withFactor(isZero(c) ? call("dirac", Tv) : call("dirac", tidy(sub(Tv, num(c)))), num(inv.impulse)));
+    const body = inv.terms;
+    if (!(body.type === "num" && isZero(body.value))) terms.push(isZero(c) ? body : switchedOn(c, body, t));
+  }
+  const result = sumAst(terms);
+  return { partialFractions: F(sumAst(fractions)), result: F(result), tree: result };
+}
+
+/** replace heaviside(t − c) by 1 or 0 for times in (from, …) and impulses by 0: the formula on one interval */
+function onInterval(ast, t, from) {
+  if (ast.type === "call") {
+    const sw = ast.args.length === 1 && (STEP_NAMES.has(ast.name) || IMPULSE_NAMES.has(ast.name)) ? switchOf(ast, t) : null;
+    if (sw) return num(sw.kind === "impulse" ? ZERO : sw.c.compareTo(from) <= 0 ? ONE : ZERO);
+  }
+  if (ast.args) return { ...ast, args: ast.args.map((a) => onInterval(a, t, from)) };
+  return ast;
+}
+function switchTimes(ast, t, out = new Map()) {
+  if (ast.type === "call" && ast.args.length === 1 && (STEP_NAMES.has(ast.name) || IMPULSE_NAMES.has(ast.name))) {
+    const sw = switchOf(ast, t);
+    const prev = out.get(String(sw.c));
+    out.set(String(sw.c), { c: sw.c, impulse: (prev?.impulse ?? false) || sw.kind === "impulse" });
+  }
+  if (ast.args) for (const a of ast.args) switchTimes(a, t, out);
+  return out;
+}
+
+/**
+ * Solve a_n y⁽ⁿ⁾ + … + a_0 y = g(t) with y(0), y′(0), … given, by the Laplace
+ * transform. The forcing may switch on and off (heaviside(t − c)) and kick
+ * (dirac(t − c)). Returns { transform, partialFractions, solution, pieces,
+ * verified, steps }: `pieces` is the solution on each interval between
+ * switching times, and `verified` says that each piece satisfies the
+ * equation identically, the first piece the initial conditions, and the
+ * pieces join as the equation forces: y, y′, …, y⁽ⁿ⁻¹⁾ continuous, except
+ * that an impulse w·dirac(t − c) makes y⁽ⁿ⁻¹⁾ jump by exactly w/a_n at c.
+ */
+export function laplaceSolve(coefficients, forcing = 0, initial = [], opts = {}) {
+  const t = opts.t ?? "t";
+  const s = opts.s ?? "s";
+  const Sv = variable(s);
+  const Tv = variable(t);
+  const a = coefficients.map(qOf);
+  const n = a.length - 1;
+  if (n < 1 || isZero(a[0])) refuse("bad-equation", "give the coefficients highest derivative first, the first one not zero");
+  const y0 = Array.from({ length: n }, (_, i) => qOf(initial[i] ?? 0));
+  const steps = [];
+  const step = (what, value) => steps.push({ what, value });
+  const p = a.slice().reverse(); // p[j] = coefficient of s^j
+  step("characteristic polynomial", polyText(p, s));
+  // Y·p(s) = G(s) + Σ_j a_j Σ_{i<j} s^{j−1−i} y⁽ⁱ⁾(0)
+  const q = new Array(n).fill(ZERO);
+  for (let j = 1; j <= n; j++) for (let i = 0; i < j; i++) q[j - 1 - i] = q[j - 1 - i].add(p[j].multiply(y0[i]));
+  const groups = transformGroups(forcing, t, s);
+  step("transform of the forcing", F(joinGroups(groups, Sv)) || "0");
+  const pAst = polyAst(p, Sv);
+  const qAst = polyAst(q, Sv);
+  const byDelay = new Map(groups.map((g) => [String(g.c), g]));
+  if (!byDelay.has("0")) byDelay.set("0", { c: ZERO, ast: num(ZERO) });
+  const ys = [...byDelay.values()].sort((x, y) => x.c.compareTo(y.c)).map((g) => ({ c: g.c, ast: tidy(div(isZero(g.c) ? add(g.ast, qAst) : g.ast, pAst)) }));
+  const transform = F(joinGroups(ys, Sv));
+  step("Y(s)", transform);
+  const inv = inverseLaplace(transform, { t, s });
+  step("partial fractions", inv.partialFractions);
+  step("y(t)", inv.result);
+  // the certificate
+  const g = tidy(A(forcing));
+  const y = inv.tree;
+  const times = [...switchTimes(g, t).values(), ...switchTimes(y, t).values()].sort((u, v) => u.c.compareTo(v.c));
+  const breaks = [];
+  for (const x of times) {
+    const last = breaks[breaks.length - 1];
+    if (last && last.c.equals(x.c)) last.impulse ||= x.impulse;
+    else breaks.push({ ...x });
+  }
+  const starts = [ZERO, ...breaks.map((b) => b.c).filter((c) => c.numerator > 0n)];
+  const pieces = starts.map((from) => ({ from: String(from), y: tidy(onInterval(y, t, from)), g: tidy(onInterval(g, t, from)) }));
+  const derivs = (ast) => {
+    const out = [ast];
+    for (let j = 1; j <= n; j++) out.push(D(out[j - 1], t));
+    return out;
+  };
+  let verified = true;
+  const reasons = [];
+  for (const piece of pieces) {
+    const d = derivs(piece.y);
+    let lhs = num(ZERO);
+    for (let j = 0; j <= n; j++) lhs = add(lhs, mul(num(p[j]), d[j]));
+    if (!vanishesIdentically(sub(lhs, piece.g))) {
+      verified = false;
+      reasons.push(`the equation on t > ${piece.from}`);
+    }
+  }
+  const at = (ast, c) => tidy(subst(ast, { [t]: num(c) }));
+  // the size of each impulse in the forcing: an impulse w·δ(t − c) makes y⁽ⁿ⁻¹⁾ jump by w/a_n at c
+  const kicks = new Map();
+  for (const term of additiveTerms(g)) {
+    let sign = 1;
+    let body = term;
+    while (body.type === "op" && body.op === "neg") {
+      sign = -sign;
+      body = body.args[0];
+    }
+    const fs = factorsOf(body);
+    const k = fs.findIndex((x) => x.type === "call" && IMPULSE_NAMES.has(x.name));
+    if (k < 0) continue;
+    const c = switchOf(fs[k], t).c;
+    const w = at(productOf(fs.filter((_, i) => i !== k)), c);
+    const key = String(c);
+    kicks.set(key, tidy(add(kicks.get(key) ?? num(ZERO), sign < 0 ? neg(w) : w)));
+  }
+  const jump = (c) => tidy(div(kicks.get(String(c)) ?? num(ZERO), num(p[n])));
+  const d0 = derivs(pieces[0].y);
+  for (let i = 0; i < n; i++) {
+    const want = i === n - 1 ? add(num(y0[i]), jump(ZERO)) : num(y0[i]);
+    if (!vanishesIdentically(sub(at(d0[i], ZERO), want))) {
+      verified = false;
+      reasons.push(`y${"'".repeat(i)}(0)`);
+    }
+  }
+  for (let k = 1; k < pieces.length; k++) {
+    const c = qOf(pieces[k].from);
+    const before = derivs(pieces[k - 1].y);
+    const after = derivs(pieces[k].y);
+    for (let i = 0; i < n; i++) {
+      const want = i === n - 1 ? jump(c) : num(ZERO);
+      if (!vanishesIdentically(sub(sub(at(after[i], c), at(before[i], c)), want))) {
+        verified = false;
+        reasons.push(`the join of y${"'".repeat(i)} at t = ${c}`);
+      }
+    }
+  }
+  step(verified ? "verified: each piece solves the equation, the start matches, the pieces join" : `not verified: ${reasons.join("; ")}`, "");
+  return {
+    transform,
+    partialFractions: inv.partialFractions,
+    solution: inv.result,
+    pieces: pieces.map((x) => ({ from: x.from, y: F(x.y) })),
+    verified,
+    steps,
+    /** the solution at a time, as a formula (heaviside and dirac switched for that time) */
+    at(time) {
+      const c = qOf(time);
+      return F(tidy(at(onInterval(y, t, c), c)));
+    },
+  };
+}
+function polyAst(p, X) {
+  const parts = [];
+  p.forEach((c, j) => {
+    if (isZero(c)) return;
+    parts.push(j === 0 ? num(c) : mul(num(c), j === 1 ? X : pw(X, num(j))));
+  });
+  return parts.length ? tidy(sumAst(parts)) : num(ZERO);
 }
 
 // ---------------------------------------------------------------- linear systems in the plane
@@ -790,11 +1131,14 @@ function classify(tr, det, disc) {
 /**
  * x′ = Ax for a 2×2 rational matrix: { trace, determinant, discriminant,
  * eigenvalues, eigenvectors, kind, stability, exponential, solution(x0) }.
- * `exponential` is e^{At} as four formulas in t.
+ * `exponential` is e^{At} as four formulas in t. Other sizes go to
+ * linearSystemN below (e^{At} by the inverse Laplace transform of (sI − A)⁻¹).
  */
 export function linearSystem(matrix, opts = {}) {
   const t = opts.t ?? "t";
-  if (matrix.length !== 2 || matrix.some((row) => row.length !== 2)) refuse("bad-dimension", "linearSystem here is for 2×2 matrices; linalg has the matrix exponential in general");
+  const n = matrix.length;
+  if (!n || matrix.some((row) => row.length !== n)) refuse("bad-dimension", "linearSystem needs a square matrix");
+  if (n !== 2) return linearSystemN(matrix.map((row) => row.map(qOf)), t, opts);
   const [[a, b], [c, d]] = matrix.map((row) => row.map(qOf));
   const tr = a.add(d);
   const det = a.multiply(d).subtract(b.multiply(c));
@@ -862,6 +1206,120 @@ export function linearSystem(matrix, opts = {}) {
     solution(x0) {
       const v0 = x0.map(A);
       return exponential.map((row) => F(tidy(add(mul(row[0], v0[0]), mul(row[1], v0[1])))));
+    },
+  };
+}
+
+/** rank of a rational matrix */
+function rankQ(M) {
+  const R = M.map((r) => [...r]);
+  let rank = 0;
+  const cols = R[0]?.length ?? 0;
+  for (let c = 0; c < cols && rank < R.length; c++) {
+    const p = R.findIndex((r, i) => i >= rank && !isZero(r[c]));
+    if (p < 0) continue;
+    [R[rank], R[p]] = [R[p], R[rank]];
+    for (let i = 0; i < R.length; i++) {
+      if (i === rank || isZero(R[i][c])) continue;
+      const f = R[i][c].divide(R[rank][c]);
+      R[i] = R[i].map((v, k) => v.subtract(f.multiply(R[rank][k])));
+    }
+    rank++;
+  }
+  return rank;
+}
+const matMulQ = (X, Y) => X.map((r) => Y[0].map((_, j) => r.reduce((acc, v, k) => acc.add(v.multiply(Y[k][j])), ZERO)));
+const signOfRoot = (r) => {
+  // the sign of the real part of a root from characteristicRoots, exactly
+  if (r.kind === "complex") return r.re.numerator > 0n ? 1 : r.re.numerator < 0n ? -1 : 0;
+  if (r.value !== null) return r.value.numerator > 0n ? 1 : r.value.numerator < 0n ? -1 : 0;
+  // re ± √d with d > 0
+  const re = r.re;
+  const reSign = re.numerator > 0n ? 1 : re.numerator < 0n ? -1 : 0;
+  if (r.sign > 0 && reSign >= 0) return 1;
+  if (r.sign < 0 && reSign <= 0) return -1;
+  const c = re.multiply(re).compareTo(r.surd);
+  return c === 0 ? 0 : c > 0 ? reSign : r.sign;
+};
+
+/**
+ * x′ = Ax for an n×n rational matrix. e^{At} is the inverse Laplace transform
+ * of (sI − A)⁻¹, whose entries come from the Faddeev–LeVerrier recursion:
+ * (sI − A)⁻¹ = (Σₖ Mₖ s^{n−k})/p(s). Works when p splits over the rationals
+ * into linear factors and quadratics (the inverse transform's condition).
+ * `verified` says that d/dt e^{At} = A·e^{At} holds identically and e^{A·0} = I.
+ */
+function linearSystemN(M, t, opts) {
+  const n = M.length;
+  const I = M.map((_, i) => M.map((_, j) => (i === j ? ONE : ZERO)));
+  // Faddeev–LeVerrier: M_1 = I, c_{n−1} = −tr A; M_k = A M_{k−1} + c_{n−k+1} I, c_{n−k} = −tr(A M_k)/k
+  const c = new Array(n + 1).fill(ZERO);
+  c[n] = ONE;
+  const Ms = [];
+  let Mk = M.map((r) => r.map(() => ZERO));
+  for (let k = 1; k <= n; k++) {
+    Mk = matMulQ(M, Mk).map((r, i) => r.map((v, j) => (i === j ? v.add(c[n - k + 1]) : v)));
+    Ms.push(Mk);
+    const AM = matMulQ(M, Mk);
+    c[n - k] = AM.reduce((acc, r, i) => acc.add(r[i]), ZERO).divide(Q(k)).negate();
+  }
+  const roots = characteristicRoots(c);
+  const exponential = M.map((_, i) =>
+    M.map((_, j) => {
+      const numer = new Array(n).fill(ZERO);
+      Ms.forEach((Mk2, k) => (numer[n - 1 - k] = Mk2[i][j]));
+      while (numer.length > 1 && isZero(numer[numer.length - 1])) numer.pop();
+      if (numer.every(isZero)) return num(ZERO);
+      return inverseRational({ num: numer, den: c }, t, "s").terms;
+    }),
+  );
+  // stability from the real parts of the eigenvalues
+  let stability = null;
+  if (roots) {
+    const signs = roots.map(signOfRoot);
+    if (signs.some((x) => x > 0)) stability = "unstable";
+    else if (signs.every((x) => x < 0)) stability = "asymptotically stable";
+    else {
+      // eigenvalues on the imaginary axis: stable when each is semisimple
+      let semisimple = true;
+      roots.forEach((r, k) => {
+        if (signs[k] !== 0 || r.multiplicity === 1) return;
+        if (r.kind === "real") semisimple &&= rankQ(M.map((row, i) => row.map((v, j) => (i === j ? v.subtract(r.value) : v)))) === n - r.multiplicity;
+        else {
+          const w2 = r.im2;
+          semisimple &&= rankQ(matMulQ(M, M).map((row, i) => row.map((v, j) => (i === j ? v.add(w2) : v)))) === n - 2 * r.multiplicity;
+        }
+      });
+      stability = semisimple ? "stable, not asymptotically" : "unstable";
+    }
+  }
+  // the certificate: d/dt e^{At} = A·e^{At} identically, and e^{A·0} = I
+  let verified = true;
+  for (let i = 0; i < n && verified; i++)
+    for (let j = 0; j < n && verified; j++) {
+      let rhs = num(ZERO);
+      for (let k = 0; k < n; k++) if (!isZero(M[i][k])) rhs = add(rhs, mul(num(M[i][k]), exponential[k][j]));
+      if (!vanishesIdentically(sub(D(exponential[i][j], t), rhs))) verified = false;
+      if (!vanishesIdentically(sub(tidy(subst(exponential[i][j], { [t]: num(ZERO) })), num(i === j ? ONE : ZERO)))) verified = false;
+    }
+  return {
+    matrix: M,
+    verified,
+    trace: M.reduce((acc, r, i) => acc.add(r[i]), ZERO),
+    characteristic: `${polyText(c, "s")} = 0`,
+    eigenvalues: roots
+      ? roots.flatMap((r) => {
+          const texts = r.kind === "complex" ? ["-", "+"].map((sg) => r.text.replace("± ", sg === "-" ? "- " : "+ ").replace(/^([-+]) /, (m, x) => (x === "-" ? "-" : ""))) : [r.text];
+          return Array(r.multiplicity).fill(texts).flat();
+        })
+      : null,
+    eigenvectors: null,
+    kind: null,
+    stability,
+    exponential: exponential.map((row) => row.map(F)),
+    solution(x0) {
+      const v0 = x0.map(A);
+      return exponential.map((row) => F(tidy(row.reduce((acc, e, j) => add(acc, mul(e, v0[j])), num(ZERO)))));
     },
   };
 }

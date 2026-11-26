@@ -23,6 +23,19 @@
 
 ### Added
 
+- Steps and impulses in Laplace transforms (roadmap 13.6 leftovers):
+  `laplace` reads `heaviside(t - c)` (both `heaviside(t - c)*g(t)` and the
+  textbook `heaviside(t - c)*f(t - c)`) and `dirac(t - c)`; `inverseLaplace`
+  reads delays `exp(-c*s)` and returns `heaviside`/`dirac` terms, including a
+  `dirac(t)` for a constant polynomial part. New `laplaceSolve(coefficients,
+  forcing, initial)` solves constant-coefficient equations with switched or
+  impulsive forcing and verifies the answer piece by piece, with the jump an
+  impulse puts into the top derivative.
+- `linearSystem` beyond 2 by 2: the characteristic polynomial, exact
+  eigenvalues where it splits, `e^{At}` as the inverse Laplace transform of
+  `(sI − A)⁻¹` (verified by `d/dt E = AE`, `E(0) = I`), and stability from
+  exact signs with a rank test for repeated eigenvalues on the imaginary axis.
+
 - Sequences and series (roadmap 13.4): `sequence` (exact terms, proven
   limits, `monotone`, `bounds`), `recursive` (fixed points with their
   multipliers, limits proven by contraction), `sum` (the nth-term, ratio,

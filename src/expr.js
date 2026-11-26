@@ -63,6 +63,8 @@ export const FUNCTIONS = new Set([
   "sin", "cos", "tan", "exp", "ln", "log", "sqrt", "abs", "min", "max",
   "atan", "log1p", "sinh", "cosh", "tanh", "asin", "acos", "cbrt", "erf",
   "gamma", "lgamma", "digamma", "trigamma", "beta", "besselJ", "Si", "fresnelS", "fresnelC", "erfc",
+  // switches for the Laplace transform tools: a unit step and a unit impulse at 0
+  "heaviside", "dirac",
 ]);
 /** Functions of two arguments. */
 const BINARY = new Set(["min", "max", "beta", "besselJ"]);

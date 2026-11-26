@@ -46,7 +46,7 @@ inverseLaplace("1/(s^2*(s + 1))");
     <tr><td>\(e^{at}\sin wt\)</td><td>\(w/((s - a)^2 + w^2)\)</td></tr>
     <tr><td>\(u(t - c)\,f(t - c)\)</td><td>\(e^{-cs}F(s)\)</td></tr>
   </table>
-  <p><code>laplace</code> transforms sums of terms \(t^k e^{at}\cos wt\) and \(t^k e^{at}\sin wt\). <code>inverseLaplace</code> inverts rational functions whose denominators split over the rationals into linear factors (to any power) and single quadratic factors.</p>
+  <p><code>laplace</code> transforms sums of terms \(t^k e^{at}\cos wt\) and \(t^k e^{at}\sin wt\). <code>inverseLaplace</code> inverts rational functions whose denominators split over the rationals into linear factors (to any power) and single quadratic factors. Forcing that switches on at a time, written <code>heaviside(t - c)</code>, and impulses, written <code>dirac(t - c)</code>, are on the page <a href="switches.html">Steps and impulses</a>, together with <code>laplaceSolve</code>.</p>
 
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th></tr>

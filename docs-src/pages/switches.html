@@ -1,0 +1,61 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>Steps and impulses</h1>
+  <p>Forces that switch on at a time, or strike at an instant, are where the Laplace transform is at its best. A factor <code>heaviside(t - c)</code> switches a term on at time \(c\). <code>dirac(t - c)</code> is a unit impulse at \(c\). <code>laplaceSolve</code> solves a linear equation with such forcing by transform, and then proves the answer piece by piece.</p>
+<pre><code>laplace("heaviside(t - 2)");            // "exp(-2*s)/s"
+laplace("heaviside(t - 1)*t");          // "exp(-s)*(1/s + 1/s^2)"
+laplace("heaviside(t - 1)*sin(t)");     // "exp(-s)*(sin(1)*(s/(s^2 + 1)) + cos(1)*(1/(s^2 + 1)))"
+laplace("t*dirac(t - 2)");              // "exp(-2*s)*2"
+
+inverseLaplace("exp(-2*s)/s^2").result;      // "heaviside(t - 2)*(t - 2)"
+inverseLaplace("exp(-3*s)").result;          // "dirac(t - 3)"
+
+const r = laplaceSolve([1, 0, 1], "heaviside(t - 1)", [0, 0]);   // y'' + y = u(t − 1), at rest
+r.solution;    // "heaviside(t - 1)*(-cos(t - 1) + 1)"
+r.pieces;      // [{ from: "0", y: "0" }, { from: "1", y: "-cos(t - 1) + 1" }]
+r.verified;    // true</code></pre>
+
+  <h2>The shift theorems</h2>
+  <p>Write \(u(t - c)\) for the unit step that is 0 before \(c\) and 1 after, with \(c \ge 0\). Then</p>
+  \[ \mathcal{L}\{u(t - c)\,g(t)\} = e^{-cs}\,\mathcal{L}\{g(t + c)\}, \qquad \mathcal{L}\{\delta(t - c)\,g(t)\} = e^{-cs}\,g(c). \]
+  <p>For the first, substitute \(\tau = t - c\) in \(\int_c^\infty e^{-st} g(t)\,dt\). For a term \(g = t^k e^{at}\cos wt\), the shifted \(g(t + c)\) is expanded exactly: \((t + c)^k\) by the binomial theorem, and \(\cos(wt + wc)\) by the addition formula. That leaves constants such as \(e^{ac}\), \(\cos wc\) and \(\sin wc\), which stay as exact formulas. The second is the defining property of the impulse: \(\int_0^\infty e^{-st}\delta(t - c)\,g(t)\,dt = e^{-cs}g(c)\).</p>
+  <p>Going back, <code>inverseLaplace</code> groups the terms of \(F(s)\) by their factor \(e^{-cs}\), inverts each group by partial fractions, and shifts: \(e^{-cs}R(s) \mapsto u(t - c)\,r(t - c)\). A constant left over after the partial fractions is an impulse: \(e^{-cs} \mapsto \delta(t - c)\). A polynomial of higher degree would need derivatives of the impulse, and is refused.</p>
+
+  <h2>Solving with switched forcing</h2>
+  <p>For \(a_n y^{(n)} + \dots + a_0 y = g(t)\) with \(y(0), \dots, y^{(n-1)}(0)\) given, transforming gives</p>
+  \[ p(s)\,Y(s) = G(s) + \sum_{j=1}^{n} a_j \sum_{i<j} s^{\,j-1-i}\,y^{(i)}(0), \qquad p(s) = a_n s^n + \dots + a_0, \]
+  <p>and \(Y = (\dots)/p(s)\) is inverted group by group. <code>steps</code> records each stage.</p>
+<pre><code>const kick = laplaceSolve([1, 2, 5], "dirac(t - 2)", [1, 0]);   // a damped spring, struck at t = 2
+kick.solution;
+// "cos(2*t)*exp(-t) + 1/2*sin(2*t)*exp(-t) + heaviside(t - 2)*(1/2*sin(2*t - 4)*exp(-t + 2))"
+
+const pulse = laplaceSolve([1, 3, 2], "heaviside(t - 1) - heaviside(t - 3)", [0, 0]);   // on from 1 to 3
+pulse.pieces.map((p) =&gt; p.from);   // ["0", "1", "3"]</code></pre>
+
+  <h2>Why the answer is proved, not just computed</h2>
+  <p>Between switching times the forcing is an ordinary formula, and so is the solution. <code>laplaceSolve</code> checks, by exact symbolic differentiation:</p>
+  <ul>
+    <li>On each interval, the piece satisfies the equation identically.</li>
+    <li>The first piece has the given initial values.</li>
+    <li>At each switching time \(c\), the pieces join with \(y, y', \dots, y^{(n-2)}\) continuous. At an impulse \(w\,\delta(t - c)\), \(y^{(n-1)}\) jumps by exactly \(w/a_n\); everywhere else it is continuous too.</li>
+  </ul>
+  <p>That is exactly the meaning of a solution with step and impulse forcing. The uniqueness theorem for linear equations then says it is <em>the</em> solution, so <code>verified: true</code> is a proof.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>laplace(f, { t, s, delay })</td><td>a formula in s; f may contain <code>heaviside(t - c)</code> factors and <code>dirac(t - c)</code></td></tr>
+    <tr><td>inverseLaplace(F, { s, t })</td><td>{ partialFractions, result } for sums of \(e^{-cs}\) times rational functions</td></tr>
+    <tr><td>laplaceSolve(coefficients, forcing, initial, { t, s })</td><td>{ transform, partialFractions, solution, pieces, verified, steps, at(time) }</td></tr>
+  </table></div>
+  <p><code>heaviside</code> and <code>dirac</code> are understood by these transform tools only. To evaluate or plot a switched solution, take its pieces.</p>
+<template data-runbox>
+// A spring at rest is pushed by a constant force from t = 1 to t = 3, then struck at t = 5.
+const r = laplaceSolve([1, 0, 4], "heaviside(t - 1) - heaviside(t - 3) + dirac(t - 5)", [0, 0]);
+for (const step of r.steps) PRINT(`${step.what}${step.value ? ":  " + step.value : ""}`);
+for (const p of r.pieces) PRINT(`for t > ${p.from}:  y = ${p.y}`);
+PRINT("y(2) =", r.at(2));
+// The transform of the pushing force, and back again.
+const F = laplace("heaviside(t - 1) - heaviside(t - 3)");
+PRINT("L{u(t-1) - u(t-3)} =", F);
+inverseLaplace(F).result
+</template>

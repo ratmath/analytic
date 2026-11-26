@@ -1,7 +1,7 @@
 <!-- wide: no -->
 <div class="eyebrow">Topic</div>
   <h1>Systems in the plane</h1>
-  <p><code>linearSystem</code> solves \(x' = Ax\) for a 2 by 2 matrix exactly and names the kind of equilibrium. <code>planarSystem</code> takes a nonlinear system, finds every equilibrium in a box with proof, and classifies each from its linearisation.</p>
+  <p><code>linearSystem</code> solves \(x' = Ax\) exactly: for a 2 by 2 matrix it names the kind of equilibrium, and for larger matrices it gives \(e^{At}\) and the stability. <code>planarSystem</code> takes a nonlinear system, finds every equilibrium in a box with proof, and classifies each from its linearisation.</p>
 <pre><code>const s = linearSystem([[1, 2], [3, 2]]);
 s.eigenvalues;      // ["-1", "4"]
 s.kind;             // "saddle"
@@ -25,7 +25,19 @@ pendulum.equilibria({ x: [-4, 4], y: [-2, 2] });
   <p>The entries are rational, so the signs of \(\tau\), \(\Delta\) and \(\tau^2 - 4\Delta\) are decided exactly and the borderline cases are recognised for what they are.</p>
   <p>The solution is \(x(t) = e^{At}x(0)\). For a 2 by 2 matrix, with \(\mu = \tau/2\) and \(\delta = \mu^2 - \Delta\),</p>
   \[ e^{At} = e^{\mu t}\Bigl(c(t)\,I + s(t)\,(A - \mu I)\Bigr), \qquad (c, s) = \begin{cases} (\cosh\omega t,\ \sinh(\omega t)/\omega) & \delta = \omega^2 > 0 \\ (1,\ t) & \delta = 0 \\ (\cos\omega t,\ \sin(\omega t)/\omega) & \delta = -\omega^2 < 0, \end{cases} \]
-  <p>which follows from \((A - \mu I)^2 = \delta I\) (Cayley-Hamilton). Larger systems use the matrix exponential in the linear algebra package.</p>
+  <p>which follows from \((A - \mu I)^2 = \delta I\) (Cayley-Hamilton).</p>
+
+  <h2>Larger systems</h2>
+  <p>For an \(n\) by \(n\) matrix, \(e^{At}\) is the inverse Laplace transform of \((sI - A)^{-1}\), because \(\mathcal{L}\{e^{At}\} = (sI - A)^{-1}\). The Faddeev–LeVerrier recursion gives this inverse with exact rational coefficients: with \(M_1 = I\),</p>
+  \[ M_{k} = A M_{k-1} + c_{n-k+1} I, \qquad c_{n-k} = -\tfrac1k \operatorname{tr}(A M_k), \qquad (sI - A)^{-1} = \frac{\sum_{k=1}^{n} M_k\, s^{\,n-k}}{p(s)}, \]
+  <p>where \(p(s) = s^n + c_{n-1}s^{n-1} + \dots + c_0\) is the characteristic polynomial. Each entry is then inverted by partial fractions. This works when \(p\) splits over the rationals into linear factors and quadratics. The result is checked: \(\tfrac{d}{dt}e^{At} = A\,e^{At}\) identically and \(e^{A\cdot 0} = I\), and <code>verified</code> reports it.</p>
+<pre><code>const s3 = linearSystem([[0, 1, 0], [0, 0, 1], [-6, -11, -6]]);
+s3.characteristic;   // "s^3 + 6*s^2 + 11*s + 6 = 0"
+s3.eigenvalues;      // ["-1", "-2", "-3"]
+s3.stability;        // "asymptotically stable"
+s3.solution([1, 0, 0])[0];   // "3*exp(-t) - 3*exp(-2*t) + exp(-3*t)"
+linearSystem([[0, 1, 0], [0, 0, 1], [0, 0, 0]]).exponential[0];   // ["1", "t", "1/2*t^2"]</code></pre>
+  <p>Stability is read from the real parts of the eigenvalues, whose signs are decided exactly. If every real part is negative, the system is asymptotically stable; if any is positive, it is unstable. Eigenvalues on the imaginary axis give stability that is not asymptotic, if each is semisimple, which is checked exactly by a rank. Otherwise the system is unstable: a repeated zero eigenvalue with a Jordan block makes \(e^{At}\) grow like a power of \(t\). For other matrices, use the matrix exponential in the linear algebra package.</p>
 
   <h2>Nonlinear systems</h2>
   <p>An equilibrium of \(x' = f(x, y),\ y' = g(x, y)\) is a common zero of \(f\) and \(g\). <code>equilibria(box)</code> bisects the box, discards pieces where interval arithmetic shows \(f\) or \(g\) has no zero, and applies a Krawczyk test to the rest: when the test succeeds there is exactly one equilibrium in that piece. The returned list has <code>complete: true</code> when every part of the box was either proven empty or proven to hold exactly one equilibrium.</p>
@@ -35,6 +47,7 @@ pendulum.equilibria({ x: [-4, 4], y: [-2, 2] });
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th></tr>
     <tr><td>linearSystem([[a, b], [c, d]])</td><td>{ trace, determinant, discriminant, eigenvalues, eigenvectors, kind, stability, exponential, solution(x0) }</td></tr>
+    <tr><td>linearSystem(A), A n by n</td><td>{ characteristic, eigenvalues, stability, exponential, verified, solution(x0) }</td></tr>
     <tr><td>planarSystem([f, g], [x, y], { params })</td><td>PlanarSystem</td></tr>
     <tr><td>s.jacobian(), s.nullclines()</td><td>formulas</td></tr>
     <tr><td>s.equilibria({ x: [a, b], y: [c, d] })</td><td>records { point, unique, jacobian, trace, determinant, kind, stability, hyperbolic }, with <code>complete</code> on the list</td></tr>
@@ -48,6 +61,8 @@ for (const A of [[[1, 2], [3, 2]], [[-2, 1], [1, -2]], [[-1, -2], [2, -1]], [[0,
   PRINT(`${JSON.stringify(A)}: eigenvalues ${s.eigenvalues.join(" and ")} -&gt; ${s.kind}`);
 }
 PRINT("rotation:", JSON.stringify(linearSystem([[0, 1], [-1, 0]]).exponential));
+const big = linearSystem([[0, 1, 0], [-1, 0, 0], [0, 0, -2]]);
+PRINT("3 by 3:", big.eigenvalues.join(", "), "-&gt;", big.stability, "; verified", big.verified);
 
 // Competing species: every equilibrium in the box, proven and classified.
 const species = planarSystem(["x*(3 - x - 2*y)", "y*(2 - x - y)"], ["x", "y"]);
