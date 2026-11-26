@@ -33,6 +33,8 @@ export const PAGES = [
   { name: "improper", title: "Limits and improper integrals" },
   { name: "special", title: "Special functions" },
   { name: "fourier", title: "Fourier series" },
+  { name: "transforms", title: "The Fourier transform" },
+  { name: "dft", title: "The discrete Fourier transform" },
   { name: "series", title: "Your own series" },
   { name: "sequences", title: "Sequences" },
   { name: "sums", title: "Series and convergence tests" },

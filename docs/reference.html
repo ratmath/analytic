@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 
-<link rel="stylesheet" href="assets/site.css?v=aa48210cc2">
+<link rel="stylesheet" href="assets/site.css?v=19e23836be">
 </head>
 <body>
 <div class="shell">
@@ -42,6 +42,8 @@
     <option value="improper.html">Limits and improper integrals</option>
     <option value="special.html">Special functions</option>
     <option value="fourier.html">Fourier series</option>
+    <option value="transforms.html">The Fourier transform</option>
+    <option value="dft.html">The discrete Fourier transform</option>
     <option value="series.html">Your own series</option>
     <option value="sequences.html">Sequences</option>
     <option value="sums.html">Series and convergence tests</option>
@@ -81,6 +83,8 @@
     <a href="improper.html">Limits and improper integrals</a>
     <a href="special.html">Special functions</a>
     <a href="fourier.html">Fourier series</a>
+    <a href="transforms.html">The Fourier transform</a>
+    <a href="dft.html">The discrete Fourier transform</a>
     <a href="series.html">Your own series</a>
     <a href="sequences.html">Sequences</a>
     <a href="sums.html">Series and convergence tests</a>
@@ -252,6 +256,18 @@
     <tr><td>ode.solve({ …, track: false })</td><td></td><td>skips tracking the initial value, which is faster for a single starting point over a short span</td></tr>
   </table></div>
 
+  <h2>Fourier transforms</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>fourierTransform(f, { convention, support })</td><td>FourierTransform</td><td><code>at(ω)</code> as { re, im } enclosures, <code>formula</code> for the standard pairs (checked against the integrals), <code>check(ω)</code>, <code>parseval()</code>, <code>inversion(x)</code>. See <a href="transforms.html">The Fourier transform</a></td></tr>
+    <tr><td>inverseFourier(F).at(x)</td><td>{ re, im }</td><td>from a formula for F</td></tr>
+    <tr><td>convolution(f, g)</td><td>object</td><td><code>at(x)</code> enclosed; <code>theorem(x)</code> checks it against the product of the transforms</td></tr>
+    <tr><td>heatLine({ k, initial })</td><td>object</td><td>the heat equation on the whole line: <code>at(x, t)</code>, <code>viaTransform(x, t)</code>, <code>check(x, t)</code>, <code>heat()</code></td></tr>
+    <tr><td>dft(values), fft(values)</td><td>object</td><td>exact in the field of n-th roots of unity; <code>fft</code> counts its multiplications and compares with the definition. See <a href="dft.html">The discrete Fourier transform</a></td></tr>
+    <tr><td>rootOfUnity(n, k), cyclotomic(n), Cyclotomic</td><td></td><td>exact numbers built from roots of unity</td></tr>
+    <tr><td>alias(frequency, rate), sinusoidSamples(spec), sample(f, spec)</td><td></td><td>the alias frequency, exact samples of a sinusoid, enclosed samples of a formula</td></tr>
+  </table></div>
+
   <h2>Numerical methods, with their true errors</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th><th>notes</th></tr>
@@ -331,6 +347,6 @@ f.range(R`0:5`, { digits: 6 }).exact()</textarea>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=aa48210cc2"></script>
+<script type="module" src="assets/pages.js?v=19e23836be"></script>
 </body>
 </html>

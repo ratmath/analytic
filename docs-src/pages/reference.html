@@ -150,6 +150,18 @@
     <tr><td>ode.solve({ …, track: false })</td><td></td><td>skips tracking the initial value, which is faster for a single starting point over a short span</td></tr>
   </table></div>
 
+  <h2>Fourier transforms</h2>
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th><th>notes</th></tr>
+    <tr><td>fourierTransform(f, { convention, support })</td><td>FourierTransform</td><td><code>at(ω)</code> as { re, im } enclosures, <code>formula</code> for the standard pairs (checked against the integrals), <code>check(ω)</code>, <code>parseval()</code>, <code>inversion(x)</code>. See <a href="#transforms">The Fourier transform</a></td></tr>
+    <tr><td>inverseFourier(F).at(x)</td><td>{ re, im }</td><td>from a formula for F</td></tr>
+    <tr><td>convolution(f, g)</td><td>object</td><td><code>at(x)</code> enclosed; <code>theorem(x)</code> checks it against the product of the transforms</td></tr>
+    <tr><td>heatLine({ k, initial })</td><td>object</td><td>the heat equation on the whole line: <code>at(x, t)</code>, <code>viaTransform(x, t)</code>, <code>check(x, t)</code>, <code>heat()</code></td></tr>
+    <tr><td>dft(values), fft(values)</td><td>object</td><td>exact in the field of n-th roots of unity; <code>fft</code> counts its multiplications and compares with the definition. See <a href="#dft">The discrete Fourier transform</a></td></tr>
+    <tr><td>rootOfUnity(n, k), cyclotomic(n), Cyclotomic</td><td></td><td>exact numbers built from roots of unity</td></tr>
+    <tr><td>alias(frequency, rate), sinusoidSamples(spec), sample(f, spec)</td><td></td><td>the alias frequency, exact samples of a sinusoid, enclosed samples of a formula</td></tr>
+  </table></div>
+
   <h2>Numerical methods, with their true errors</h2>
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th><th>notes</th></tr>

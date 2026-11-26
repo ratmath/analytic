@@ -53,6 +53,16 @@
   tail; `wave` by d'Alembert's formula; `sturmLiouville` eigenvalues by
   shooting, each bracketed by two validated solutions. `antiderivative` and
   `partialFractions` are the integrals the methods use.
+- Fourier transforms (roadmap 13.6), also at `@ratmath/analytic/transform`:
+  `fourierTransform` gives F(ω) as two certified improper integrals and, for
+  the standard pairs with the shift and multiply-by-x rules, a formula that
+  is checked against those integrals before it is returned; three
+  conventions. `parseval()` and `inversion(x)` are checked statements,
+  `convolution(f, g).theorem(x)` checks the convolution theorem, and
+  `heatLine` solves the heat equation on the whole line two ways. `dft` and
+  `fft` work exactly in the field of n-th roots of unity (`Cyclotomic`,
+  `rootOfUnity`, `cyclotomic`), with the fast algorithm's count beside n²;
+  `alias`, `sinusoidSamples` and `sample` for sampling.
 - Numerical analysis for teaching (roadmap 13.3), also at
   `@ratmath/analytic/methods`: the textbook methods run as a program would
   run them, each beside the certified answer so the error shown is the true
