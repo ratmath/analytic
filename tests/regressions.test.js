@@ -1,6 +1,7 @@
 // Cases that once gave a wrong answer, a crash or an unhelpful "possible".
 import { describe, test, expect } from "bun:test";
-import { zeros, extrema, inflections, fn, simplify, parse, format } from "../index.js";
+import { Rational, RationalInterval } from "@ratmath/core";
+import { zeros, extrema, inflections, fn, simplify, parse, format, enclose, constants } from "../index.js";
 
 const num = (x) => x.toNumber();
 const mid = (v) => (num(v.low) + num(v.high)) / 2;
@@ -79,5 +80,60 @@ describe("zeros that land on a bisection point", () => {
     expect(e[0].unique).toBe(true);
     const f = inflections("exp(-x^2)", [-3, 3]).exact();
     expect(f.length).toBe(2);
+  });
+});
+
+describe("atan at points with long denominators", () => {
+  // atanSmall rounds a point whose denominator is longer than the working precision
+  // and used to round the rounded point again, without end, whenever its numerator was odd.
+  const big = (digits, seed) => {
+    let s = BigInt(seed);
+    let out = 0n;
+    for (let i = 0; i < digits; i++) {
+      s = (s * 6364136223846793005n + 1442695040888963407n) % (1n << 64n);
+      out = out * 10n + (s >> 60n) % 10n;
+    }
+    return out + 1n;
+  };
+  const points = [];
+  for (let k = 1; k <= 40; k++) {
+    const d = big(30 + 3 * k, k);
+    // spread over the three ranges atan treats differently: below 1/2, up to 2, above 2
+    const scale = [1n, 3n, 7n, 2n, 9n, 40n][k % 6];
+    const over = [5n, 4n, 5n, 1n, 2n, 3n][k % 6];
+    points.push(new Rational(big(30 + 3 * k, 1000 + k) % d * scale + 1n, d * over));
+  }
+  test("every one returns, encloses the float value and is as narrow as asked", () => {
+    for (const q of points) for (const bits of [24, 64, 150]) {
+      const iv = enclose.atan(q, bits);
+      const width = iv.high.subtract(iv.low).toNumber();
+      expect(width).toBeLessThan(2 ** -(bits - 2));
+      expect(Math.abs(iv.low.toNumber() - Math.atan(q.toNumber()))).toBeLessThan(1e-6 + 2 ** -bits);
+    }
+  });
+  test("a wider precision gives an interval inside the narrower one's", () => {
+    for (const q of points) {
+      const a = enclose.atan(q, 40);
+      const b = enclose.atan(q, 200);
+      expect(a.low.compareTo(b.high) <= 0 && b.low.compareTo(a.high) <= 0).toBe(true);
+      const c = enclose.atan(q, 400);
+      expect(b.low.compareTo(c.high) <= 0 && c.low.compareTo(b.high) <= 0).toBe(true);
+    }
+  });
+  test("atan(x) + atan(1/x) = pi/2 and atan(-x) = -atan(x)", () => {
+    for (const q of points.slice(0, 20)) {
+      const sum = enclose.atan(q, 120).add(enclose.atan(q.reciprocal(), 120));
+      const half = constants.pi(140).divide(new RationalInterval(new Rational(2n), new Rational(2n)));
+      expect(sum.low.compareTo(half.high) <= 0 && half.low.compareTo(sum.high) <= 0).toBe(true);
+      const neg = enclose.atan(q.negate(), 120);
+      const pos = enclose.atan(q, 120);
+      expect(neg.low.equals(pos.high.negate()) && neg.high.equals(pos.low.negate())).toBe(true);
+    }
+  });
+  test("tan of the enclosure contains the point", () => {
+    for (const q of points.slice(0, 12)) {
+      const t = enclose.tan(enclose.atan(q, 100), 100);
+      expect(t.low.compareTo(q) <= 0 && q.compareTo(t.high) <= 0).toBe(true);
+    }
   });
 });

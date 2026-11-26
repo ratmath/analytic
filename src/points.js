@@ -113,8 +113,10 @@ export const expPoint = remembered(function expPoint(q, bits = 96) {
  * (4/3)·2^-(wp+16), and the terms together are off by less than 2^-wp.
  */
 function atanSmall(x, wp) {
-  if (bitLen(x.denominator) > wp + 8) {
-    // |atan′| ≤ 1: moving x by 2^-(wp+8) moves the value by no more
+  if (bitLen(x.denominator) > wp + 9) {
+    // |atan′| ≤ 1: moving x by 2^-(wp+8) moves the value by no more. The
+    // rounded point has denominator at most 2^(wp+8), whose bit length is
+    // wp + 9, so it is not rounded again.
     const xr = roundDyadic(x, wp + 8);
     const e = pow2(-(wp + 8));
     return atanSmall(xr, wp).add(new Iv(e.negate(), e));

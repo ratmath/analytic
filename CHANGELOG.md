@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- `atan` at a point whose denominator is longer than the working precision
+  (a fraction with dozens of digits, as products of other results often are) no
+  longer recurses until the stack overflows. The point was rounded to a dyadic
+  one and then, about half the time, taken to need rounding again.
 - A function that is identically zero (`x - x`, `0*sin(x)`) no longer reports
   zeros, extrema or inflections one by one: `zeros` returns one `everywhere`
   record and `extrema` one `constant` record.
