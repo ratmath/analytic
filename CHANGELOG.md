@@ -23,6 +23,9 @@
 
 ### Added
 
+- `enclose.gammaP(a, x)`, `enclose.gammaQ(a, x)` and `enclose.betaI(x, a, b)`:
+  certified regularized incomplete gamma and beta functions, the cumulative
+  probabilities behind the gamma, chi-square, beta, t and F distributions.
 - Several variables: `field(text, vars)` with partials, gradients, Hessians,
   certified values over points and boxes, directional derivatives, ranges,
   classified critical points, and integrals over boxes, iterated bounds and

@@ -6,7 +6,7 @@
 import { Rational } from "@ratmath/core";
 import { Iv } from "./interval.js";
 import { refuse } from "./errors.js";
-import { ZERO, ONE, TWO, HALF, lt, le, gt, max } from "./rat.js";
+import { ZERO, ONE, TWO, HALF, lt, le, gt, max, floorDyadic, ceilDyadic } from "./rat.js";
 import { expPoint, logPoint, piIv } from "./points.js";
 
 const RN = (n, d = 1n) => new Rational(BigInt(n), BigInt(d));
@@ -294,6 +294,128 @@ export const besselJIv = (n, v, bits) => lipschitz((q, b) => besselJPoint(n, q, 
 export const siIv = lipschitz(siPoint, RN(1852, 1000));
 export const fresnelSIv = lipschitz((q, b) => fresnelPoint(q, b).S, RN(72, 100));
 export const fresnelCIv = lipschitz((q, b) => fresnelPoint(q, b).C, RN(78, 100));
+
+// ---- incomplete gamma and beta functions -----------------------------------------------------------
+
+const floorD = (q, b) => floorDyadic(q, b);
+const ceilD = (q, b) => ceilDyadic(q, b);
+const UNIT = new Iv(ZERO, ONE);
+const expIv = (v, wp) => new Iv(expPoint(v.lo, wp).lo, expPoint(v.hi, wp).hi);
+
+/**
+ * Σ tₙ for positive terms t₀ = first, tₙ = tₙ₋₁·ratio(n), carried as intervals
+ * rounded outward. `settled(n)` returns a bound ρ < 1 on every later ratio once
+ * one is known (null before that); the tail is then at most tₙ·ρ/(1 − ρ).
+ * `grow` is how many bits the terms may gain before they start to shrink.
+ */
+function positiveSeries(first, ratio, settled, wp, grow) {
+  const b = wp + 16 + grow;
+  const eps = pow2(-wp);
+  let lo = first;
+  let hi = first;
+  let sumLo = first;
+  let sumHi = first;
+  for (let n = 1; ; n++) {
+    if (n > 2000000) refuse("budget", "series did not converge within the term budget");
+    const rho = settled(n);
+    if (rho !== null) {
+      const tail = hi.multiply(rho).divide(ONE.subtract(rho));
+      if (le(tail, eps)) return new Iv(sumLo, sumHi.add(ceilD(tail, b)));
+    }
+    const r = ratio(n);
+    lo = floorD(lo.multiply(r), b);
+    hi = ceilD(hi.multiply(r), b);
+    sumLo = sumLo.add(lo);
+    sumHi = sumHi.add(hi);
+  }
+}
+
+/**
+ * The regularized lower incomplete gamma function
+ *   P(a, x) = γ(a, x)/Γ(a) = 1/Γ(a) · ∫₀ˣ t^(a−1) e^(−t) dt,   a > 0, x ≥ 0,
+ * from γ(a, x) = x^a e^(−x) Σ xⁿ/(a(a+1)⋯(a+n)), a series of positive terms.
+ * Far to the right, where 1 − P is below the precision asked for, the bound
+ * Γ(a, x) ≤ x^(a−1) e^(−x)·x/(x − a + 1) is used instead.
+ */
+export function gammaPPoint(a, x, bits = 96) {
+  if (!gt(a, ZERO)) refuse("domain", `the incomplete gamma function needs a positive shape, got ${a}`);
+  if (lt(x, ZERO)) refuse("domain", `the incomplete gamma function needs x ≥ 0, got ${x}`);
+  if (x.numerator === 0n) return Iv.point(ZERO);
+  const af = a.toNumber();
+  const xf = x.toNumber();
+  if (xf > af + 1) {
+    // an estimate of log2 of the upper tail; only trusted after the certified check below
+    const est = ((af - 1) * Math.log(xf) - xf - lgammaFloat(af) + Math.log(xf / (xf - af + 1))) / Math.LN2;
+    if (est < -(bits + 12)) {
+      const lead = logPoint(x, 64).scale(a.subtract(ONE)).sub(Iv.point(x)).sub(lgammaPoint(a, 64));
+      const factor = x.divide(x.subtract(a).add(ONE));
+      const bound = expIv(lead, 64).scale(factor);
+      if (le(bound.hi, pow2(-(bits + 6)))) return new Iv(ONE.subtract(bound.hi), ONE).roundOut(bits + 4, 6000);
+    }
+  }
+  const grow = Math.max(0, Math.ceil(xf * 1.4427)) + 2;
+  const wp = bits + 40 + Math.max(0, Math.ceil(Math.log2(af + 1)));
+  const sum = positiveSeries(
+    a.reciprocal(),
+    (n) => x.divide(a.add(RN(n))),
+    (n) => {
+      const r = x.divide(a.add(RN(n)));
+      return lt(r, ONE) ? r : null;
+    },
+    wp,
+    grow,
+  );
+  const lead = logPoint(x, wp).scale(a).sub(Iv.point(x)).sub(lgammaPoint(a, wp));
+  return (expIv(lead, wp).mul(sum).intersect(UNIT) ?? UNIT).roundOut(bits + 4, 6000);
+}
+
+/**
+ * The regularized incomplete beta function
+ *   I_x(a, b) = 1/B(a, b) · ∫₀ˣ t^(a−1) (1−t)^(b−1) dt,   a, b > 0, 0 ≤ x ≤ 1,
+ * from I_x(a, b) = x^a (1−x)^b/(a·B(a, b)) · Σ (a+b)ₙ/(a+1)ₙ · xⁿ, a series of
+ * positive terms whose ratios tend to x. For x > 1/2 the reflection
+ * I_x(a, b) = 1 − I_(1−x)(b, a) is used, so the ratios tend to at most 1/2.
+ */
+export function betaIPoint(x, a, b, bits = 96) {
+  if (!gt(a, ZERO) || !gt(b, ZERO)) refuse("domain", `the incomplete beta function needs positive parameters, got ${a} and ${b}`);
+  if (lt(x, ZERO) || gt(x, ONE)) refuse("domain", `the incomplete beta function needs 0 ≤ x ≤ 1, got ${x}`);
+  if (x.numerator === 0n) return Iv.point(ZERO);
+  if (x.compareTo(ONE) === 0) return Iv.point(ONE);
+  if (gt(x, HALF)) {
+    const other = betaIPoint(ONE.subtract(x), b, a, bits);
+    return new Iv(ONE.subtract(other.hi), ONE.subtract(other.lo));
+  }
+  const ab = a.add(b);
+  const ratio = (n) => x.multiply(ab.add(RN(n - 1))).divide(a.add(RN(n)));
+  // how far the terms climb before the ratios drop below 1 (floats, for the working precision only)
+  const [af, bf, xf] = [a.toNumber(), b.toNumber(), x.toNumber()];
+  let climb = 0;
+  let top = 0;
+  for (let n = 1; n < 5000000; n++) {
+    const r = (xf * (af + bf + n - 1)) / (af + n);
+    if (r <= 1) break;
+    climb += Math.log2(r);
+    top = Math.max(top, climb);
+  }
+  const grow = Math.ceil(top) + 2;
+  const wp = bits + 40;
+  const bLarge = gt(b, ONE);
+  const sum = positiveSeries(
+    ONE,
+    ratio,
+    (n) => {
+      // the ratios decrease toward x when b > 1 and increase toward x otherwise
+      const next = ratio(n + 1);
+      const rho = bLarge ? next : max(next, x);
+      return lt(rho, ONE) ? rho : null;
+    },
+    wp,
+    grow,
+  );
+  const lnB = lgammaPoint(a, wp).add(lgammaPoint(b, wp)).sub(lgammaPoint(ab, wp));
+  const lead = logPoint(x, wp).scale(a).add(logPoint(ONE.subtract(x), wp).scale(b)).sub(lnB);
+  return (expIv(lead, wp).scale(a.reciprocal()).mul(sum).intersect(UNIT) ?? UNIT).roundOut(bits + 4, 6000);
+}
 
 // ---- Float64 versions (previews) ------------------------------------------------------------------
 
