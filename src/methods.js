@@ -28,6 +28,8 @@ const qOf = (x) => (x instanceof Rational ? x : typeof x === "string" ? toRation
 const out = (iv) => iv.toRationalInterval();
 const absIv = (iv) => (iv.lo.numerator >= 0n ? iv : iv.hi.numerator <= 0n ? iv.neg() : new Iv(ZERO, iv.mag));
 const midNumber = (iv) => Iv.from(iv).mid.toNumber();
+/** A starting value or bracket end as a float: a JS number as it is, anything exact ("1/2", R`1/2`, 2n) read exactly and rounded once. */
+const startOf = (v) => (typeof v === "number" ? v : toQ(v).toNumber());
 
 // ---------------------------------------------------------------- floating point
 
@@ -260,8 +262,8 @@ function finishRoots(name, rows, root, extra = {}) {
  */
 export function bisection(f, [a, b], opts = {}) {
   const { ast, variable, F } = prepare(f, opts);
-  let lo = Number(a);
-  let hi = Number(b);
+  let lo = startOf(a);
+  let hi = startOf(b);
   let flo = F({ [variable]: lo });
   if (!(flo * F({ [variable]: hi }) < 0)) refuse("no-bracket", "bisection needs f(a) and f(b) of opposite signs");
   const root = certifiedRoot(ast, variable, lo, hi, (lo + hi) / 2, opts.digits ?? 25);
@@ -283,7 +285,7 @@ export function newton(f, x0, opts = {}) {
   const { ast, variable, F, dAst } = prepare(f, opts);
   const dF = compileFloat(dAst);
   const rows = [];
-  let x = Number(x0);
+  let x = startOf(x0);
   const steps = opts.steps ?? 10;
   for (let n = 0; n <= steps; n++) {
     const fx = F({ [variable]: x });
@@ -303,7 +305,7 @@ export function newton(f, x0, opts = {}) {
 /** The secant method: { iterations: [{ n, x, fx, error }], root, order } (the order tends to (1 + √5)/2). */
 export function secant(f, x0, x1, opts = {}) {
   const { ast, variable, F } = prepare(f, opts);
-  let [a, b] = [Number(x0), Number(x1)];
+  let [a, b] = [startOf(x0), startOf(x1)];
   let [fa, fb] = [F({ [variable]: a }), F({ [variable]: b })];
   const rows = [{ n: 0, x: a, fx: fa }, { n: 1, x: b, fx: fb }];
   const steps = opts.steps ?? 12;
@@ -332,7 +334,7 @@ export function fixedPoint(g, x0, opts = {}) {
   const gAst = toAst(g);
   const G = compileFloat(gAst);
   const rows = [];
-  let x = Number(x0);
+  let x = startOf(x0);
   const steps = opts.steps ?? 25;
   for (let n = 0; n <= steps; n++) {
     rows.push({ n, x });
