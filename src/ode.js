@@ -297,7 +297,7 @@ function tightStep(pb, t0, h, set, opts) {
   return { t0, t1, excess, complete };
 }
 
-class ODESolution {
+export class ODESolution {
   constructor(pb, steps, complete, reason) {
     this.steps = steps; // [{ t0, t1, models }]
     this.complete = complete;

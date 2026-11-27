@@ -357,8 +357,8 @@ export function sturmLiouville({ p = "1", q = "0", w = "1", interval, count = 3,
     return y;
   };
   const found = [];
-  const lo0 = Number(from);
-  const hi0 = Number(to);
+  const lo0 = (typeof from === "number" ? from : toQ(from).toNumber());
+  const hi0 = (typeof to === "number" ? to : toQ(to).toNumber());
   const scan = 800;
   let prev = shoot(lo0);
   let lamPrev = lo0;

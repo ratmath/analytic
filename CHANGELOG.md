@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Fixes found by the Course Test (ratmath/shelf#7):
+  - `newton`, `secant`, `fixedPoint` and `bisection` read an exact starting
+    value (`"1/2"`, ``R`1/2` ``) exactly; `Number("1/2")` was NaN and the root
+    came back null without an error. The same for `sturmLiouville`'s `from`
+    and `to`.
+  - `functionSequence(...).pointwise(x)` substitutes x; it was passed as a
+    parameter the limit code never used, so `x^n` threw. 1^n and 0^n are
+    folded first, so the limit of x^n is found at x = 0 and x = 1 too.
+  - The parser reads `sec csc cot sech csch coth asinh acosh atanh` (as
+    1/cos(u) and so on); `sec(x)` used to be the product sec·x. An unknown
+    name of three or more letters against `(` is refused instead of becoming
+    a product.
+  - `firstOrder` solves linear equations whose integrating factor is
+    exp(−log|u|): it takes 1/u (any constant multiple of an integrating factor
+    is one), so y′ = (x + y)/x gives y = x·log|x| + C·x instead of nothing.
+  - `ODESolution` is exported, as `index.d.ts` says.
+
 - `seriesSolution` now proves its remainder. Each solution has
   `remainder(ρ)`, a rational bound for all the terms left out that holds on
   the whole complex disc of radius ρ about the point, and `enclose(x)`, the
