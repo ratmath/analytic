@@ -11,6 +11,9 @@ string.at("1/4", "1/3");             // exact up to rounding: d'Alembert's formu
 
 const plate = laplaceRectangle({ top: "x*(1 - x)", terms: 8 });
 plate.at("1/2", "3/4");</code></pre>
+  <h2>Which kind of equation</h2>
+  <p>A second-order linear equation \(A u_{xx} + B u_{xy} + C u_{yy} + (\text{lower order}) = 0\) is hyperbolic where \(B^2 - 4AC &gt; 0\), parabolic where it is 0 and elliptic where it is negative, like the conic \(Ax^2 + Bxy + Cy^2\). The wave, heat and Laplace equations are the three model cases. <code>classifyPDE({ A, B, C })</code> (also <code>pde.classify</code>) computes the discriminant; when \(A\), \(B\), \(C\) depend on \(x\) and \(y\) the type can change from region to region. The Tricomi equation \(y\,u_{xx} + u_{yy} = 0\) has discriminant \(-4y\): hyperbolic for \(y &lt; 0\), parabolic on \(y = 0\), elliptic for \(y &gt; 0\). <code>at(x, y)</code> decides the type at a point (exactly for polynomial coefficients) and <code>on(rectangle)</code> proves a single type on a rectangle or returns null.</p>
+
   <h2>The heat equation</h2>
   <p>For \(u_t = k\,u_{xx}\) on \(0 < x < L\) with both ends held at 0, try \(u = X(x)\,T(t)\). Then \(T'/(kT) = X''/X\), a function of \(t\) equal to a function of \(x\), so both are a constant \(-\lambda\). The boundary conditions force \(X = \sin(n\pi x/L)\) and \(\lambda = (n\pi/L)^2\), and superposing,</p>
   \[ u(x, t) = \sum_{n=1}^{\infty} b_n\,e^{-k(n\pi/L)^2 t}\,\sin\frac{n\pi x}{L}, \qquad b_n = \frac{2}{L}\int_0^L f(x)\sin\frac{n\pi x}{L}\,dx . \]
@@ -36,6 +39,7 @@ plate.at("1/2", "3/4");</code></pre>
 
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th></tr>
+    <tr><td>classifyPDE({ A, B, C }), pde.classify</td><td>{ discriminant, type, regions: { hyperbolic, parabolic, elliptic }, at(x, y), on([[x0, x1], [y0, y1]]) }</td></tr>
     <tr><td>heat({ k, length, initial, ends = "fixed", terms = 8 })</td><td>{ coefficients, modes, at(x, t), formula(terms) }</td></tr>
     <tr><td>laplaceRectangle({ width, height, top, terms })</td><td>{ coefficients, modes, at(x, y), formula }</td></tr>
     <tr><td>laplaceDisc({ radius, boundary, terms, angle = "theta" })</td><td>{ coefficients, mean, at(r, s), formula }</td></tr>
@@ -44,6 +48,11 @@ plate.at("1/2", "3/4");</code></pre>
     <tr><td>sturmLiouville({ p, q, w, interval, count = 3, width = "1e-6", certify = true })</td><td>[{ index, eigenvalue, estimate, proven }]</td></tr>
   </table></div>
 <template data-runbox>
+// The type of an equation from B² − 4AC.
+const tricomi = classifyPDE({ A: "y", C: "1" });
+PRINT("Tricomi:", tricomi.discriminant, tricomi.regions, " at (0, -1):", tricomi.at(0, -1));
+PRINT("wave, heat, Laplace:", [{ A: 1, C: -1 }, { A: 1 }, { A: 1, C: 1 }].map((c) =&gt; classifyPDE(c).type).join(", "));
+
 // A rod with temperature x(1 - x), ends held at 0.
 const rod = heat({ k: 1, length: 1, initial: "x*(1 - x)", terms: 6 });
 PRINT("first terms:", rod.formula(3));

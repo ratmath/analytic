@@ -17,7 +17,7 @@ import { toAst, format, compileFloat, derivative, simplify, freeVariables, const
 import { encloseAst } from "./ieval.js";
 import { bitsForDigits } from "./scope.js";
 import { fn } from "./fn.js";
-import { zeros } from "./roots.js";
+import { zeros, extrema } from "./roots.js";
 import { quad1 } from "./quad.js";
 import { solve as odeSolve } from "./ode.js";
 import * as P from "./rpoly.js";
@@ -280,8 +280,18 @@ export function bisection(f, [a, b], opts = {}) {
   return finishRoots("bisection", rows, root);
 }
 
-/** Newton's method x ← x − f(x)/f′(x): { iterations: [{ n, x, fx, dfx, error }], root, order, derivative }. */
+/**
+ * Newton's method x ← x − f(x)/f′(x): { iterations: [{ n, x, fx, dfx, error }], root, order, derivative }.
+ *
+ * With { exact: true } every step is done in exact rational arithmetic, as by
+ * hand with fractions: x, fx and dfx are Core Rationals, each row also gives
+ * the size of x's denominator in digits (it roughly doubles per step, as the
+ * correct digits do), and `floats` holds the double-precision iterates from
+ * the same start for comparison. f must be built from + − × ÷ and integer
+ * powers so that f(x) and f′(x) are exact; the default is 6 steps.
+ */
 export function newton(f, x0, opts = {}) {
+  if (opts.exact) return exactNewton(f, x0, opts);
   const { ast, variable, F, dAst } = prepare(f, opts);
   const dF = compileFloat(dAst);
   const rows = [];
@@ -302,7 +312,122 @@ export function newton(f, x0, opts = {}) {
   return finishRoots("newton", rows, root, { derivative: format(dAst) });
 }
 
-/** The secant method: { iterations: [{ n, x, fx, error }], root, order } (the order tends to (1 + √5)/2). */
+function exactNewton(f, x0, opts) {
+  const { ast, variable, dAst } = prepare(f, opts);
+  const at = (tree, x) => constantRational(tree, { [variable]: x });
+  let x = qOf(x0);
+  if (at(ast, x) === null || at(dAst, x) === null) refuse("not-rational", "exact Newton needs f built from + − × ÷ and integer powers, so that f(x) and f′(x) are exact fractions");
+  const rows = [];
+  const steps = opts.steps ?? 6;
+  for (let n = 0; n <= steps; n++) {
+    const fx = at(ast, x);
+    const dfx = at(dAst, x);
+    if (fx === null || dfx === null) refuse("undefined", `f or f′ is undefined at ${x}`);
+    rows.push({ n, x, fx, dfx, denominatorDigits: x.denominator.toString().length });
+    if (fx.numerator === 0n || dfx.numerator === 0n || n === steps) break;
+    x = x.subtract(fx.divide(dfx));
+  }
+  const floats = newton(f, startOf(x0), { ...opts, exact: false, steps: rows.length - 1 }).iterations.map((r) => r.x);
+  const last = rows.at(-1).x.toNumber();
+  const root = rows.at(-1).fx.numerator === 0n ? new RationalInterval(rows.at(-1).x, rows.at(-1).x) : certifiedRoot(ast, variable, last - 1e-6 - 1e-3 * Math.abs(last), last + 1e-6 + 1e-3 * Math.abs(last), last, opts.digits ?? 40);
+  for (const r of rows) r.error = root ? absIv(Iv.point(r.x).sub(Iv.from(root))).hi.toNumber() : null;
+  return { ...finishRoots("newton", rows, root, { derivative: format(dAst), exact: true, floats }), estimate: rows.at(-1).x };
+}
+
+/**
+ * Gradient descent, run as a simulation of the method: x ← x − t·∇f(x).
+ *
+ *   gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "1/10", steps: 5 })
+ *
+ * The variables are `variables` (default the free variables of f, sorted).
+ * `method`:
+ *   "fixed"        the same step t every time (default, `step` = 1/10);
+ *   "backtracking" start each step at `step` (default 1) and halve it until
+ *                  the Armijo condition f(x − t·g) ≤ f(x) − c·t·|g|² holds
+ *                  (`armijo` = c, default 1/2);
+ *   "exact"        the exact line search, for a quadratic f: t = |g|²/(gᵀHg)
+ *                  with H the constant Hessian.
+ * When f is built from + − × ÷ and integer powers, every iterate, value,
+ * gradient and step is an exact Core Rational; otherwise the run is in
+ * floating point. The result is labelled `simulated`: it shows what the
+ * method does from this start and proves nothing about a minimum.
+ * → { simulated: true, method, variables, iterations: [{ n, x, fx, gradient, step }], final, value, exact }
+ */
+export function gradientDescent(f, start, opts = {}) {
+  const ast = toAst(f);
+  const vars = opts.variables ?? [...freeVariables(ast)].sort();
+  if (start.length !== vars.length) refuse("bad-argument", `the start has ${start.length} coordinates for the variables ${vars.join(", ")}`);
+  const method = opts.method ?? "fixed";
+  if (!["fixed", "backtracking", "exact"].includes(method)) refuse("bad-argument", "method is fixed, backtracking or exact");
+  const grads = vars.map((v) => simplify(derivative(ast, v)));
+  const x0 = start.map(qOf);
+  const env = (x) => Object.fromEntries(vars.map((v, i) => [v, x[i]]));
+  const exactRun = constantRational(ast, env(x0)) !== null && grads.every((g) => constantRational(g, env(x0)) !== null);
+  let H = null;
+  if (method === "exact") {
+    H = grads.map((g) => vars.map((v) => constantRational(simplify(derivative(g, v)))));
+    if (!exactRun || H.flat().some((h) => h === null)) refuse("not-quadratic", "the exact line search needs a quadratic f with rational coefficients");
+  }
+  const steps = opts.steps ?? 10;
+  const rows = [];
+  if (exactRun) {
+    const F = (x) => constantRational(ast, env(x));
+    const G = (x) => grads.map((g) => constantRational(g, env(x)));
+    const dot = (a, b) => a.reduce((s, ai, i) => s.add(ai.multiply(b[i])), ZERO);
+    const move = (x, t, g) => x.map((xi, i) => xi.subtract(t.multiply(g[i])));
+    const c = qOf(opts.armijo ?? "1/2");
+    let x = x0;
+    for (let n = 0; n <= steps; n++) {
+      const fx = F(x);
+      const g = G(x);
+      if (fx === null || g.some((gi) => gi === null)) refuse("undefined", `f or its gradient is undefined at (${x.join(", ")})`);
+      const gg = dot(g, g);
+      const row = { n, x, fx, gradient: g, step: null };
+      rows.push(row);
+      if (n === steps || gg.numerator === 0n) break;
+      let t;
+      if (method === "fixed") t = qOf(opts.step ?? "1/10");
+      else if (method === "exact") {
+        const Hg = H.map((r) => dot(r, g));
+        const curve = dot(g, Hg);
+        if (curve.numerator <= 0n) refuse("not-convex", "the exact line search needs gᵀHg > 0: f is not convex along the gradient");
+        t = gg.divide(curve);
+      } else {
+        t = qOf(opts.step ?? "1");
+        for (let k = 0; ; k++) {
+          const fy = F(move(x, t, g));
+          if (fy !== null && fy.compareTo(fx.subtract(c.multiply(t).multiply(gg))) <= 0) break;
+          if (k > 200) refuse("no-step", "backtracking found no step satisfying the Armijo condition");
+          t = t.divide(TWO);
+        }
+      }
+      row.step = t;
+      x = move(x, t, g);
+    }
+  } else {
+    const F = compileFloat(ast);
+    const G = grads.map(compileFloat);
+    const fenv = (x) => Object.fromEntries(vars.map((v, i) => [v, x[i]]));
+    const c = qOf(opts.armijo ?? "1/2").toNumber();
+    let x = x0.map((q) => q.toNumber());
+    for (let n = 0; n <= steps; n++) {
+      const fx = F(fenv(x));
+      const g = G.map((gi) => gi(fenv(x)));
+      const gg = g.reduce((s, gi) => s + gi * gi, 0);
+      const row = { n, x, fx, gradient: g, step: null };
+      rows.push(row);
+      if (n === steps || gg === 0 || !Number.isFinite(fx)) break;
+      let t = method === "fixed" ? qOf(opts.step ?? "1/10").toNumber() : qOf(opts.step ?? "1").toNumber();
+      if (method === "backtracking") for (let k = 0; k < 60 && !(F(fenv(x.map((xi, i) => xi - t * g[i]))) <= fx - c * t * gg); k++) t /= 2;
+      row.step = t;
+      x = x.map((xi, i) => xi - t * g[i]);
+    }
+  }
+  const last = rows.at(-1);
+  return { simulated: true, method, variables: vars, iterations: rows, final: last.x, value: last.fx, exact: exactRun };
+}
+
+/** The secant method:/** The secant method: { iterations: [{ n, x, fx, error }], root, order } (the order tends to (1 + √5)/2). */
 export function secant(f, x0, x1, opts = {}) {
   const { ast, variable, F } = prepare(f, opts);
   let [a, b] = [startOf(x0), startOf(x1)];
@@ -718,6 +843,79 @@ export function quadratureRule(f, [a, b], opts = {}) {
     error: out(s.sub(exact).roundOut(100)),
     bound: M === null ? null : rule.c.multiply(B.subtract(A)).multiply(hp).multiply(M),
     order: rule.p,
+  };
+}
+
+/**
+ * Lower and upper Darboux sums: darboux(f, partition) with the partition as a
+ * list of points ["0", "1/2", "1"] or { interval: [a, b], n } for n equal
+ * pieces. → { lower, upper, exact, pieces, integral }.
+ *
+ * On a piece where f′ is proven of one sign, f is monotone, so its inf and
+ * sup are its end values: exact fractions when f is built from + − × ÷ and
+ * powers. If every piece is like that and every end value is a fraction,
+ * `exact` is true and `lower` and `upper` are Core Rationals. Otherwise the
+ * inf and sup come from certified extrema (the end values and the enclosed
+ * critical points), `lower` and `upper` are RationalIntervals that contain
+ * the true sums, and `exact` is false. `integral` is the certified integral,
+ * which lies between the two sums.
+ */
+export function darboux(f, partition, opts = {}) {
+  const variable = opts.variable ?? "x";
+  const ast = toAst(f);
+  const dAst = simplify(derivative(ast, variable));
+  const bits = 120;
+  let points;
+  if (Array.isArray(partition)) points = partition.map(qOf);
+  else if (partition && partition.interval) {
+    const [A, B] = partition.interval.map(qOf);
+    const n = partition.n ?? 4;
+    points = Array.from({ length: n + 1 }, (_, i) => A.add(B.subtract(A).multiply(Q(i, n))));
+  } else refuse("bad-partition", "the partition is a list of points or { interval: [a, b], n }");
+  if (points.length < 2) refuse("bad-partition", "a partition needs at least two points");
+  for (let i = 1; i < points.length; i++) if (points[i].compareTo(points[i - 1]) <= 0) refuse("bad-partition", "partition points must increase");
+  const value = (x) => {
+    const q = constantRational(ast, { [variable]: x });
+    return q !== null ? Iv.point(q) : encloseAst(ast, { [variable]: Iv.point(x) }, bits);
+  };
+  const minIv = (ivs) => new Iv(ivs.reduce((m, v) => (v.lo.compareTo(m) < 0 ? v.lo : m), ivs[0].lo), ivs.reduce((m, v) => (v.hi.compareTo(m) < 0 ? v.hi : m), ivs[0].hi));
+  const maxIv = (ivs) => new Iv(ivs.reduce((m, v) => (v.lo.compareTo(m) > 0 ? v.lo : m), ivs[0].lo), ivs.reduce((m, v) => (v.hi.compareTo(m) > 0 ? v.hi : m), ivs[0].hi));
+  let lower = Iv.point(ZERO);
+  let upper = Iv.point(ZERO);
+  const pieces = [];
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1], points[i]];
+    const h = b.subtract(a);
+    const [fa, fb] = [value(a), value(b)];
+    let slope = null;
+    try {
+      const d = encloseAst(dAst, { [variable]: new Iv(a, b) }, bits);
+      if (d.lo.numerator >= 0n) slope = "increasing";
+      else if (d.hi.numerator <= 0n) slope = "decreasing";
+    } catch {
+      slope = null;
+    }
+    let inf;
+    let sup;
+    if (slope === "increasing") [inf, sup] = [fa, fb];
+    else if (slope === "decreasing") [inf, sup] = [fb, fa];
+    else {
+      const candidates = [fa, fb];
+      for (const c of extrema(ast, [a, b], { variable }).exact()) candidates.push(encloseAst(ast, { [variable]: new Iv(c.lo, c.hi) }, bits));
+      [inf, sup] = [minIv(candidates), maxIv(candidates)];
+    }
+    lower = lower.add(inf.scale(h));
+    upper = upper.add(sup.scale(h));
+    const show = (iv) => (iv.isPoint ? iv.lo : out(iv));
+    pieces.push({ from: a, to: b, monotone: slope, inf: show(inf), sup: show(sup) });
+  }
+  const exact = lower.isPoint && upper.isPoint;
+  return {
+    lower: exact ? lower.lo : out(lower.roundOut(bits)),
+    upper: exact ? upper.lo : out(upper.roundOut(bits)),
+    exact,
+    pieces,
+    integral: out(certifiedIntegral(ast, variable, points[0], points.at(-1), opts.digits ?? 20)),
   };
 }
 

@@ -10,7 +10,7 @@ import { Rational, RationalInterval } from "@ratmath/core";
 import { Iv } from "./interval.js";
 import { refuse } from "./errors.js";
 import { ZERO, ONE, TWO, toQ } from "./rat.js";
-import { toAst, format, compileFloat, num, v as variable, op, call, toRational } from "./expr.js";
+import { toAst, format, compileFloat, num, v as variable, op, call, toRational, simplify, derivative, constantRational, freeVariables } from "./expr.js";
 import { encloseAst } from "./ieval.js";
 import { bitsForDigits } from "./scope.js";
 import { fn } from "./fn.js";
@@ -401,3 +401,70 @@ export function sturmLiouville({ p = "1", q = "0", w = "1", interval, count = 3,
     return { index: index + 1, eigenvalue: new RationalInterval(lo, hi), estimate: est, proven };
   });
 }
+
+/**
+ * The type of a second-order linear PDE A·u_xx + B·u_xy + C·u_yy + (lower
+ * order) = 0 from the sign of the discriminant B² − 4AC: hyperbolic where it
+ * is positive, parabolic where it is zero, elliptic where it is negative.
+ *
+ *     classifyPDE({ A: "y", B: "0", C: "1" })   // the Tricomi equation
+ *
+ * A, B and C may depend on x and y. → { discriminant, type, regions, at, on }:
+ * `type` is the type everywhere when the discriminant is constant, else
+ * null; `regions` gives the condition for each type (solved for the variable
+ * when the discriminant is linear in one variable, as in "y < 0"); `at(x, y)`
+ * is the type at a point, decided exactly for polynomial coefficients at
+ * rational points and by a certified enclosure otherwise (null if that
+ * cannot decide); `on([[x0, x1], [y0, y1]])` is the single type on a
+ * rectangle when the enclosure proves one, else null.
+ */
+export function classifyPDE(coefficients, opts = {}) {
+  const [xName, yName] = opts.variables ?? ["x", "y"];
+  const { A = "0", B = "0", C = "0" } = Array.isArray(coefficients) ? { A: coefficients[0], B: coefficients[1], C: coefficients[2] } : coefficients;
+  const [a, b, c] = [A, B, C].map((t) => toAst(typeof t === "number" ? String(t) : t));
+  const disc = simplify(op("-", op("*", b, b), op("*", op("*", num(Q(4)), a), c)));
+  const typeOf = (sign) => (sign > 0 ? "hyperbolic" : sign < 0 ? "elliptic" : "parabolic");
+  const signOf = (iv) => (iv.lo.numerator > 0n ? 1 : iv.hi.numerator < 0n ? -1 : iv.isPoint ? 0 : null);
+  const text = format(disc);
+  const constant = constantRational(disc);
+  let regions;
+  if (constant !== null) {
+    const t = typeOf(constant.numerator > 0n ? 1 : constant.numerator < 0n ? -1 : 0);
+    regions = { hyperbolic: t === "hyperbolic" ? "everywhere" : "nowhere", parabolic: t === "parabolic" ? "everywhere" : "nowhere", elliptic: t === "elliptic" ? "everywhere" : "nowhere" };
+  } else {
+    regions = { hyperbolic: `${text} > 0`, parabolic: `${text} = 0`, elliptic: `${text} < 0` };
+    const free = [...freeVariables(disc)];
+    if (free.length === 1) {
+      // linear in one variable: D = s·v + r, so D > 0 is v > −r/s (or v < −r/s when s < 0)
+      const v = free[0];
+      const s = constantRational(simplify(derivative(disc, v)));
+      const r = constantRational(disc, { [v]: ZERO });
+      if (s !== null && r !== null && s.numerator !== 0n) {
+        const cut = r.negate().divide(s);
+        const [above, below] = s.numerator > 0n ? ["hyperbolic", "elliptic"] : ["elliptic", "hyperbolic"];
+        const side = { [above]: `${v} > ${cut}`, [below]: `${v} < ${cut}` };
+        regions = { hyperbolic: side.hyperbolic, parabolic: `${v} = ${cut}`, elliptic: side.elliptic };
+      }
+    }
+  }
+  const evalAt = (env) => {
+    const exact = constantRational(disc, env);
+    if (exact !== null) return Iv.point(exact);
+    return encloseAst(disc, Object.fromEntries(Object.entries(env).map(([k, q]) => [k, q instanceof Iv ? q : Iv.point(q)])), 120);
+  };
+  return {
+    discriminant: text,
+    type: constant === null ? null : regions.hyperbolic === "everywhere" ? "hyperbolic" : regions.elliptic === "everywhere" ? "elliptic" : "parabolic",
+    regions,
+    at(x, y) {
+      const s = signOf(evalAt({ [xName]: qOf(x), [yName]: qOf(y) }));
+      return s === null ? null : typeOf(s);
+    },
+    on([[x0, x1], [y0, y1]]) {
+      const iv = encloseAst(disc, { [xName]: new Iv(qOf(x0), qOf(x1)), [yName]: new Iv(qOf(y0), qOf(y1)) }, 120);
+      const s = signOf(iv);
+      return s === null ? null : typeOf(s);
+    },
+  };
+}
+export { classifyPDE as classify };

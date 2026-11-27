@@ -240,13 +240,15 @@ export function freeVariables(ast, out = new Set()) {
   return out;
 }
 
-/** The value of a tree with no variables and no pi/e or functions, else null. */
-export function constantRational(ast) {
+/** The exact value of a tree built from + − × ÷ and integer powers, with variables read from env (Core Rationals), else null. */
+export function constantRational(ast, env = null) {
   switch (ast.type) {
     case "num":
       return ast.value;
+    case "var":
+      return env && env[ast.name] instanceof Rational ? env[ast.name] : null;
     case "op": {
-      const a = ast.args.map(constantRational);
+      const a = ast.args.map((x) => constantRational(x, env));
       if (a.some((q) => q === null)) return null;
       switch (ast.op) {
         case "+": return a[0].add(a[1]);

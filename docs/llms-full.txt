@@ -1,6 +1,6 @@
 # @ratmath/analytic 0.1.0: full documentation
 
-> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit fca3208. Each page ends with a runnable example; in it, PRINT(...) prints.
+> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit 59b9d8d. Each page ends with a runnable example; in it, PRINT(...) prints.
 
 
 ---
@@ -114,7 +114,7 @@ Numbers can be JS integers, bigints, strings such as `"3/4"` or `"0.1"` (decimal
 
 | f.toString() | string | calculator notation that parses back |
 
-Grammar: `+ - * / ^` (or `**`), parentheses, implicit products (`2x`, `3(x+1)`, `2sin(x)`), `-x^2 = -(x^2)`, `^` right-associative. Functions: `exp log ln log1p sqrt cbrt sin cos tan asin acos atan sinh cosh tanh erf erfc abs min max` (`arcsin arccos arctan` too), and the special functions `gamma lgamma digamma trigamma beta(a, b) besselJ(n, x) Si fresnelS fresnelC`; constants `pi e`. A power with an odd denominator, `x^(1/3)`, is the real root and is defined for negative x. Ranges and integrals may cross points where the function is not smooth (`abs`, `cbrt` at 0); there the bounds come from interval evaluation. It is the same grammar and the same plain AST as `@ratmath/graphics`.
+Grammar: `+ - * / ^` (or `**`), parentheses, implicit products (`2x`, `3(x+1)`, `2sin(x)`), `-x^2 = -(x^2)`, `^` right-associative. Functions: `exp log ln log1p sqrt cbrt sin cos tan asin acos atan sinh cosh tanh erf erfc abs min max` (`arcsin arccos arctan` too), `sec csc cot sech csch coth asinh acosh atanh` (written out in the others as they are read), and the special functions `gamma lgamma digamma trigamma beta(a, b) besselJ(n, x) Si fresnelS fresnelC`; constants `pi e`. A name of three or more letters written against a parenthesis, such as `foo(x)`, is refused as an unknown function rather than read as a product. A power with an odd denominator, `x^(1/3)`, is the real root and is defined for negative x. Ranges and integrals may cross points where the function is not smooth (`abs`, `cbrt` at 0); there the bounds come from interval evaluation. It is the same grammar and the same plain AST as `@ratmath/graphics`.
 
 ### Features of a function
 
@@ -242,7 +242,7 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 
 | recursive(next, { start, variable = "x" }) | RecursiveSequence | terms(count), fixedPoints([a, b]), limit([a, b]) proven by contraction |
 
-| sum(term, { variable = "n", from = 1 }) | Series | partial(N); divergenceTest, ratioTest, rootTest, comparisonTest, integralTest, alternatingTest, tests(); convergence(); sum({ digits }) with a proven tail. See Series and convergence tests |
+| sum(term, { variable = "n", from = 1 }) | Series | partial(N); divergenceTest, ratioTest, rootTest, comparisonTest, integralTest, alternatingTest, tests(); convergence(); termsForError(ε) for alternating series; sum({ digits }) with a proven tail. See Series and convergence tests |
 
 | powerSeries(coefficient, { index = "n", from = 0, centre = 0 }) | PowerSeries | radius(), interval() with both ends examined, partial(N), at(x), value(x), derivative(), integral(). See Power series |
 
@@ -290,6 +290,8 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 
 | wave({ c, length, position, velocity }) | { at(x, t), travelling, modes(N) } | d'Alembert's formula |
 
+| classifyPDE({ A, B, C }), pde.classify | object | hyperbolic, parabolic or elliptic from B² − 4AC, with the region of each type when the coefficients vary |
+
 | sturmLiouville({ p, q, w, interval, count }) | [{ index, eigenvalue, proven }] | shooting, each eigenvalue bracketed by validated solutions |
 
 | antiderivative(tree, name), partialFractions(N, D) | | the integrals and partial fractions the methods use |
@@ -336,7 +338,9 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 
 | roundoff(formula, inputs) | object | the calculation in doubles and exactly, digitsLost, and steps showing where the digits go |
 
-| bisection(f, [a, b]), newton(f, x0), secant(f, x0, x1), fixedPoint(g, x0) | object | iterations each with its true error against the certified root, and the observed order. See Root-finding methods |
+| bisection(f, [a, b]), newton(f, x0), secant(f, x0, x1), fixedPoint(g, x0) | object | iterations each with its true error against the certified root, and the observed order; newton(f, x0, { exact: true }) iterates in exact fractions. See Root-finding methods |
+
+| gradientDescent(f, start, { method, step, steps }) | object | a simulated run with fixed steps, backtracking or the exact line search for quadratics; exact fractions for polynomial objectives. See Gradient descent |
 
 | interpolate(points) or interpolate(f, { nodes }) | object | divided differences, newton, lagrange, polynomial, at(x), error(x), maxError([a, b]). See Interpolation and approximation |
 
@@ -347,6 +351,8 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 | differences(f, x, { kind, steps }), richardson(f, x) | object | difference quotients in doubles with true error and truncation term; the extrapolation table. See Differences and quadrature rules |
 
 | quadratureRule(f, [a, b], { rule, n }), romberg(f, [a, b]), gaussRule(f, [a, b], n) | object | the rule's value, the certified integral, the true error and the textbook bound |
+
+| darboux(f, partition) | object | lower and upper sums, exact where f is proven monotone on each piece, else enclosures; with the certified integral between them |
 
 | legendre(n), gaussLegendre(n) | | exact Legendre coefficients; certified nodes and weights |
 
@@ -1696,6 +1702,10 @@ const plate = laplaceRectangle({ top: "x*(1 - x)", terms: 8 });
 plate.at("1/2", "3/4");
 ```
 
+### Which kind of equation
+
+A second-order linear equation Auxx​+Buxy​+Cuyy​+(lower order)=0 is hyperbolic where B2−4AC>0, parabolic where it is 0 and elliptic where it is negative, like the conic Ax2+Bxy+Cy2. The wave, heat and Laplace equations are the three model cases. `classifyPDE({ A, B, C })` (also `pde.classify`) computes the discriminant; when A, B, C depend on x and y the type can change from region to region. The Tricomi equation yuxx​+uyy​=0 has discriminant −4y: hyperbolic for y, parabolic on y=0, elliptic for y>0. `at(x, y)` decides the type at a point (exactly for polynomial coefficients) and `on(rectangle)` proves a single type on a rectangle or returns null.
+
 ### The heat equation
 
 For ut​=kuxx​ on 0 with both ends held at 0, try u=X(x)T(t). Then T′/(kT)=X′′/X, a function of t equal to a function of x, so both are a constant −λ. The boundary conditions force X=sin(nπx/L) and λ=(nπ/L)2, and superposing,
@@ -1731,6 +1741,8 @@ Separation of variables leads to eigenvalue problems −(py′)′+qy=λwy with 
 
 | call | returns |
 
+| classifyPDE({ A, B, C }), pde.classify | { discriminant, type, regions: { hyperbolic, parabolic, elliptic }, at(x, y), on([[x0, x1], [y0, y1]]) } |
+
 | heat({ k, length, initial, ends = "fixed", terms = 8 }) | { coefficients, modes, at(x, t), formula(terms) } |
 
 | laplaceRectangle({ width, height, top, terms }) | { coefficients, modes, at(x, y), formula } |
@@ -1746,6 +1758,11 @@ Separation of variables leads to eigenvalue problems −(py′)′+qy=λwy with 
 ### Try it
 
 ```js
+// The type of an equation from B² − 4AC.
+const tricomi = classifyPDE({ A: "y", C: "1" });
+PRINT("Tricomi:", tricomi.discriminant, tricomi.regions, " at (0, -1):", tricomi.at(0, -1));
+PRINT("wave, heat, Laplace:", [{ A: 1, C: -1 }, { A: 1 }, { A: 1, C: 1 }].map((c) => classifyPDE(c).type).join(", "));
+
 // A rod with temperature x(1 - x), ends held at 0.
 const rod = heat({ k: 1, length: 1, initial: "x*(1 - x)", terms: 6 });
 PRINT("first terms:", rod.formula(3));
@@ -2445,6 +2462,10 @@ Write S=SN​+RN​ with SN​ the sum of the terms up to N and RN​ the tail. 
 
 - Comparison. If only a bound ∣an​∣≤Cnp(logn)m is known (as for sinn/n2), the tail is at most the integral of the bound.
 
+### How many terms for a given error
+
+For an alternating series whose term sizes decrease to 0, the error after the term n=N is at most the next term, ∣S−SN​∣≤∣aN+1​∣. `s.termsForError(ε)` runs the alternating test to find the index n0​ from which the sizes are proven to decrease, then finds the first N with N+1≥n0​ and ∣aN+1​∣≤ε by doubling and bisection, deciding each comparison from certified enclosures of the term. For ∑(−1)n+1/n2 and ε=1/1000 that is 31 terms, since 1/322=1/1024.
+
 N is doubled until the enclosure is as narrow as `digits` asks (default 8) or `maxTerms` is reached; `met` says which. Whatever the width, the enclosure contains the sum.
 
 | call | returns |
@@ -2456,6 +2477,8 @@ N is doubled until the enclosure is as narrow as `digits` asks (default 8) or `m
 | s.divergenceTest(), s.ratioTest(), s.rootTest(), s.comparisonTest(), s.integralTest(), s.alternatingTest() | { test, verdict, reason, … } |
 
 | s.tests() | all six |
+
+| s.termsForError(ε) | { terms, last, bound, from, reason }: the error after the term last is at most bound = \|a(last + 1)\| ≤ ε; alternating series only |
 
 | s.convergence() | { convergence, by, reason, test } |
 
@@ -2486,6 +2509,10 @@ show("sin(n)/n^2");
 
 // every test on one series
 for (const t of sum("n/2^n").tests()) PRINT(t.test.padEnd(12), t.verdict.padEnd(13), t.reason);
+
+// how many terms of Σ (-1)^(n+1)/n² bring the error below 1/1000
+const alt = sum("(-1)^(n+1)/n^2").termsForError("1/1000");
+PRINT(`${alt.terms} terms; the error is at most ${alt.bound}`);
 
 // pi from the Basel sum: 6·Σ 1/n² encloses pi²
 const basel = sum("1/n^2").sum({ digits: 9 }).enclosure;
@@ -3224,6 +3251,10 @@ which is what `order` reports, using the last errors that are still well above r
 xn+1​−x∗=2f′(xn​)f′′(ξ)​(xn​−x∗)2.
 At a multiple root f′(x∗)=0, the argument fails, and the observed order drops to 1: try `newton("(x - 1)^2", 2)`.
 
+### Newton's method with fractions
+
+With `{ exact: true }`, `newton` works the way it would by hand with fractions: every iterate is an exact Core Rational, so there is no rounding floor at all. For x2−2 from 1 the iterates are 23​,1217​,408577​,470832665857​, the convergents of 2​ that the Babylonians used. The price shows in `denominatorDigits`: the denominators double in length each step, just as the correct digits do. `floats` holds the double-precision iterates from the same start, so the two can be compared row by row. This needs f built from +, −, ×, ÷ and integer powers, so that f(x) and f′(x) are fractions; the default is 6 steps.
+
 ### Fixed points and the multiplier
 
 For x←g(x), xn+1​−x∗=g(xn​)−g(x∗)≈g′(x∗)(xn​−x∗). So each step multiplies the error by about g′(x∗). `fixedPoint` returns an enclosure of that multiplier at the certified fixed point and the observed `ratio` of successive errors, which should agree with it. The proof of convergence by the contraction principle is in [recursive sequences](https://ratmath.com/analytic/sequences.html).
@@ -3237,6 +3268,8 @@ A program cannot know its error, so in practice the step size ∣xn+1​−xn​
 | bisection(f, [a, b], { steps = 20 }) | { iterations: [{ n, a, b, x, fx, bound, error }], root, order } |
 
 | newton(f, x0, { steps = 10 }) | { iterations: [{ n, x, fx, dfx, error }], root, order, derivative } |
+
+| newton(f, x0, { exact: true, steps = 6 }) | the same with x, fx and dfx as Rationals, plus denominatorDigits on each row and floats, the double iterates |
 
 | secant(f, x0, x1, { steps = 12 }) | { iterations: [{ n, x, fx, error }], root, order } |
 
@@ -3264,8 +3297,63 @@ PRINT("root:", n.root.low.toDecimal(20));
 const c = fixedPoint("cos(x)", 1, { steps: 30 });
 PRINT(`x = cos(x): multiplier g'(x*) = ${c.multiplier.low.toDecimal(8)}, observed ratio of errors ${c.ratio.toFixed(6)}`);
 
+// Newton with fractions: no rounding, but the denominators double in length.
+for (const row of newton("x^2 - 2", "1", { exact: true, steps: 5 }).iterations) PRINT(`x${row.n} = ${row.x}   (${row.denominatorDigits} digits, error ${row.error.toExponential(1)})`);
+
 // A double root: Newton drops to order 1.
 newton("(x - 1)^2*(x + 2)", 2, { steps: 20 }).order.toFixed(2);
+```
+
+---
+
+Page: https://ratmath.com/analytic/descent.html
+
+Numerical methods
+
+## Gradient descent
+
+Gradient descent walks downhill: from a point x it steps against the gradient, x←x−t∇f(x). `gradientDescent` runs the method and keeps its table. When f is built from +, −, ×, ÷ and integer powers, every iterate, value, gradient and step is an exact fraction, so the table is what the method does with no rounding at all; otherwise it runs in floating point. The result is labelled `simulated`: it shows the method from one start and proves nothing about a minimum. For a certified minimum use [extrema](https://ratmath.com/analytic/zeros.html) on one variable or [lagrange](https://ratmath.com/analytic/multipliers.html) with constraints.
+
+```js
+const r = gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "1/10", steps: 2 });
+r.iterations.map((row) => row.x);   // [[1, 1], [4/5, 1/5], [16/25, 1/25]]
+r.simulated;                          // true
+```
+
+### Choosing the step
+
+- Fixed (method: "fixed", step = 1/10 by default). The same t every time. For f=x2+4y2 a step above 1/4 makes the y coordinate grow: the step must be below 2/L where L is the largest curvature.
+
+- Backtracking ("backtracking"). Start at step (default 1) and halve until the Armijo condition f(x−tg)≤f(x)−ct∣g∣2 holds, with c = armijo (default 1/2). Each step is then guaranteed to decrease f by a fixed fraction of what the slope promised.
+
+- Exact line search ("exact"), for a quadratic f=21​xTHx+bTx+c. Along x−tg the value is a parabola in t, minimised at
+
+t∗=gTHggTg​.
+Successive gradients are then perpendicular, which is why the path zigzags when the level sets are long ellipses. With exact fractions this is visible exactly: the dot product of consecutive gradients is 0, not a small number.
+
+| call | returns |
+
+| gradientDescent(f, start, { variables, method = "fixed", step, steps = 10, armijo = "1/2" }) | { simulated: true, method, variables, iterations: [{ n, x, fx, gradient, step }], final, value, exact } |
+
+### Try it
+
+```js
+// Three ways to choose the step on f = x^2 + 4y^2 from (1, 1), all in exact fractions.
+for (const method of ["fixed", "backtracking", "exact"]) {
+  const r = gradientDescent("x^2 + 4*y^2", ["1", "1"], { method, step: method === "fixed" ? "1/10" : undefined, steps: 4 });
+  PRINT(method.padEnd(12), r.iterations.map((row) => `(${row.x.join(", ")})`).join(" → "));
+}
+
+// With the exact line search, consecutive gradients are exactly perpendicular.
+const e = gradientDescent("x^2 + 4*y^2 + x*y", ["2", "1"], { method: "exact", steps: 3 });
+const g = e.iterations.map((row) => row.gradient);
+PRINT("g0·g1 =", g[0][0].multiply(g[1][0]).add(g[0][1].multiply(g[1][1])), "  g1·g2 =", g[1][0].multiply(g[2][0]).add(g[1][1].multiply(g[2][1])));
+
+// Too large a fixed step diverges.
+PRINT("step 3/10:", gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "3/10", steps: 4 }).iterations.map((row) => row.x[1]).join(", "));
+
+// A non-polynomial objective runs in floating point.
+gradientDescent("exp(x) + x^2", ["1"], { method: "backtracking", steps: 6 }).final
 ```
 
 ---
@@ -3399,6 +3487,10 @@ The central difference has an error expansion in even powers, D(h)=f′(x)+c2​
 
 `quadratureRule` evaluates the rule with certified arithmetic, so `error` is the error of the method alone, with no rounding mixed in. `exact` is the certified integral and `bound` the textbook bound with the maximum of the derivative enclosed. The true error is always inside the bound, and usually well inside.
 
+### Darboux sums
+
+The lower and upper Darboux sums of a partition use the inf and the sup of f on each piece, L=∑mi​Δxi​ and U=∑Mi​Δxi​, and every integral lies between them. `darboux(f, partition)` takes a list of points or `{ interval, n }`. On a piece where f′ is proven to have one sign, f is monotone and its inf and sup are its end values, so for a polynomial or rational function the sums are exact fractions: for x2 on [0,1] with four pieces, L=327​ and U=3215​. Where monotonicity is not proven, the inf and sup come from the end values and the certified critical points inside, the sums are intervals that contain the true sums, and `exact` is false.
+
 ### Gauss rules
 
 With n points chosen freely, a rule can be exact for all polynomials of degree below 2n. The points are the roots of the Legendre polynomial Pn​, and the weights are wi​=2/((1−xi2​)Pn′​(xi​)2). `gaussLegendre(n)` builds Pn​ with exact coefficients, isolates its roots with proof, and returns nodes and weights as enclosures to 25 digits.
@@ -3410,6 +3502,8 @@ With n points chosen freely, a rule can be exact for all polynomials of degree b
 | richardson(f, x, { h = 0.5, levels = 5 }) | { table, errors, exact } |
 
 | quadratureRule(f, [a, b], { rule, n }) | { value, exact, error, bound, order, h } |
+
+| darboux(f, points) or darboux(f, { interval: [a, b], n }) | { lower, upper, exact, pieces: [{ from, to, monotone, inf, sup }], integral }; Rationals when exact, else RationalIntervals |
 
 | romberg(f, [a, b], { levels = 5 }) | { table, errors, exact } |
 
@@ -3432,6 +3526,14 @@ for (const rule of ["midpoint", "trapezoid", "simpson"]) {
     PRINT(`${rule.padEnd(9)} n = ${n}: error ${q.error.low.toNumber().toExponential(3)}   bound ${q.bound.toNumber().toExponential(3)}`);
   }
 }
+
+// Darboux sums of x^2 on [0, 1] squeeze 1/3; sin on [0, 3] gets enclosures.
+for (const n of [4, 16, 64]) {
+  const d = darboux("x^2", { interval: [0, 1], n });
+  PRINT(`n = ${n}: ${d.lower} ≤ 1/3 ≤ ${d.upper}`);
+}
+const ds = darboux("sin(x)", { interval: [0, 3], n: 3 });
+PRINT("sin on [0, 3]:", ds.pieces.map((p) => p.monotone ?? "turns").join(", "), " lower", ds.lower.low.toDecimal(6), " upper", ds.upper.high.toDecimal(6));
 
 // Three Gauss points beat eight Simpson panels.
 const g = gaussRule("exp(x)", [0, 1], 3);

@@ -23,6 +23,7 @@ export { greens, stokes, divergenceTheorem, changeOfVariables, potential, lagran
 export { curve, Curve, surface, Surface, metric, Metric } from "./src/geometry.js";
 export { tidy } from "./src/tidy.js";
 export { firstOrder, exactEquation, linearODE, laplace, inverseLaplace, laplaceSolve, linearSystem, planarSystem, PlanarSystem, seriesSolution } from "./src/diffeq.js";
-export { heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville } from "./src/pde.js";
+export { heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville, classifyPDE } from "./src/pde.js";
+export * as pde from "./src/pde.js";
 export { antiderivative, partialFractions } from "./src/antiderivative.js";
-export { exactOf, nearestDouble, floatParts, floatOp, roundoff, bisection, newton, secant, fixedPoint, interpolate, equallySpaced, chebyshevNodes, spline, leastSquares, differences, richardson, quadratureRule, romberg, legendre, gaussLegendre, gaussRule, odeMethod, stepSizeStudy, stability } from "./src/methods.js";
+export { exactOf, nearestDouble, floatParts, floatOp, roundoff, bisection, newton, gradientDescent, secant, fixedPoint, interpolate, equallySpaced, chebyshevNodes, spline, leastSquares, differences, richardson, quadratureRule, darboux, romberg, legendre, gaussLegendre, gaussRule, odeMethod, stepSizeStudy, stability } from "./src/methods.js";

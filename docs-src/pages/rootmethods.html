@@ -27,6 +27,9 @@ fixedPoint("cos(x)", 1).multiplier;                        // g′ at the fixed 
   \[ x_{n+1} - x^* = \frac{f''(\xi)}{2 f'(x_n)}\,(x_n - x^*)^2 . \]
   <p>At a multiple root \(f'(x^*) = 0\), the argument fails, and the observed order drops to 1: try <code>newton("(x - 1)^2", 2)</code>.</p>
 
+  <h2>Newton's method with fractions</h2>
+  <p>With <code>{ exact: true }</code>, <code>newton</code> works the way it would by hand with fractions: every iterate is an exact Core Rational, so there is no rounding floor at all. For \(x^2 - 2\) from 1 the iterates are \(\tfrac32, \tfrac{17}{12}, \tfrac{577}{408}, \tfrac{665857}{470832}\), the convergents of \(\sqrt2\) that the Babylonians used. The price shows in <code>denominatorDigits</code>: the denominators double in length each step, just as the correct digits do. <code>floats</code> holds the double-precision iterates from the same start, so the two can be compared row by row. This needs \(f\) built from \(+\), \(-\), \(\times\), \(\div\) and integer powers, so that \(f(x)\) and \(f'(x)\) are fractions; the default is 6 steps.</p>
+
   <h2>Fixed points and the multiplier</h2>
   <p>For \(x \leftarrow g(x)\), \(x_{n+1} - x^* = g(x_n) - g(x^*) \approx g'(x^*)(x_n - x^*)\). So each step multiplies the error by about \(g'(x^*)\). <code>fixedPoint</code> returns an enclosure of that multiplier at the certified fixed point and the observed <code>ratio</code> of successive errors, which should agree with it. The proof of convergence by the contraction principle is in <a href="#sequences">recursive sequences</a>.</p>
 
@@ -37,6 +40,7 @@ fixedPoint("cos(x)", 1).multiplier;                        // g′ at the fixed 
     <tr><th>call</th><th>returns</th></tr>
     <tr><td>bisection(f, [a, b], { steps = 20 })</td><td>{ iterations: [{ n, a, b, x, fx, bound, error }], root, order }</td></tr>
     <tr><td>newton(f, x0, { steps = 10 })</td><td>{ iterations: [{ n, x, fx, dfx, error }], root, order, derivative }</td></tr>
+    <tr><td>newton(f, x0, { exact: true, steps = 6 })</td><td>the same with x, fx and dfx as Rationals, plus <code>denominatorDigits</code> on each row and <code>floats</code>, the double iterates</td></tr>
     <tr><td>secant(f, x0, x1, { steps = 12 })</td><td>{ iterations: [{ n, x, fx, error }], root, order }</td></tr>
     <tr><td>fixedPoint(g, x0, { steps = 25 })</td><td>{ iterations, root, multiplier, ratio, order }</td></tr>
   </table></div>
@@ -59,6 +63,9 @@ PRINT("root:", n.root.low.toDecimal(20));
 // Fixed-point iteration: the error shrinks by the multiplier each step.
 const c = fixedPoint("cos(x)", 1, { steps: 30 });
 PRINT(`x = cos(x): multiplier g'(x*) = ${c.multiplier.low.toDecimal(8)}, observed ratio of errors ${c.ratio.toFixed(6)}`);
+
+// Newton with fractions: no rounding, but the denominators double in length.
+for (const row of newton("x^2 - 2", "1", { exact: true, steps: 5 }).iterations) PRINT(`x${row.n} = ${row.x}   (${row.denominatorDigits} digits, error ${row.error.toExponential(1)})`);
 
 // A double root: Newton drops to order 1.
 newton("(x - 1)^2*(x + 2)", 2, { steps: 20 }).order.toFixed(2);

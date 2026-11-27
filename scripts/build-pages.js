@@ -48,6 +48,7 @@ export const PAGES = [
   { group: "Numerical methods" },
   { name: "floats", title: "Floating point, exactly" },
   { name: "rootmethods", title: "Root-finding methods" },
+  { name: "descent", title: "Gradient descent" },
   { name: "interpolation", title: "Interpolation and approximation" },
   { name: "quadraturerules", title: "Differences and quadrature rules" },
   { name: "odemethods", title: "Euler to Runge-Kutta" },

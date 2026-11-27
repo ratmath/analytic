@@ -609,6 +609,8 @@ export class Series {
   comparisonTest(options?: { digits?: number }): TestResult;
   integralTest(options?: { digits?: number }): TestResult;
   alternatingTest(options?: { digits?: number }): TestResult;
+  /** Alternating series only: the first N (counted in `last`) whose error bound |a(N + 1)| is at most eps. */
+  termsForError(eps: RationalLike | string, options?: { digits?: number }): { terms: number; last: number; bound: Rational | RationalInterval; from: number; reason: string };
   tests(options?: { digits?: number }): TestResult[];
   convergence(options?: { digits?: number }): { convergence: "absolutely convergent" | "conditionally convergent" | "convergent" | "divergent" | "undecided"; by: string | null; reason: string; test?: TestResult };
   /** Throws AnalyticError for a divergent or undecided series. */
@@ -951,6 +953,19 @@ export function wave(spec: { c?: RationalLike | string; length?: RationalLike | 
   modes(N?: number): Array<{ n: number; frequency: string; cos: RationalInterval; sin: RationalInterval }>;
 };
 export function sturmLiouville(spec: { p?: ExpressionLike; q?: ExpressionLike; w?: ExpressionLike; interval: [RationalLike | string, RationalLike | string]; count?: number; from?: number; to?: number; width?: RationalLike | string; certify?: boolean; x?: string }): Array<{ index: number; eigenvalue: RationalInterval; estimate: number; proven: boolean }>;
+export type PDEType = "hyperbolic" | "parabolic" | "elliptic";
+export interface PDEClassification {
+  discriminant: string;
+  type: PDEType | null;
+  regions: { hyperbolic: string; parabolic: string; elliptic: string };
+  at(x: RationalLike | string, y: RationalLike | string): PDEType | null;
+  on(rectangle: [[RationalLike | string, RationalLike | string], [RationalLike | string, RationalLike | string]]): PDEType | null;
+}
+export function classifyPDE(coefficients: { A?: ExpressionLike | number; B?: ExpressionLike | number; C?: ExpressionLike | number } | [ExpressionLike | number, ExpressionLike | number, ExpressionLike | number], options?: { variables?: [string, string] }): PDEClassification;
+export const pde: {
+  heat: typeof heat; wave: typeof wave; laplaceRectangle: typeof laplaceRectangle; laplaceDisc: typeof laplaceDisc; sturmLiouville: typeof sturmLiouville;
+  classifyPDE: typeof classifyPDE; classify: typeof classifyPDE;
+};
 export function antiderivative(tree: Ast, name?: string): { tree: Ast; trust: "proven" | "checked" } | null;
 export function partialFractions(N: Rational[], D: Rational[]): { poly: Rational[]; linear: Array<{ root: Rational; power: number; coeff: Rational }>; quadratic: Array<{ p: Rational; q: Rational; alpha: Rational; beta: Rational }> } | null;
 
@@ -970,7 +985,20 @@ export interface RootIteration { n: number; x: number; fx?: number; dfx?: number
 export interface RootRun { method: string; iterations: RootIteration[]; root: RationalInterval | null; estimate: number; order: number | null; derivative?: string; multiplier?: RationalInterval | null; ratio?: number | null }
 export interface RootOptions { variable?: string; steps?: number; tol?: number; digits?: number }
 export function bisection(f: ExpressionLike, bracket: [number, number], options?: RootOptions): RootRun;
-export function newton(f: ExpressionLike, x0: number, options?: RootOptions): RootRun;
+export function newton(f: ExpressionLike, x0: number | RationalLike | string, options: RootOptions & { exact: true }): ExactNewtonRun;
+export function newton(f: ExpressionLike, x0: number | RationalLike | string, options?: RootOptions & { exact?: false }): RootRun;
+export interface ExactNewtonRun {
+  method: "newton"; exact: true; derivative: string;
+  iterations: Array<{ n: number; x: Rational; fx: Rational; dfx: Rational; denominatorDigits: number; error: number | null }>;
+  root: RationalInterval | null; estimate: Rational; order: number | null;
+  /** the double-precision iterates from the same start */
+  floats: number[];
+}
+export function gradientDescent(f: ExpressionLike, start: Array<RationalLike | string>, options?: { variables?: string[]; method?: "fixed" | "backtracking" | "exact"; step?: RationalLike | string; steps?: number; armijo?: RationalLike | string }): {
+  simulated: true; method: "fixed" | "backtracking" | "exact"; variables: string[]; exact: boolean;
+  iterations: Array<{ n: number; x: Array<Rational | number>; fx: Rational | number; gradient: Array<Rational | number>; step: Rational | number | null }>;
+  final: Array<Rational | number>; value: Rational | number;
+};
 export function secant(f: ExpressionLike, x0: number, x1: number, options?: RootOptions): RootRun;
 export function fixedPoint(g: ExpressionLike, x0: number, options?: RootOptions): RootRun;
 export interface Interpolant {
@@ -987,6 +1015,15 @@ export function leastSquares(points: Array<[RationalLike | string, RationalLike 
 export function differences(f: ExpressionLike, x: number, options?: { kind?: "forward" | "backward" | "central" | "second"; steps?: number[]; variable?: string }): { exact: RationalInterval; rows: Array<{ h: number; value: number; error: number; truncation: number | null }>; best: { h: number; value: number; error: number } };
 export function richardson(f: ExpressionLike, x: number, options?: { h?: number; levels?: number; variable?: string }): { table: number[][]; errors: number[][]; exact: RationalInterval };
 export function quadratureRule(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], options?: { rule?: "midpoint" | "trapezoid" | "simpson"; n?: number; variable?: string }): { rule: string; panels: number; h: Rational; order: number; value: RationalInterval; exact: RationalInterval; error: RationalInterval; bound: Rational | null };
+export interface DarbouxSums {
+  lower: Rational | RationalInterval;
+  upper: Rational | RationalInterval;
+  /** true when every piece is proven monotone with fraction end values: lower and upper are then Rationals */
+  exact: boolean;
+  pieces: Array<{ from: Rational; to: Rational; monotone: "increasing" | "decreasing" | null; inf: Rational | RationalInterval; sup: Rational | RationalInterval }>;
+  integral: RationalInterval;
+}
+export function darboux(f: ExpressionLike, partition: Array<RationalLike | string> | { interval: [RationalLike | string, RationalLike | string]; n?: number }, options?: { variable?: string; digits?: number }): DarbouxSums;
 export function romberg(f: ExpressionLike, interval: [RationalLike | string, RationalLike | string], options?: { levels?: number; variable?: string }): { table: number[][]; errors: number[][]; exact: RationalInterval };
 export function legendre(n: number): Rational[];
 export function gaussLegendre(n: number, options?: { digits?: number }): { polynomial: Rational[]; nodes: RationalInterval[]; weights: RationalInterval[] };

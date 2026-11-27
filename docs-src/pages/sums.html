@@ -35,6 +35,9 @@ sum("1/n").sum();              // refuses: the series diverges (comparison test:
     <li><strong>Alternating.</strong> The tail lies between 0 and its first term. If the sizes are convex as well, it lies between \(a_{N+1}/2\) and \(-a_N/2\), which gains several digits for slowly convergent series such as \(\sum (-1)^n/n\).</li>
     <li><strong>Comparison.</strong> If only a bound \(|a_n| \le C\,n^p(\log n)^m\) is known (as for \(\sin n / n^2\)), the tail is at most the integral of the bound.</li>
   </ul>
+  <h2>How many terms for a given error</h2>
+  <p>For an alternating series whose term sizes decrease to 0, the error after the term \(n = N\) is at most the next term, \(|S - S_N| \le |a_{N+1}|\). <code>s.termsForError(ε)</code> runs the alternating test to find the index \(n_0\) from which the sizes are proven to decrease, then finds the first \(N\) with \(N + 1 \ge n_0\) and \(|a_{N+1}| \le ε\) by doubling and bisection, deciding each comparison from certified enclosures of the term. For \(\sum (-1)^{n+1}/n^2\) and \(ε = 1/1000\) that is 31 terms, since \(1/32^2 = 1/1024\).</p>
+
   <p>\(N\) is doubled until the enclosure is as narrow as <code>digits</code> asks (default 8) or <code>maxTerms</code> is reached; <code>met</code> says which. Whatever the width, the enclosure contains the sum.</p>
 
   <div class="tablewrap"><table class="ref">
@@ -43,6 +46,7 @@ sum("1/n").sum();              // refuses: the series diverges (comparison test:
     <tr><td>s.term(n), s.partial(N)</td><td>Rational when exact, else RationalInterval</td></tr>
     <tr><td>s.divergenceTest(), s.ratioTest(), s.rootTest(), s.comparisonTest(), s.integralTest(), s.alternatingTest()</td><td>{ test, verdict, reason, … }</td></tr>
     <tr><td>s.tests()</td><td>all six</td></tr>
+    <tr><td>s.termsForError(ε)</td><td>{ terms, last, bound, from, reason }: the error after the term <code>last</code> is at most <code>bound</code> = |a(last + 1)| ≤ ε; alternating series only</td></tr>
     <tr><td>s.convergence()</td><td>{ convergence, by, reason, test }</td></tr>
     <tr><td>s.sum({ digits = 8, maxTerms = 8192 })</td><td>{ enclosure, terms, upTo, partial, tail, by, met }; refuses for a divergent or undecided series</td></tr>
   </table></div>
@@ -69,6 +73,10 @@ show("sin(n)/n^2");
 
 // every test on one series
 for (const t of sum("n/2^n").tests()) PRINT(t.test.padEnd(12), t.verdict.padEnd(13), t.reason);
+
+// how many terms of Σ (-1)^(n+1)/n² bring the error below 1/1000
+const alt = sum("(-1)^(n+1)/n^2").termsForError("1/1000");
+PRINT(`${alt.terms} terms; the error is at most ${alt.bound}`);
 
 // pi from the Basel sum: 6·Σ 1/n² encloses pi²
 const basel = sum("1/n^2").sum({ digits: 9 }).enclosure;
