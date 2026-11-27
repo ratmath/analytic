@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Review of batch A6 (Course Test B1):
+  - `darboux` on a piece where f′ cannot be enclosed (a corner such as |x| at 0,
+    or a cusp) no longer takes the end values as inf and sup: the range of f is
+    bounded by interval subdivision, and the sums are labelled enclosures.
+  - `termsForError` searches forward correctly from a negative starting index.
 - Helpers from the Course Test roadmap (batch A6):
   - `Series#termsForError(ε)`: for an alternating series, the first N whose
     error bound |a(N + 1)| is at most ε, found by doubling and bisection from

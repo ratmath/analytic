@@ -644,7 +644,7 @@ export class Series {
     let hi = n0;
     while (!small(hi)) {
       lo = hi;
-      hi = hi * 2;
+      hi = hi + Math.max(1, hi - n0 + 1); // doubling the distance from n0, whatever the sign of the index
       if (hi > 2 ** 52) refuse("budget", "the terms stay above ε for every index tried");
     }
     while (hi - lo > 1) {

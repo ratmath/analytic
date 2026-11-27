@@ -847,6 +847,66 @@ export function quadratureRule(f, [a, b], opts = {}) {
 }
 
 /**
+ * The inf and sup of f on [a, b] as enclosures, for an f that need not be
+ * differentiable: [a, b] is cut into cells, the interval value of f on a cell
+ * bounds f there, and the value at each cell's midpoint is attained. The inf
+ * lies between the least lower bound over the cells and the least value
+ * seen; cells that could still hold it are halved until the two meet to 40
+ * bits or the work budget ends (the enclosure is valid either way). An f that
+ * is unbounded or undefined somewhere on the piece is refused.
+ */
+function rangeOn(ast, variable, a, b, ends, bits) {
+  const tol = new Rational(1n, 1n << 40n);
+  const at = (x) => {
+    const q = constantRational(ast, { [variable]: x });
+    return q !== null ? Iv.point(q) : encloseAst(ast, { [variable]: Iv.point(x) }, bits);
+  };
+  const one = (sign) => {
+    // sign = 1 for the inf, −1 for the sup (the inf of −f)
+    const lowOf = (iv) => (sign > 0 ? iv.lo : iv.hi.negate());
+    const highOf = (iv) => (sign > 0 ? iv.hi : iv.lo.negate());
+    let seenLo = ends.map(lowOf).reduce((m, q) => (q.compareTo(m) < 0 ? q : m)); // a lower bound for the least value seen
+    let seenHi = ends.map(highOf).reduce((m, q) => (q.compareTo(m) < 0 ? q : m)); // the inf is at most this
+    let cells = [[a, b]];
+    let floor = null;
+    for (let round = 0; round < 60; round++) {
+      const next = [];
+      floor = null;
+      for (const [l, r] of cells) {
+        let iv;
+        try {
+          iv = encloseAst(ast, { [variable]: new Iv(l, r) }, bits);
+        } catch {
+          iv = null;
+        }
+        if (iv === null) {
+          if (r.subtract(l).compareTo(b.subtract(a).multiply(new Rational(1n, 1n << 50n))) < 0) refuse("unbounded", `f could not be bounded near ${variable} = ${l.toNumber()}: a Darboux sum needs a bounded f`);
+          const m = l.add(r).divide(TWO);
+          next.push([l, m], [m, r]);
+          continue;
+        }
+        const low = lowOf(iv);
+        const mid = l.add(r).divide(TWO);
+        const fm = at(mid);
+        if (highOf(fm).compareTo(seenHi) < 0) [seenLo, seenHi] = [lowOf(fm), highOf(fm)];
+        if (low.compareTo(seenHi) >= 0) continue; // the inf is not below this cell's bound: discard it
+        if (floor === null || low.compareTo(floor) < 0) floor = low;
+        next.push([l, mid], [mid, r]);
+      }
+      // cells whose bound is no longer below the least value seen drop out next round
+      if (!next.length || floor === null) return [seenLo.compareTo(seenHi) < 0 ? seenLo : seenHi, seenHi];
+      if (seenHi.subtract(floor).compareTo(tol) <= 0 && next.length) return [floor, seenHi];
+      if (next.length > 4096) return [floor, seenHi];
+      cells = next;
+    }
+    return [floor, seenHi];
+  };
+  const [iLo, iHi] = one(1);
+  const [sLo, sHi] = one(-1);
+  return [new Iv(iLo, iHi), new Iv(sHi.negate(), sLo.negate())];
+}
+
+/**
  * Lower and upper Darboux sums: darboux(f, partition) with the partition as a
  * list of points ["0", "1/2", "1"] or { interval: [a, b], n } for n equal
  * pieces. → { lower, upper, exact, pieces, integral }.
@@ -888,18 +948,24 @@ export function darboux(f, partition, opts = {}) {
     const h = b.subtract(a);
     const [fa, fb] = [value(a), value(b)];
     let slope = null;
+    let smooth = true; // f′ is enclosed on the whole piece, so f is differentiable there
     try {
       const d = encloseAst(dAst, { [variable]: new Iv(a, b) }, bits);
       if (d.lo.numerator >= 0n) slope = "increasing";
       else if (d.hi.numerator <= 0n) slope = "decreasing";
     } catch {
       slope = null;
+      smooth = false;
     }
     let inf;
     let sup;
     if (slope === "increasing") [inf, sup] = [fa, fb];
     else if (slope === "decreasing") [inf, sup] = [fb, fa];
-    else {
+    else if (!smooth) {
+      // a corner (|x| at 0) or a cusp: the critical points of f′ do not find the
+      // extremum there, so bound the range of f itself over ever smaller cells
+      [inf, sup] = rangeOn(ast, variable, a, b, [fa, fb], bits);
+    } else {
       const candidates = [fa, fb];
       for (const c of extrema(ast, [a, b], { variable }).exact()) candidates.push(encloseAst(ast, { [variable]: new Iv(c.lo, c.hi) }, bits));
       [inf, sup] = [minIv(candidates), maxIv(candidates)];
