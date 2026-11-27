@@ -1,6 +1,6 @@
 # @ratmath/analytic 0.1.0: full documentation
 
-> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit b635716. Each page ends with a runnable example; in it, PRINT(...) prints.
+> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit 59b9d8d. Each page ends with a runnable example; in it, PRINT(...) prints.
 
 
 ---
@@ -339,6 +339,8 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 | roundoff(formula, inputs) | object | the calculation in doubles and exactly, digitsLost, and steps showing where the digits go |
 
 | bisection(f, [a, b]), newton(f, x0), secant(f, x0, x1), fixedPoint(g, x0) | object | iterations each with its true error against the certified root, and the observed order; newton(f, x0, { exact: true }) iterates in exact fractions. See Root-finding methods |
+
+| gradientDescent(f, start, { method, step, steps }) | object | a simulated run with fixed steps, backtracking or the exact line search for quadratics; exact fractions for polynomial objectives. See Gradient descent |
 
 | interpolate(points) or interpolate(f, { nodes }) | object | divided differences, newton, lagrange, polynomial, at(x), error(x), maxError([a, b]). See Interpolation and approximation |
 
@@ -3300,6 +3302,58 @@ for (const row of newton("x^2 - 2", "1", { exact: true, steps: 5 }).iterations) 
 
 // A double root: Newton drops to order 1.
 newton("(x - 1)^2*(x + 2)", 2, { steps: 20 }).order.toFixed(2);
+```
+
+---
+
+Page: https://ratmath.com/analytic/descent.html
+
+Numerical methods
+
+## Gradient descent
+
+Gradient descent walks downhill: from a point x it steps against the gradient, x←x−t∇f(x). `gradientDescent` runs the method and keeps its table. When f is built from +, −, ×, ÷ and integer powers, every iterate, value, gradient and step is an exact fraction, so the table is what the method does with no rounding at all; otherwise it runs in floating point. The result is labelled `simulated`: it shows the method from one start and proves nothing about a minimum. For a certified minimum use [extrema](https://ratmath.com/analytic/zeros.html) on one variable or [lagrange](https://ratmath.com/analytic/multipliers.html) with constraints.
+
+```js
+const r = gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "1/10", steps: 2 });
+r.iterations.map((row) => row.x);   // [[1, 1], [4/5, 1/5], [16/25, 1/25]]
+r.simulated;                          // true
+```
+
+### Choosing the step
+
+- Fixed (method: "fixed", step = 1/10 by default). The same t every time. For f=x2+4y2 a step above 1/4 makes the y coordinate grow: the step must be below 2/L where L is the largest curvature.
+
+- Backtracking ("backtracking"). Start at step (default 1) and halve until the Armijo condition f(x−tg)≤f(x)−ct∣g∣2 holds, with c = armijo (default 1/2). Each step is then guaranteed to decrease f by a fixed fraction of what the slope promised.
+
+- Exact line search ("exact"), for a quadratic f=21​xTHx+bTx+c. Along x−tg the value is a parabola in t, minimised at
+
+t∗=gTHggTg​.
+Successive gradients are then perpendicular, which is why the path zigzags when the level sets are long ellipses. With exact fractions this is visible exactly: the dot product of consecutive gradients is 0, not a small number.
+
+| call | returns |
+
+| gradientDescent(f, start, { variables, method = "fixed", step, steps = 10, armijo = "1/2" }) | { simulated: true, method, variables, iterations: [{ n, x, fx, gradient, step }], final, value, exact } |
+
+### Try it
+
+```js
+// Three ways to choose the step on f = x^2 + 4y^2 from (1, 1), all in exact fractions.
+for (const method of ["fixed", "backtracking", "exact"]) {
+  const r = gradientDescent("x^2 + 4*y^2", ["1", "1"], { method, step: method === "fixed" ? "1/10" : undefined, steps: 4 });
+  PRINT(method.padEnd(12), r.iterations.map((row) => `(${row.x.join(", ")})`).join(" → "));
+}
+
+// With the exact line search, consecutive gradients are exactly perpendicular.
+const e = gradientDescent("x^2 + 4*y^2 + x*y", ["2", "1"], { method: "exact", steps: 3 });
+const g = e.iterations.map((row) => row.gradient);
+PRINT("g0·g1 =", g[0][0].multiply(g[1][0]).add(g[0][1].multiply(g[1][1])), "  g1·g2 =", g[1][0].multiply(g[2][0]).add(g[1][1].multiply(g[2][1])));
+
+// Too large a fixed step diverges.
+PRINT("step 3/10:", gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "3/10", steps: 4 }).iterations.map((row) => row.x[1]).join(", "));
+
+// A non-polynomial objective runs in floating point.
+gradientDescent("exp(x) + x^2", ["1"], { method: "backtracking", steps: 6 }).final
 ```
 
 ---

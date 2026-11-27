@@ -994,6 +994,11 @@ export interface ExactNewtonRun {
   /** the double-precision iterates from the same start */
   floats: number[];
 }
+export function gradientDescent(f: ExpressionLike, start: Array<RationalLike | string>, options?: { variables?: string[]; method?: "fixed" | "backtracking" | "exact"; step?: RationalLike | string; steps?: number; armijo?: RationalLike | string }): {
+  simulated: true; method: "fixed" | "backtracking" | "exact"; variables: string[]; exact: boolean;
+  iterations: Array<{ n: number; x: Array<Rational | number>; fx: Rational | number; gradient: Array<Rational | number>; step: Rational | number | null }>;
+  final: Array<Rational | number>; value: Rational | number;
+};
 export function secant(f: ExpressionLike, x0: number, x1: number, options?: RootOptions): RootRun;
 export function fixedPoint(g: ExpressionLike, x0: number, options?: RootOptions): RootRun;
 export interface Interpolant {

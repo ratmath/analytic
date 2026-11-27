@@ -1,0 +1,39 @@
+<!-- wide: no -->
+<div class="eyebrow">Numerical methods</div>
+  <h1>Gradient descent</h1>
+  <p>Gradient descent walks downhill: from a point \(x\) it steps against the gradient, \(x \leftarrow x - t\,\nabla f(x)\). <code>gradientDescent</code> runs the method and keeps its table. When \(f\) is built from \(+\), \(-\), \(\times\), \(\div\) and integer powers, every iterate, value, gradient and step is an exact fraction, so the table is what the method does with no rounding at all; otherwise it runs in floating point. The result is labelled <code>simulated</code>: it shows the method from one start and proves nothing about a minimum. For a certified minimum use <a href="#zeros">extrema</a> on one variable or <a href="#multipliers">lagrange</a> with constraints.</p>
+<pre><code>const r = gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "1/10", steps: 2 });
+r.iterations.map((row) =&gt; row.x);   // [[1, 1], [4/5, 1/5], [16/25, 1/25]]
+r.simulated;                          // true</code></pre>
+
+  <h2>Choosing the step</h2>
+  <ul>
+    <li><strong>Fixed</strong> (<code>method: "fixed"</code>, <code>step</code> = 1/10 by default). The same \(t\) every time. For \(f = x^2 + 4y^2\) a step above \(1/4\) makes the \(y\) coordinate grow: the step must be below \(2/L\) where \(L\) is the largest curvature.</li>
+    <li><strong>Backtracking</strong> (<code>"backtracking"</code>). Start at <code>step</code> (default 1) and halve until the Armijo condition \(f(x - t g) \le f(x) - c\,t\,|g|^2\) holds, with \(c\) = <code>armijo</code> (default \(1/2\)). Each step is then guaranteed to decrease \(f\) by a fixed fraction of what the slope promised.</li>
+    <li><strong>Exact line search</strong> (<code>"exact"</code>), for a quadratic \(f = \tfrac12 x^{\mathsf T} H x + b^{\mathsf T}x + c\). Along \(x - t g\) the value is a parabola in \(t\), minimised at</li>
+  </ul>
+  \[ t^* = \frac{g^{\mathsf T} g}{g^{\mathsf T} H g}. \]
+  <p>Successive gradients are then perpendicular, which is why the path zigzags when the level sets are long ellipses. With exact fractions this is visible exactly: the dot product of consecutive gradients is 0, not a small number.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>gradientDescent(f, start, { variables, method = "fixed", step, steps = 10, armijo = "1/2" })</td><td>{ simulated: true, method, variables, iterations: [{ n, x, fx, gradient, step }], final, value, exact }</td></tr>
+  </table></div>
+<template data-runbox>
+// Three ways to choose the step on f = x^2 + 4y^2 from (1, 1), all in exact fractions.
+for (const method of ["fixed", "backtracking", "exact"]) {
+  const r = gradientDescent("x^2 + 4*y^2", ["1", "1"], { method, step: method === "fixed" ? "1/10" : undefined, steps: 4 });
+  PRINT(method.padEnd(12), r.iterations.map((row) =&gt; `(${row.x.join(", ")})`).join(" → "));
+}
+
+// With the exact line search, consecutive gradients are exactly perpendicular.
+const e = gradientDescent("x^2 + 4*y^2 + x*y", ["2", "1"], { method: "exact", steps: 3 });
+const g = e.iterations.map((row) =&gt; row.gradient);
+PRINT("g0·g1 =", g[0][0].multiply(g[1][0]).add(g[0][1].multiply(g[1][1])), "  g1·g2 =", g[1][0].multiply(g[2][0]).add(g[1][1].multiply(g[2][1])));
+
+// Too large a fixed step diverges.
+PRINT("step 3/10:", gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "3/10", steps: 4 }).iterations.map((row) =&gt; row.x[1]).join(", "));
+
+// A non-polynomial objective runs in floating point.
+gradientDescent("exp(x) + x^2", ["1"], { method: "backtracking", steps: 6 }).final
+</template>

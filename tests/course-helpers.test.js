@@ -128,3 +128,37 @@ describe("classifying second-order PDEs", () => {
     expect(e.at("0", "0")).toBe("elliptic");
   });
 });
+
+describe("gradient descent (batch A8)", () => {
+  test("one fixed step of 1/10 from (1, 1) on x² + 4y² lands at (4/5, 1/5)", () => {
+    const r = A.gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "1/10", steps: 1 });
+    expect(r.simulated).toBe(true);
+    expect(r.exact).toBe(true);
+    // independent: ∇f = (2x, 8y) = (2, 8); (1, 1) − (2, 8)/10
+    expect(r.final.map(String)).toEqual(["4/5", "1/5"]);
+    expect(r.value.equals(Q(4, 5))).toBe(true);
+  });
+  test("the exact line search on a quadratic: t = |g|²/(gᵀHg) and perpendicular gradients", () => {
+    const r = A.gradientDescent("x^2 + 4*y^2", ["1", "1"], { method: "exact", steps: 3 });
+    expect(r.iterations[0].step.equals(Q(68, 520))).toBe(true);
+    // the step minimises f along the line: f(x − t g) as a parabola, checked at t ± 1/1000
+    const f = (x, y) => x.multiply(x).add(Q(4).multiply(y).multiply(y));
+    const at = (t) => f(Q(1).subtract(t.multiply(Q(2))), Q(1).subtract(t.multiply(Q(8))));
+    const t = r.iterations[0].step;
+    expect(at(t).lessThan(at(t.add(Q(1, 1000)))) && at(t).lessThan(at(t.subtract(Q(1, 1000))))).toBe(true);
+    const g = r.iterations.map((row) => row.gradient);
+    for (let i = 0; i + 1 < g.length; i++) expect(g[i][0].multiply(g[i + 1][0]).add(g[i][1].multiply(g[i + 1][1])).numerator).toBe(0n);
+  });
+  test("backtracking satisfies the Armijo condition and decreases f", () => {
+    const r = A.gradientDescent("(x - 3)^4 + y^2", ["0", "1"], { method: "backtracking", steps: 6 });
+    for (let i = 0; i + 1 < r.iterations.length; i++) expect(r.iterations[i + 1].fx.lessThan(r.iterations[i].fx)).toBe(true);
+  });
+  test("floating point for other objectives, and refusals", () => {
+    const r = A.gradientDescent("exp(x) + x^2", ["1"], { method: "backtracking", steps: 30 });
+    expect(r.exact).toBe(false);
+    // independent: the minimum solves exp(x) + 2x = 0, x ≈ −0.3517337
+    expect(r.final[0]).toBeCloseTo(-0.3517337, 5);
+    expect(() => A.gradientDescent("x^4 + y^2", ["1", "1"], { method: "exact" })).toThrow(/quadratic/);
+    expect(() => A.gradientDescent("x^2", ["1", "1"])).toThrow(/coordinates/);
+  });
+});

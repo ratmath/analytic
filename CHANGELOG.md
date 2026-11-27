@@ -16,6 +16,10 @@
     the `pde` namespace): hyperbolic, parabolic or elliptic from B² − 4AC,
     with the region of each type when the coefficients depend on x and y.
   - `constantRational(tree, env)` evaluates with exact variable values.
+- `gradientDescent(f, start, { method })` (Course Test batch A8): fixed
+  steps, Armijo backtracking, or the exact line search for quadratics; exact
+  rational iterates for polynomial objectives; labelled `simulated`. New docs
+  page "Gradient descent".
 - Types: the curve and surface parameter type is now `ParameterLike`. It was a
   second `PointLike`, which clashed with the scalar-field `PointLike`, so
   TypeScript reported a duplicate identifier in `index.d.ts`.

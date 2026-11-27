@@ -334,6 +334,99 @@ function exactNewton(f, x0, opts) {
   return { ...finishRoots("newton", rows, root, { derivative: format(dAst), exact: true, floats }), estimate: rows.at(-1).x };
 }
 
+/**
+ * Gradient descent, run as a simulation of the method: x ← x − t·∇f(x).
+ *
+ *   gradientDescent("x^2 + 4*y^2", ["1", "1"], { step: "1/10", steps: 5 })
+ *
+ * The variables are `variables` (default the free variables of f, sorted).
+ * `method`:
+ *   "fixed"        the same step t every time (default, `step` = 1/10);
+ *   "backtracking" start each step at `step` (default 1) and halve it until
+ *                  the Armijo condition f(x − t·g) ≤ f(x) − c·t·|g|² holds
+ *                  (`armijo` = c, default 1/2);
+ *   "exact"        the exact line search, for a quadratic f: t = |g|²/(gᵀHg)
+ *                  with H the constant Hessian.
+ * When f is built from + − × ÷ and integer powers, every iterate, value,
+ * gradient and step is an exact Core Rational; otherwise the run is in
+ * floating point. The result is labelled `simulated`: it shows what the
+ * method does from this start and proves nothing about a minimum.
+ * → { simulated: true, method, variables, iterations: [{ n, x, fx, gradient, step }], final, value, exact }
+ */
+export function gradientDescent(f, start, opts = {}) {
+  const ast = toAst(f);
+  const vars = opts.variables ?? [...freeVariables(ast)].sort();
+  if (start.length !== vars.length) refuse("bad-argument", `the start has ${start.length} coordinates for the variables ${vars.join(", ")}`);
+  const method = opts.method ?? "fixed";
+  if (!["fixed", "backtracking", "exact"].includes(method)) refuse("bad-argument", "method is fixed, backtracking or exact");
+  const grads = vars.map((v) => simplify(derivative(ast, v)));
+  const x0 = start.map(qOf);
+  const env = (x) => Object.fromEntries(vars.map((v, i) => [v, x[i]]));
+  const exactRun = constantRational(ast, env(x0)) !== null && grads.every((g) => constantRational(g, env(x0)) !== null);
+  let H = null;
+  if (method === "exact") {
+    H = grads.map((g) => vars.map((v) => constantRational(simplify(derivative(g, v)))));
+    if (!exactRun || H.flat().some((h) => h === null)) refuse("not-quadratic", "the exact line search needs a quadratic f with rational coefficients");
+  }
+  const steps = opts.steps ?? 10;
+  const rows = [];
+  if (exactRun) {
+    const F = (x) => constantRational(ast, env(x));
+    const G = (x) => grads.map((g) => constantRational(g, env(x)));
+    const dot = (a, b) => a.reduce((s, ai, i) => s.add(ai.multiply(b[i])), ZERO);
+    const move = (x, t, g) => x.map((xi, i) => xi.subtract(t.multiply(g[i])));
+    const c = qOf(opts.armijo ?? "1/2");
+    let x = x0;
+    for (let n = 0; n <= steps; n++) {
+      const fx = F(x);
+      const g = G(x);
+      if (fx === null || g.some((gi) => gi === null)) refuse("undefined", `f or its gradient is undefined at (${x.join(", ")})`);
+      const gg = dot(g, g);
+      const row = { n, x, fx, gradient: g, step: null };
+      rows.push(row);
+      if (n === steps || gg.numerator === 0n) break;
+      let t;
+      if (method === "fixed") t = qOf(opts.step ?? "1/10");
+      else if (method === "exact") {
+        const Hg = H.map((r) => dot(r, g));
+        const curve = dot(g, Hg);
+        if (curve.numerator <= 0n) refuse("not-convex", "the exact line search needs gᵀHg > 0: f is not convex along the gradient");
+        t = gg.divide(curve);
+      } else {
+        t = qOf(opts.step ?? "1");
+        for (let k = 0; ; k++) {
+          const fy = F(move(x, t, g));
+          if (fy !== null && fy.compareTo(fx.subtract(c.multiply(t).multiply(gg))) <= 0) break;
+          if (k > 200) refuse("no-step", "backtracking found no step satisfying the Armijo condition");
+          t = t.divide(TWO);
+        }
+      }
+      row.step = t;
+      x = move(x, t, g);
+    }
+  } else {
+    const F = compileFloat(ast);
+    const G = grads.map(compileFloat);
+    const fenv = (x) => Object.fromEntries(vars.map((v, i) => [v, x[i]]));
+    const c = qOf(opts.armijo ?? "1/2").toNumber();
+    let x = x0.map((q) => q.toNumber());
+    for (let n = 0; n <= steps; n++) {
+      const fx = F(fenv(x));
+      const g = G.map((gi) => gi(fenv(x)));
+      const gg = g.reduce((s, gi) => s + gi * gi, 0);
+      const row = { n, x, fx, gradient: g, step: null };
+      rows.push(row);
+      if (n === steps || gg === 0 || !Number.isFinite(fx)) break;
+      let t = method === "fixed" ? qOf(opts.step ?? "1/10").toNumber() : qOf(opts.step ?? "1").toNumber();
+      if (method === "backtracking") for (let k = 0; k < 60 && !(F(fenv(x.map((xi, i) => xi - t * g[i]))) <= fx - c * t * gg); k++) t /= 2;
+      row.step = t;
+      x = x.map((xi, i) => xi - t * g[i]);
+    }
+  }
+  const last = rows.at(-1);
+  return { simulated: true, method, variables: vars, iterations: rows, final: last.x, value: last.fx, exact: exactRun };
+}
+
 /** The secant method:/** The secant method: { iterations: [{ n, x, fx, error }], root, order } (the order tends to (1 + √5)/2). */
 export function secant(f, x0, x1, opts = {}) {
   const { ast, variable, F } = prepare(f, opts);

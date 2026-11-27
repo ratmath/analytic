@@ -26,4 +26,4 @@ export { firstOrder, exactEquation, linearODE, laplace, inverseLaplace, laplaceS
 export { heat, wave, laplaceRectangle, laplaceDisc, sturmLiouville, classifyPDE } from "./src/pde.js";
 export * as pde from "./src/pde.js";
 export { antiderivative, partialFractions } from "./src/antiderivative.js";
-export { exactOf, nearestDouble, floatParts, floatOp, roundoff, bisection, newton, secant, fixedPoint, interpolate, equallySpaced, chebyshevNodes, spline, leastSquares, differences, richardson, quadratureRule, darboux, romberg, legendre, gaussLegendre, gaussRule, odeMethod, stepSizeStudy, stability } from "./src/methods.js";
+export { exactOf, nearestDouble, floatParts, floatOp, roundoff, bisection, newton, gradientDescent, secant, fixedPoint, interpolate, equallySpaced, chebyshevNodes, spline, leastSquares, differences, richardson, quadratureRule, darboux, romberg, legendre, gaussLegendre, gaussRule, odeMethod, stepSizeStudy, stability } from "./src/methods.js";
