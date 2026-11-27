@@ -80,7 +80,20 @@ function specialCall(name, args, text) {
   }
   return call(name, ...args);
 }
-const ALIASES = { arcsin: "asin", arccos: "acos", arctan: "atan" };
+const ALIASES = { arcsin: "asin", arccos: "acos", arctan: "atan", arcsinh: "asinh", arccosh: "acosh", arctanh: "atanh" };
+const ONE_ = () => num(1);
+/** Functions read as they are written out in terms of the built-in ones. */
+const REWRITES = {
+  sec: (u) => op("/", ONE_(), call("cos", u)),
+  csc: (u) => op("/", ONE_(), call("sin", u)),
+  cot: (u) => op("/", call("cos", u), call("sin", u)),
+  sech: (u) => op("/", ONE_(), call("cosh", u)),
+  csch: (u) => op("/", ONE_(), call("sinh", u)),
+  coth: (u) => op("/", call("cosh", u), call("sinh", u)),
+  asinh: (u) => call("log", op("+", u, call("sqrt", op("+", op("^", u, num(2)), ONE_())))),
+  acosh: (u) => call("log", op("+", u, call("sqrt", op("-", op("^", u, num(2)), ONE_())))),
+  atanh: (u) => op("/", call("log", op("/", op("+", ONE_(), u), op("-", ONE_(), u))), num(2)),
+};
 export const CONSTANTS = new Set(["pi", "e"]);
 
 /**
@@ -167,7 +180,22 @@ export function parse(text) {
         }
         return specialCall(k.v, [power()], text);
       }
+      if (REWRITES[k.v]) {
+        if (peek() && peek().t === "(") {
+          next();
+          const arg = expr();
+          if (peek() && peek().t === ",") throw new SyntaxError(`${k.v} takes one argument in ${text}`);
+          expect(")");
+          return REWRITES[k.v](arg);
+        }
+        return REWRITES[k.v](power());
+      }
       if (CONSTANTS.has(k.v)) return { type: "const", name: k.v };
+      // a name of three or more letters written against "(" is a function call, not a product:
+      // refuse one that is not known rather than read sec(x) as sec·x
+      if (k.v.length >= 3 && peek() && peek().t === "(" && peek().pos === k.pos + k.v.length) {
+        throw new SyntaxError(`unknown function ${k.v} at ${k.pos} in ${text} (write a product with *)`);
+      }
       return v(k.v);
     }
     throw new SyntaxError(`unexpected ${k.t} at ${k.pos} in ${text}`);

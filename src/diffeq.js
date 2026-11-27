@@ -145,6 +145,14 @@ class FirstOrder {
  * singular, through(x0, y0) }. `type` is null when none applies or an
  * integral could not be done; the validated solver still works then.
  */
+/** log|u| → log u throughout a tree. */
+function dropAbsInLog(t) {
+  if (!t || (t.type !== "op" && t.type !== "call")) return t;
+  if (t.type === "call" && (t.name === "log" || t.name === "ln") && t.args[0]?.type === "call" && t.args[0].name === "abs") return call(t.name, dropAbsInLog(t.args[0].args[0]));
+  const args = t.args.map(dropAbsInLog);
+  return args.every((a, i) => a === t.args[i]) ? t : { ...t, args };
+}
+
 export function firstOrder(rhs, opts = {}) {
   const x = opts.x ?? "x";
   const y = opts.y ?? "y";
@@ -204,8 +212,11 @@ export function firstOrder(rhs, opts = {}) {
   const tryLinear = () => {
     const b = fy; // coefficient of y
     const a = tidy(sub(f, mul(b, Y)));
-    const B = integral(b, x);
-    if (!B) return false;
+    const B0 = integral(b, x);
+    if (!B0) return false;
+    // any constant multiple of an integrating factor is one, so on an interval where u keeps its sign
+    // exp(−log|u|) = ±1/u may be taken as 1/u: keeping |u| leaves ∫ a·μ dx out of reach (∫ 1/|x| dx)
+    const B = dropAbsInLog(B0);
     const mu = tidy(call("exp", neg(B)));
     const I = integral(tidy(mul(a, mu)), x);
     if (!I) return false;
@@ -263,8 +274,11 @@ export function firstOrder(rhs, opts = {}) {
     // v = y^(1−n): v′ = m·p·v + m·q
     const b = tidy(mul(num(m), p));
     const a = tidy(mul(num(m), q));
-    const B = integral(b, x);
-    if (!B) return false;
+    const B0 = integral(b, x);
+    if (!B0) return false;
+    // any constant multiple of an integrating factor is one, so on an interval where u keeps its sign
+    // exp(−log|u|) = ±1/u may be taken as 1/u: keeping |u| leaves ∫ a·μ dx out of reach (∫ 1/|x| dx)
+    const B = dropAbsInLog(B0);
     const mu = tidy(call("exp", neg(B)));
     const I = integral(tidy(mul(a, mu)), x);
     if (!I) return false;

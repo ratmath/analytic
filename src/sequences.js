@@ -892,6 +892,27 @@ export function taylorRemainder(f, { about = 0, order = 4, on, variable: x = "x"
 
 // ---- sequences of functions -------------------------------------------------------------------
 
+/**
+ * 1^e = 1, and 0^e = 0 when e = k·n with k > 0 (so e ≥ k for every n ≥ 1):
+ * what substituting x = 1 or x = 0 into x^n leaves, folded before the limit
+ * code meets an exponential of 0·log.
+ */
+function foldPowers(ast, n) {
+  if (ast.type !== "op" && ast.type !== "call") return ast;
+  const args = ast.args.map((a) => foldPowers(a, n));
+  if (ast.type === "op" && ast.op === "^") {
+    const base = constantRational(args[0]);
+    if (base !== null && base.equals(ONE)) return num(ONE);
+    if (base !== null && base.numerator === 0n) {
+      const e = args[1];
+      const k = e.type === "var" && e.name === n ? ONE : e.type === "op" && e.op === "*" && e.args[1]?.type === "var" && e.args[1].name === n ? constantRational(e.args[0]) : null;
+      if (k !== null && gt(k, ZERO)) return num(ZERO);
+    }
+  }
+  const out = { ...ast, args };
+  return args.every((a, i) => a === ast.args[i]) ? ast : simplify(out);
+}
+
 export class FunctionSequence {
   constructor(term, { variable: x = "x", index = "n" } = {}) {
     this.ast = readTerm(term);
@@ -908,7 +929,11 @@ export class FunctionSequence {
   }
   /** The pointwise limit at a rational x: a RationalInterval or ±Infinity. */
   pointwise(x, opts) {
-    return new Sequence(this.ast, { variable: this.index, params: { [this.variable]: q(x) } }).limit(opts);
+    // x is put into the term itself: as a parameter it was never substituted by the limit code
+    const term = foldPowers(simplify(subst(this.ast, this.variable, num(q(x)))), this.index);
+    const lone = constantRational(term);
+    if (lone !== null) return new RationalInterval(lone, lone);
+    return new Sequence(term, { variable: this.index }).limit(opts);
   }
   /**
    * sup over [a, b] of |f_n − f|, enclosed: the upper end is a proven bound

@@ -8,7 +8,7 @@ export { bitsForDigits } from "./src/scope.js";
 export { Refinement, live } from "@ratmath/core/refine";
 export { fn, AnalyticFunction } from "./src/fn.js";
 export { parse, format, derivative as differentiate, simplify, compileFloat, modelOf, freeVariables, num, v, op, call, toRational, FUNCTIONS, CONSTANTS, erfFloat } from "./src/expr.js";
-export { ode } from "./src/ode.js";
+export { ode, ODESolution } from "./src/ode.js";
 export { zeros, poles, extrema, inflections, simplestBetween } from "./src/roots.js";
 export { encloseAst } from "./src/ieval.js";
 export { piecewise, PiecewiseFunction, Region, where, parsePiecewiseText } from "./src/piecewise.js";
