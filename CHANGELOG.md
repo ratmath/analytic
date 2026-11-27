@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `seriesSolution` now proves its remainder. Each solution has
+  `remainder(ρ)`, a rational bound for all the terms left out that holds on
+  the whole complex disc of radius ρ about the point, and `enclose(x)`, the
+  partial sum at a rational point with that bound on either side. The result
+  also has `provenRadius`, a proven lower bound for the distance to the
+  nearest other singular point (by Graeffe root squaring, in exact
+  arithmetic). The bound comes from the recurrence itself: Cauchy-type
+  bounds on the coefficients of x·p and x²·q, then a comparison sum.
+
 - `@ratmath/core` is now a peer dependency (`>=0.10.0 <0.12.0`): the package
   uses the program's own copy of Core instead of bringing its own, so Core 0.11
   works and there is never a second copy whose `Rational` is not the same class.

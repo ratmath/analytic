@@ -914,11 +914,23 @@ export function seriesSolution(spec: { p?: ExpressionLike | number; q?: Expressi
   kind: "ordinary" | "regular singular" | "irregular singular";
   indicial?: string;
   exponents?: Array<Rational | string> | null;
-  solutions: Array<{ exponent: Rational; coefficients: Rational[]; text: string }>;
+  solutions: SeriesSolutionTerm[];
   notes: string[];
   /** Distance to the nearest other singular point (a floating-point estimate; Infinity when there is none). */
   radius?: number;
+  /** A proven lower bound for that distance (Infinity when there is no other singular point). Remainders are proven inside it. */
+  provenRadius?: Rational | number;
 };
+export interface SeriesRemainder { radius: Rational; terms: number; bound: Rational; approx: number; text: string }
+export interface SeriesSolutionTerm {
+  exponent: Rational;
+  coefficients: Rational[];
+  text: string;
+  /** A proven bound for the terms left out: |g(x) − Σₙ≤N aₙ(x − c)ⁿ| ≤ bound whenever |x − c| ≤ rho (x complex), where the solution is (x − c)^exponent·g(x). */
+  remainder(rho: RationalLike | string): SeriesRemainder;
+  /** The partial sum of g at a rational point with the proven bound on either side. */
+  enclose(at: RationalLike | string): { at: Rational; partial: Rational; bound: Rational; low: Rational; high: Rational; exponent: Rational };
+}
 export interface SeriesValue { value: RationalInterval | null; partial: RationalInterval; tail: Rational | null }
 export interface SeparatedSolution {
   equation: string;
