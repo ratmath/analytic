@@ -720,7 +720,8 @@ export function lagrange(
 // ---- differential geometry (also "@ratmath/analytic/geometry")
 /** A quotient of polynomials in variables and calls, with sin² + cos² = 1 used and common factors cancelled. */
 export function tidy(tree: Ast): Ast;
-export type PointLike = RationalLike | string | RationalInterval;
+/** A parameter value: a number, an exact rational, a string such as "1/3", or an interval. */
+export type ParameterLike = RationalLike | string | RationalInterval;
 export interface CurvePoint {
   point: RationalInterval[];
   velocity: RationalInterval[];
@@ -736,7 +737,7 @@ export interface CurvePoint {
   centre: RationalInterval[] | null;
 }
 export class Curve {
-  constructor(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, PointLike> });
+  constructor(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, ParameterLike> });
   readonly parameter: string;
   readonly dimension: 2 | 3;
   readonly position: string[];
@@ -748,11 +749,11 @@ export class Curve {
   torsion(): string;
   torsionAst(): Ast;
   evolute(): Curve;
-  length(interval: [PointLike, PointLike], options?: { digits?: number }): RationalInterval;
-  totalCurvature(interval: [PointLike, PointLike], options?: { digits?: number }): RationalInterval;
-  at(t: PointLike, options?: { digits?: number }): CurvePoint;
+  length(interval: [ParameterLike, ParameterLike], options?: { digits?: number }): RationalInterval;
+  totalCurvature(interval: [ParameterLike, ParameterLike], options?: { digits?: number }): RationalInterval;
+  at(t: ParameterLike, options?: { digits?: number }): CurvePoint;
 }
-export function curve(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, PointLike> }): Curve;
+export function curve(components: ExpressionLike[], parameter?: string, options?: { params?: Record<string, ParameterLike> }): Curve;
 export interface GaussBonnetReport {
   statement: string;
   curvature: { name: string; value: RationalInterval };
@@ -763,7 +764,7 @@ export interface GaussBonnetReport {
   agree: boolean;
 }
 export class Metric {
-  constructor(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, PointLike> });
+  constructor(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, ParameterLike> });
   readonly parameters: [string, string];
   first(): { E: string; F: string; G: string };
   /** Keys such as "u_uv" for Γᵘ_uv. */
@@ -774,18 +775,18 @@ export class Metric {
   area(region: Bounds, options?: { digits?: number }): RationalInterval;
   totalCurvature(region: Bounds, options?: { digits?: number }): RationalInterval;
   /** State (u, v, u′, v′). */
-  geodesic(spec: { from: [PointLike, PointLike]; direction: [PointLike, PointLike]; until: RationalLike | string; unit?: boolean; order?: number; tol?: RationalLike | string; track?: boolean; step?: RationalLike | string }): Refinement<{ t: Float64Array; y: Float64Array[] } | null, ODESolution>;
+  geodesic(spec: { from: [ParameterLike, ParameterLike]; direction: [ParameterLike, ParameterLike]; until: RationalLike | string; unit?: boolean; order?: number; tol?: RationalLike | string; track?: boolean; step?: RationalLike | string }): Refinement<{ t: Float64Array; y: Float64Array[] } | null, ODESolution>;
   transport(
     path: Record<string, ExpressionLike>,
     interval: [RationalLike | string, RationalLike | string],
-    vector: [PointLike, PointLike],
+    vector: [ParameterLike, ParameterLike],
     options?: { parameter?: string; order?: number; tol?: RationalLike | string; step?: RationalLike | string },
   ): { start: RationalInterval[]; vector: RationalInterval[]; length: RationalInterval; lengthAfter: RationalInterval | null; angle: RationalInterval | null; solution: ODESolution };
   geodesicCurvature(path: Record<string, ExpressionLike>): string;
-  geodesicCurvature(path: Record<string, ExpressionLike>, t: PointLike, options?: { parameter?: string; digits?: number }): RationalInterval;
+  geodesicCurvature(path: Record<string, ExpressionLike>, t: ParameterLike, options?: { parameter?: string; digits?: number }): RationalInterval;
   gaussBonnet(region: Bounds, options?: { digits?: number }): GaussBonnetReport;
 }
-export function metric(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Metric;
+export function metric(g: { E: ExpressionLike | number; F?: ExpressionLike | number; G: ExpressionLike | number }, parameters?: [string, string], options?: { params?: Record<string, ParameterLike> }): Metric;
 export interface SurfacePoint {
   point: RationalInterval[];
   normal: RationalInterval[];
@@ -798,16 +799,16 @@ export interface SurfacePoint {
   kind: "elliptic" | "hyperbolic" | "parabolic" | "planar" | null;
 }
 export class Surface extends Metric {
-  constructor(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> });
+  constructor(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, ParameterLike> });
   readonly position: string[];
   normal(): string[];
   second(): { L: string; M: string; N: string };
   mean(): string;
   meanAst(): Ast;
   intrinsicGaussian(): string;
-  at(u: PointLike, v: PointLike, options?: { digits?: number }): SurfacePoint;
+  at(u: ParameterLike, v: ParameterLike, options?: { digits?: number }): SurfacePoint;
 }
-export function surface(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, PointLike> }): Surface;
+export function surface(components: ExpressionLike[], parameters?: [string, string], options?: { params?: Record<string, ParameterLike> }): Surface;
 
 // ---- differential equations: methods
 export interface MethodStep { what: string; formula: string }
@@ -819,7 +820,7 @@ export interface ParticularSolution {
   /** The explicit solution, or null when the method gives only a relation. */
   solution: string | null;
   relation: string | null;
-  at(x: PointLike, options?: { digits?: number }): RationalInterval;
+  at(x: ParameterLike, options?: { digits?: number }): RationalInterval;
   /** The formula against the validated numerical solution at x1. */
   check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string; track?: boolean }): CheckReport;
 }
@@ -848,7 +849,7 @@ export interface LinearODESolution {
   verified?: boolean;
   steps: MethodStep[];
   general: string | null;
-  initial(values: Array<RationalLike | string>, x0?: RationalLike | string): { constants: string[]; solution: string; tree: Ast; at(x: PointLike, options?: { digits?: number }): RationalInterval; check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string }): CheckReport };
+  initial(values: Array<RationalLike | string>, x0?: RationalLike | string): { constants: string[]; solution: string; tree: Ast; at(x: ParameterLike, options?: { digits?: number }): RationalInterval; check(x1: RationalLike | string, options?: { digits?: number; order?: number; tol?: RationalLike | string }): CheckReport };
 }
 /** Coefficients highest derivative first: linearODE([1, -3, 2], "exp(x)") is y″ − 3y′ + 2y = eˣ. */
 export function linearODE(coefficients: Array<RationalLike | string>, forcing?: ExpressionLike | number, options?: { x?: string; y?: string }): LinearODESolution;
@@ -900,7 +901,7 @@ export interface Equilibrium {
   hyperbolic: boolean | null;
 }
 export class PlanarSystem {
-  constructor(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, PointLike> });
+  constructor(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, ParameterLike> });
   jacobian(): string[][];
   nullclines(): Record<string, string>;
   equilibria(box: Bounds, options?: { digits?: number; tol?: RationalLike | string; maxBoxes?: number }): Equilibrium[] & { complete: boolean };
@@ -908,7 +909,7 @@ export class PlanarSystem {
   along(V: ExpressionLike): string;
   orbit(spec: { from: Array<RationalLike | string>; until: RationalLike | string; order?: number; tol?: RationalLike | string }): Refinement<unknown, ODESolution>;
 }
-export function planarSystem(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, PointLike> }): PlanarSystem;
+export function planarSystem(field: ExpressionLike[], variables?: [string, string], options?: { params?: Record<string, ParameterLike> }): PlanarSystem;
 export function seriesSolution(spec: { p?: ExpressionLike | number; q?: ExpressionLike | number; about?: RationalLike | string; order?: number; x?: string }): {
   about: Rational;
   kind: "ordinary" | "regular singular" | "irregular singular";

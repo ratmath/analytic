@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Types: the curve and surface parameter type is now `ParameterLike`. It was a
+  second `PointLike`, which clashed with the scalar-field `PointLike`, so
+  TypeScript reported a duplicate identifier in `index.d.ts`.
 - Fixes found by the Course Test (ratmath/shelf#7):
   - `newton`, `secant`, `fixedPoint` and `bisection` read an exact starting
     value (`"1/2"`, ``R`1/2` ``) exactly; `Number("1/2")` was NaN and the root
