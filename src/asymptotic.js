@@ -18,7 +18,7 @@ import { AnalyticError, refuse } from "./errors.js";
 import { ZERO, ONE, TWO, lt, le, gt, ge } from "./rat.js";
 import { derivative, constantRational, num, v as variable, op, call, format } from "./expr.js";
 import { encloseAst } from "./ieval.js";
-import { rationalFunction, deg, isZeroPoly } from "./rpoly.js";
+import { rationalFunction, deg, isZeroPoly, sub as polySub, trim as polyTrim } from "./rpoly.js";
 
 const E0 = Object.freeze({ k: ZERO, p: ZERO, m: ZERO });
 const cmpE = (a, b) => a.k.compareTo(b.k) || a.p.compareTo(b.p) || a.m.compareTo(b.m);
@@ -298,6 +298,10 @@ function evalNode(ast, ctx) {
     const rf = rationalFunction(ast, ctx.name, {}, 64);
     if (rf) return mul(polyNode(rf.num, ctx), recip(polyNode(rf.den, ctx), ctx), ctx);
   }
+  if (ast.type === "op" && (ast.op === "*" || ast.op === "/")) {
+    const merged = powerForm(ast, ctx.name);
+    if (merged) return evalNode(merged, ctx);
+  }
   switch (ast.type) {
     case "num":
       return constNode(Iv.point(ast.value));
@@ -342,6 +346,15 @@ function evalNode(ast, ctx) {
             const H = go(h);
             if (signE(H.e) < 0) return small("log1p", H, ctx);
           }
+        }
+        // log(R(x)) for a rational function R → 1: the difference R − 1 is formed exactly
+        // (its leading terms cancel) and log(1 + h) keeps h as its leading term
+        const rf = rationalFunction(arg, ctx.name, {}, 64);
+        if (rf && deg(rf.num) === deg(rf.den) && deg(rf.num) >= 0 && rf.num[deg(rf.num)].equals(rf.den[deg(rf.den)])) {
+          const diff = polyTrim(polySub(rf.num, rf.den));
+          if (isZeroPoly(diff)) return constNode(Iv.point(ZERO));
+          const H = mul(polyNode(diff, ctx), recip(polyNode(rf.den, ctx), ctx), ctx);
+          if (signE(H.e) < 0) return small("log1p", H, ctx);
         }
         return logNode(go(arg), ctx);
       }
@@ -392,6 +405,107 @@ function evalNode(ast, ctx) {
     }
   }
   return refuse("undecided", `${ast.op ?? ast.name ?? ast.type} is not followed out to infinity`);
+}
+
+const dependsOn = (ast, name) => (ast.type === "var" ? ast.name === name : ast.args ? ast.args.some((a) => dependsOn(a, name)) : false);
+
+/**
+ * A product of powers with exponents that grow, such as n^n/(n + 1)^(n + 1),
+ * merged the way it is by hand: with each exponent a polynomial Σ c_j·x^j and
+ * each base a rational function,
+ *
+ *     Π base_i^(e_i(x)) = Π base_i^(c_i0) · exp( Σ_{j ≥ 1} x^j · log R_j(x) ),   R_j = Π base_i^(c_ij),
+ *
+ * so that bases whose ratio tends to 1 meet inside one logarithm before any
+ * bound is taken (separately, e^(x·log x) and e^(−x·log(x+1)) have no
+ * bound at all). Returns the rewritten tree, or null when the tree is not such
+ * a product (fewer than two such powers, exponents that are not polynomials
+ * with whole coefficients above the constant term, bases that are not
+ * rational functions).
+ */
+function powerForm(ast, name) {
+  const plain = [];
+  const powers = [];
+  const walk = (node, w) => {
+    if (node.type === "op") {
+      if (node.op === "*") return (walk(node.args[0], w), walk(node.args[1], w));
+      if (node.op === "/") return (walk(node.args[0], w), walk(node.args[1], -w));
+      if (node.op === "^") {
+        const [base, e] = node.args;
+        const k = constantRational(e);
+        if (k !== null && k.denominator === 1n && k.abs().numerator <= 8n && base.type === "op" && (base.op === "*" || base.op === "/" || base.op === "^")) return walk(base, w * Number(k.numerator));
+        if (k === null && dependsOn(e, name)) return void powers.push({ base, e, w });
+      }
+    }
+    plain.push({ node, w });
+    return undefined;
+  };
+  walk(ast, 1);
+  if (powers.length < 2) return null;
+  const byDegree = []; // byDegree[j] = [{ base, k }] with whole k, for j ≥ 1
+  const constants = [];
+  for (const { base, e, w } of powers) {
+    const ex = rationalFunction(e, name, {}, 8);
+    if (!ex || deg(ex.den) !== 0 || !rationalFunction(base, name, {}, 64)) return null;
+    const W = new Rational(BigInt(w));
+    ex.num.forEach((c, j) => {
+      const k = c.divide(ex.den[0]).multiply(W);
+      if (isZeroQ(k)) return;
+      if (j === 0) return void constants.push({ node: base, k });
+      if (k.denominator !== 1n || k.abs().numerator > 16n) return void (byDegree.bad = true);
+      (byDegree[j] ??= []).push({ base, k });
+    });
+  }
+  if (byDegree.bad) return null;
+  const times = (a, b) => (a === null ? b : op("*", a, b));
+  let out = null;
+  for (const { node, w } of plain) out = w === 1 ? times(out, node) : times(out, op("^", node, num(new Rational(BigInt(w)))));
+  for (const { node, k } of constants) out = times(out, op("^", node, num(k)));
+  let exponent = null;
+  for (let j = 1; j < byDegree.length; j++) {
+    if (!byDegree[j]) continue;
+    let Rj = null;
+    for (const { base, k } of byDegree[j]) Rj = times(Rj, k.equals(ONE) ? base : op("^", base, num(k)));
+    const rf = rationalFunction(Rj, name, {}, 256);
+    if (!rf) return null;
+    if (deg(polyTrim(polySub(rf.num, rf.den))) === -Infinity) continue; // R_j = 1 exactly
+    const term = op("*", j === 1 ? variable(name) : op("^", variable(name), num(new Rational(BigInt(j)))), call("log", Rj));
+    exponent = exponent === null ? term : op("+", exponent, term);
+  }
+  if (exponent !== null) out = times(out, call("exp", exponent));
+  return out ?? num(ONE);
+}
+
+/**
+ * 1/ast written without a division where that is possible: exponents are
+ * negated in place, so the reciprocal of something that grows too fast to
+ * bound is something that decays.
+ */
+function reciprocalTree(ast) {
+  if (ast.type === "call" && ast.name === "exp") return call("exp", op("neg", ast.args[0]));
+  if (ast.type === "op" && ast.op === "*") return op("*", reciprocalTree(ast.args[0]), reciprocalTree(ast.args[1]));
+  if (ast.type === "op" && ast.op === "/") return op("*", reciprocalTree(ast.args[0]), ast.args[1]);
+  if (ast.type === "op" && ast.op === "^") return op("^", ast.args[0], op("neg", ast.args[1]));
+  return op("/", num(ONE), ast);
+}
+
+/**
+ * Whether the tree is positive wherever it is defined on the ray, read from
+ * its shape: an exponential, a power with a moving exponent (defined only
+ * for a positive base), a product or quotient of such, or a factor whose
+ * node is bounded above 0.
+ */
+function positiveShape(ast, ctx) {
+  if (ast.type === "call" && ast.name === "exp") return true;
+  if (ast.type === "op" && (ast.op === "*" || ast.op === "/")) return positiveShape(ast.args[0], ctx) && positiveShape(ast.args[1], ctx);
+  if (ast.type === "op" && ast.op === "^" && constantRational(ast.args[1]) === null) return true;
+  try {
+    const node = evalNode(ast, ctx);
+    return !(node.osc && node.L.containsZero()) && gt(spread(node, ctx).lo, ZERO);
+  } catch (e) {
+    if (e instanceof AnalyticError) return false;
+    throw e;
+  }
 }
 
 /** 1/ast as a node: exponentials are negated in place so that 1/e^(x²) is not a division by something unbounded. */
@@ -448,6 +562,28 @@ export function onRay(ast, name, env, bits, use, from = ZERO) {
  * keeps oscillating, "undecided" where no bound was found.
  */
 export function limitAtInfinity(ast, name, env, bits) {
+  try {
+    return finiteOrSignedLimit(ast, name, env, bits);
+  } catch (e) {
+    if (!(e instanceof AnalyticError) || e.code !== "growth") throw e;
+    // too fast to bound from above: if 1/ast → 0 and ast is positive (or negative) by its shape, ast → ±∞
+    const inner = ast.type === "op" && ast.op === "neg" ? ast.args[0] : ast;
+    const sign = inner === ast ? 1 : -1;
+    let r = null;
+    try {
+      r = onRay(reciprocalTree(inner), name, env, bits, (found, ctx) => {
+        if (signE(found.e) >= 0 && !(found.r && isZeroQ(found.L.mag) && signE(addE(found.e, found.r.e)) < 0)) return null;
+        upperEnv(found, ctx);
+        return positiveShape(inner, ctx) ? { kind: "infinite", sign, node: found } : null;
+      });
+    } catch (e2) {
+      if (!(e2 instanceof AnalyticError)) throw e2;
+    }
+    if (r) return r;
+    throw e;
+  }
+}
+function finiteOrSignedLimit(ast, name, env, bits) {
   return onRay(ast, name, env, bits, (found, ctx) => {
     // leading terms that cancelled leave only a bound
     const node = !found.osc && found.r && isZeroQ(found.L.mag)
@@ -570,4 +706,4 @@ export function tailOf(node, ctx, text = "the integrand") {
 }
 
 // the pieces series and sequences are built from (src/sequences.js)
-export { signE, spread, upperEnv, envAt, decreasing, tailUpper, termAt, integrable };
+export { signE, addE, spread, upperEnv, envAt, decreasing, tailUpper, termAt, integrable, positiveShape };

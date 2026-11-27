@@ -22,7 +22,7 @@ import { ZERO, ONE, TWO, HALF, toQ, lt, le, gt, ge, factorial } from "./rat.js";
 import { toAst, format, derivative, simplify, freeVariables, constantRational, num, v as variable, op, call, toRational } from "./expr.js";
 import { encloseAst } from "./ieval.js";
 import { bitsForDigits } from "./scope.js";
-import { rayContext, nodeAt, tailOf, signE, spread, upperEnv, envAt, decreasing, tailUpper } from "./asymptotic.js";
+import { rayContext, nodeAt, tailOf, signE, addE, spread, upperEnv, envAt, decreasing, tailUpper, positiveShape } from "./asymptotic.js";
 import { quad1 } from "./quad.js";
 import { AnalyticFunction, evalParams } from "./fn.js";
 import { zeros } from "./roots.js";
@@ -216,6 +216,34 @@ function signOnRay(ast, ctx) {
   const S = spread(node, ctx);
   return gt(S.lo, ZERO) ? 1 : lt(S.hi, ZERO) ? -1 : 0;
 }
+/**
+ * The sign of H on the whole ray when its node does not show one: if H → 0
+ * and H′ has one sign s on the ray, H is strictly monotone there with limit
+ * 0, so its sign is −s throughout. H′ is treated the same way, up to four
+ * derivatives deep. This settles differences whose leading terms cancel,
+ * such as log(1 + 1/x) − 1/(x + 1): its derivative is a rational function,
+ * whose sign is exact. Returns 1, −1, or 0 when not settled.
+ */
+function chainSign(H, n, ctx, depth = 0) {
+  const node = nodeAt(H, ctx);
+  if (!(node.osc && node.L.containsZero())) {
+    const S = spread(node, ctx);
+    if (gt(S.lo, ZERO)) return 1;
+    if (lt(S.hi, ZERO)) return -1;
+  }
+  const decays = signE(node.e) < 0 || (!node.osc && node.r && node.L.mag.numerator === 0n && signE(addE(node.e, node.r.e)) < 0);
+  if (!decays || depth >= 4) return 0;
+  upperEnv(node, ctx); // the decaying bound must hold on this ray
+  return -chainSign(simplify(derivative(H, n)), n, ctx, depth + 1);
+}
+/** log of a tree, taken through products, quotients and powers: log(u^v) = v·log u. */
+function logTree(ast) {
+  if (ast.type === "op" && ast.op === "*") return op("+", logTree(ast.args[0]), logTree(ast.args[1]));
+  if (ast.type === "op" && ast.op === "/") return op("-", logTree(ast.args[0]), logTree(ast.args[1]));
+  if (ast.type === "op" && ast.op === "^") return op("*", ast.args[1], call("log", ast.args[0]));
+  if (ast.type === "call" && ast.name === "exp") return ast.args[0];
+  return call("log", ast);
+}
 const describeLimit = (L) => (L === Infinity ? "∞" : L === -Infinity ? "-∞" : L.low.equals(L.high) ? `${L.low}` : `about ${L.low.add(L.high).divide(TWO).toNumber()}`);
 
 /** lim |a(n+1)/a(n)| as { kind: "finite", iv } or { kind: "infinite" }, or null. */
@@ -278,7 +306,7 @@ export class Sequence {
       const L = d && !d.plain ? ratioLimit(d, this.variable, this.#env, bits) : null;
       if (L?.kind === "finite" && lt(L.iv.hi, ONE)) return new RationalInterval(ZERO, ZERO);
       if (L && (L.kind === "infinite" || gt(L.iv.lo, ONE)) && !d.alternating) {
-        const s = onRays(this.variable, this.#env, bits, 0, (ctx) => signOnRay(d.rest, ctx) || undefined);
+        const s = onRays(this.variable, this.#env, bits, 0, (ctx) => soft(() => signOnRay(d.rest, ctx), 0) || (positiveShape(d.rest, ctx) ? 1 : undefined));
         if (s) return s > 0 ? Infinity : -Infinity;
       }
       throw e;
@@ -296,10 +324,27 @@ export class Sequence {
     const env = this.#env;
     const da = simplify(derivative(this.ast, n));
     if (da.type === "num" && da.value.numerator === 0n) return { direction: "constant", from: this.from, proven: `for every n ≥ ${this.from}` };
-    const found = onRays(n, env, bits, this.from, (ctx, N) => {
+    let found = onRays(n, env, bits, this.from, (ctx, N) => {
       const s = signOnRay(da, ctx);
       return s ? { s, N } : undefined;
     }, [4, 8, ...NS]);
+    // a derivative whose leading terms cancel (n·sin(1/n)): its sign from its own derivatives
+    found ??= onRays(n, env, bits, this.from, (ctx, N) => {
+      const s = chainSign(da, n, ctx);
+      return s ? { s, N } : undefined;
+    }, [4, 8, ...NS]);
+    let how = null;
+    if (!found) {
+      // a positive term: a(x) rises exactly where log a(x) does, and the sign of (log a)′ is
+      // settled through its own derivatives where its leading terms cancel ((1 + 1/n)^n)
+      const logDa = soft(() => simplify(derivative(logTree(this.ast), n)));
+      found = logDa && onRays(n, env, bits, this.from, (ctx, N) => {
+        if (!positiveShape(this.ast, ctx)) return undefined;
+        const s = chainSign(logDa, n, ctx);
+        return s ? { s, N } : undefined;
+      }, [4, 8, ...NS]);
+      if (found) how = `(log a)′ = ${format(logDa)} tends to 0 and is ${found.s > 0 ? "decreasing" : "increasing"} for x ≥ ${found.N}, so it is ${found.s > 0 ? "positive" : "negative"} there`;
+    }
     if (!found) return refuse("undecided", `no ray was found on which ${format(this.ast)} is proven monotone`);
     // walk back through the terms before N
     let N = found.N;
@@ -312,7 +357,7 @@ export class Sequence {
       next = here;
       N -= 1;
     }
-    return { direction: found.s > 0 ? "increasing" : "decreasing", from: N, proven: `for every n ≥ ${N}` };
+    return { direction: found.s > 0 ? "increasing" : "decreasing", from: N, proven: `for every n ≥ ${N}`, ...(how ? { reason: how } : {}) };
   }
   /**
    * An interval that holds every term from `from` on, or null for a bound
