@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Types: the curve and surface parameter type is now `ParameterLike`. It was a
+  second `PointLike`, which clashed with the scalar-field `PointLike`, so
+  TypeScript reported a duplicate identifier in `index.d.ts`.
 - `seriesSolution` now proves its remainder. Each solution has
   `remainder(ρ)`, a rational bound for all the terms left out that holds on
   the whole complex disc of radius ρ about the point, and `enclose(x)`, the
