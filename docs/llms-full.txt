@@ -1,0 +1,3519 @@
+# @ratmath/analytic 0.1.0: full documentation
+
+> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit fca3208. Each page ends with a runnable example; in it, PRINT(...) prints.
+
+
+---
+
+Page: https://ratmath.com/analytic/index.html
+
+@ratmath/analytic
+
+## Answers about functions that come with a proof
+
+A JavaScript library for calculus on exact rational numbers. Ask for a value, a range, an integral, the zeros or the solution of a differential equation. You get a floating-point answer at once, then an interval that is guaranteed to contain the true answer.
+
+Move the slider. The curve and the guesses follow at float speed. When you stop, the zeros are proven, each one in its own small bracket that is shown to contain exactly one. The integral and the range come back as intervals, and the true values are inside them.
+
+### Why intervals
+
+Most values of `exp`, `sin` or an integral are irrational, so no fraction is exactly right. RatMath's answer is a rational interval that certainly contains the true value, as narrow as you ask. Every step that could lose accuracy (a truncated series, a rounded constant, a range over a whole interval) is counted and added to the interval. So the result is a statement you can rely on, not an estimate.
+
+Underneath sits the [Taylor model](https://ratmath.com/analytic/models.html): an exact polynomial plus an interval remainder, valid on a whole interval of inputs. Arithmetic, composition, integration and ODE steps all act on these models and keep that guarantee.
+
+### A first program
+
+```js
+import { R } from "@ratmath/core";
+import { fn, zeros, ode } from "@ratmath/analytic";
+
+const f = fn("exp(sin(x))*x");
+f.value("1/3").quick.value;          // 0.46235716975704894 (float, at once)
+f.value("1/3", { digits: 30 }).exact();  // RationalInterval, 30 correct digits
+f.integral(0, 1).exact();            // certified ∫₀¹
+f.derivative().toString();           // "exp(sin(x))*cos(x)*x + exp(sin(x))"
+
+zeros("x^3 - 3x + 1", [-3, 3]).exact();   // three brackets, each with exactly one zero
+ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2" }).exact().final;  // y(1/2), certified
+```
+
+### Topics
+
+- [Explore](https://ratmath.com/analytic/explore.html): Type any function and ask questions
+
+- [Fast, then certified](https://ratmath.com/analytic/fast.html): Previews, progress, sliders
+
+- [Taylor models](https://ratmath.com/analytic/models.html): Polynomial plus remainder
+
+- [Many digits](https://ratmath.com/analytic/values.html): exp, log, sin, π with error bounds
+
+- [Formulas](https://ratmath.com/analytic/expressions.html): Parsing and symbolic d/dx
+
+- [Ranges and integrals](https://ratmath.com/analytic/ranges.html): Bernstein bounds, adaptive pieces
+
+- [Zeros and extrema](https://ratmath.com/analytic/zeros.html): Sturm, Krawczyk, multiplicity
+
+- [Piecewise](https://ratmath.com/analytic/piecewise.html): Regions like 2n :x:! 2n+1
+
+- [ODEs](https://ratmath.com/analytic/odes.html): Validated Picard steps
+
+- [Your own series](https://ratmath.com/analytic/series.html): Remainder rules you can check
+
+### Try it
+
+```js
+const f = fn("exp(sin(x))*x");
+PRINT("float preview:", f.value("1/3").quick.value);
+PRINT("certified, 30 digits:", f.value("1/3", { digits: 30 }).exact());
+PRINT("derivative:", f.derivative().toString());
+PRINT("∫ from 0 to 1:", f.integral(0, 1, { digits: 10 }).exact());
+PRINT("zeros of x^3 - 3x + 1:");
+for (const z of zeros("x^3 - 3x + 1", [-3, 3]).exact()) PRINT("  ", z.kind, z.lo, "to", z.hi, z.unique ? "(exactly one)" : "");
+ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2" }).exact().final
+```
+
+---
+
+Page: https://ratmath.com/analytic/reference.html
+
+Reference
+
+## Everything in the library
+
+Numbers can be JS integers, bigints, strings such as `"3/4"` or `"0.1"` (decimals are exact), Core `Rational`s, or Core intervals such as `R`1/2:1``. Functions marked R return a [Refinement](https://ratmath.com/analytic/fast.html): `.quick` is the float preview, `.exact()` or `await .settle()` gives the certified answer. When a hypothesis fails (a log of something that can reach 0, a divisor that can be 0, a point outside the domain), the library throws an `AnalyticError` with a `code` and a reason. It does not return a bound it cannot prove.
+
+### Formulas
+
+| call | returns | notes |
+
+| fn(text, { variable, params }) | AnalyticFunction or PiecewiseFunction | Text, an AST, or the piecewise form "rule if region; …; rule otherwise" |
+
+| f.value(x, { digits = 20, maxBits = 8192 }) | R RationalInterval | a point interval for rational-only formulas; bits double until the digits are met or maxBits is reached |
+
+| f.range(I, { digits = 6, order = 8, maxPieces = 256 }) | R RationalInterval | preview: 256 samples (trust rough) |
+
+| f.integral(a, b, { digits = 12, order = 12, maxPieces }) | R RationalInterval | preview: Gauss–Legendre |
+
+| f.limit(c, { digits = 20, side }) | RationalInterval or ±Infinity | c is a rational point, "inf" or "-inf"; side is "left" or "right". Throws no-limit where the two sides differ or the function keeps oscillating |
+
+| f.asymptotic("inf" \| "-inf") | { exp, power, log, coefficient, oscillates, term } | the leading behaviour ekx·xp·log(x)m·(coefficient + a part that dies out) |
+
+| f.improperIntegral(a, b, { digits = 10, singular }) | R RationalInterval, ±Infinity or NaN | an end at "inf" / "-inf" or where f is undefined; singular lists interior singular points. ±Infinity is a proven divergence; an integral that cannot be decided throws undecided |
+
+| f.taylor(c, n = 6, { digits }) | RationalInterval[] | enclosures of f⁽ᵏ⁾(c)/k! for k = 0…n, n ≤ 16; exact points for rational values; removable quotients are divided as series |
+
+| f.derivative() | a new function | symbolic and simplified |
+
+| f.model(D, { order, bits, centre }) | TaylorModel | certified on the domain D |
+
+| f.regular() | a function | the same function with holes of its rational summands cancelled; used by range and integral |
+
+| f.float(x) | number | no guarantee |
+
+| f.with({ a: "3/8" }) | a new function | other parameter values (sliders) |
+
+| f.toString() | string | calculator notation that parses back |
+
+Grammar: `+ - * / ^` (or `**`), parentheses, implicit products (`2x`, `3(x+1)`, `2sin(x)`), `-x^2 = -(x^2)`, `^` right-associative. Functions: `exp log ln log1p sqrt cbrt sin cos tan asin acos atan sinh cosh tanh erf erfc abs min max` (`arcsin arccos arctan` too), and the special functions `gamma lgamma digamma trigamma beta(a, b) besselJ(n, x) Si fresnelS fresnelC`; constants `pi e`. A power with an odd denominator, `x^(1/3)`, is the real root and is defined for negative x. Ranges and integrals may cross points where the function is not smooth (`abs`, `cbrt` at 0); there the bounds come from interval evaluation. It is the same grammar and the same plain AST as `@ratmath/graphics`.
+
+### Features of a function
+
+| call | record kinds | fields |
+
+| zeros(f, [a, b], opts) | exact, sign-change, isolated, possible, undefined, everywhere | at, lo, hi, unique, multiplicity, atMost, bound, budget |
+
+| poles(f, [a, b], opts) | pole, hole, undefined | order (rational poles), source: "log" (asymptotes of ln), value (a hole's limit) |
+
+| extrema(f, [a, b], opts) | max, min, flat, possible, constant | value, unique, touching |
+
+| inflections(f, [a, b], opts) | inflection, possible | value, unique, touching |
+
+| simplestBetween(a, b) | Rational | smallest denominator in [a, b] |
+
+All four are R. Options: `variable`, `params`, `tolerance` (bracket width, default 10⁻⁶), `pieces` (starting pieces, 16), `maxDepth` (48), `maxMultiplicity`, `flatBits`, `maxBoxes` (2000 per piece), `maxMs` (8000 in all), `sliceMs` (15). Previews are `{ kind: "guess", at }`. A stretch of the interval with no record certainly holds none.
+
+| kind or field | meaning |
+
+| exact | f(at) = 0 exactly, at a rational point |
+
+| everywhere, constant | the function is identically zero (for zeros) or constant (for extrema) on [lo, hi]; one record covers the stretch |
+
+| sign-change | f has opposite proven signs at lo and hi; with unique, exactly one zero inside |
+
+| isolated | exactly one zero inside, but f keeps its sign (found through sqrt, abs or an even power) |
+
+| possible | undecided: maybe no zero, maybe several; atMost: m bounds the count with multiplicity |
+
+| undefined | f is not defined somewhere on the bracket |
+
+| bound | proven max \|f\| on a possible bracket of a flat function |
+
+| budget | the bracket was left when the work budget ran out |
+
+| touching | f′ (or f″) has the same proven sign at both ends: no feature, or a pair of them inside |
+
+### Piecewise
+
+| call | returns | notes |
+
+| piecewise([[region, rule], …], opts) | PiecewiseFunction | first matching piece wins |
+
+| where`2:!x:8` | Region | template tag; values may be interpolated |
+
+| new Region(text \| x => bool, { variable, params }) | Region | .test(x), .match(x) → { n }, .intervals(a, b), .breakpoints(a, b) |
+
+| p.breaks([a, b]) | R records | { at, value, left, right, kind: continuous \| jump \| removable \| edge \| unproven, defined } |
+
+| p.segments(a, b) | array | open pieces and points with the active rule |
+
+| p.value, range, integral, zeros, extrema, inflections, poles, derivative | | piece by piece |
+
+### Differential equations
+
+| call | returns | notes |
+
+| ode.solve({ f, y0, t0, until, order = 10, step, tol, maxSteps, vars, time, params, float }) | R ODESolution | preview: RK4 samples { t, y } |
+
+| sol.at(t), sol.final, sol.steps, sol.complete, sol.reason, sol.describe() | | enclosures of y(t) |
+
+| ode.step({ f, y0, step, order }) | { t0, t1, models, model } | one validated step, or an error |
+
+`f` is a formula in `t` and `y`, an array of formulas for a system (`vars` names the unknowns), or a JS function `(t, y) => model` with an optional `float` twin for previews.
+
+### Boundary value problems
+
+| call | returns | notes |
+
+| bvp({ f, interval, left, right, digits = 8, vars, time, params, guess, order }) | R BVPSolution | f is y″ as a formula in x, y and dy; each end gives { y } or { dy }. Solved by certified shooting |
+
+| s.at(x), s.slopeAt(x) | RationalInterval | enclosures of y(x) and y′(x) |
+
+| s.start, s.unknown, s.linear, s.unique, s.tube | | the left-end value that was solved for and which one it is; unique is proven for linear problems; tube is the ODESolution |
+
+### Several variables
+
+| call | returns | notes |
+
+| field(text, ["x", "y"], { params }) | ScalarField | any number of variables |
+
+| F.partial("x", "y"), F.gradient(), F.hessian(), F.laplacian() | ScalarFields | symbolic and simplified |
+
+| F.jet(point, { digits, order }) | { value, gradient, hessian, smooth } | certified at a point or over a box (sides may be [a, b]) |
+
+| F.value(point), F.directional(point, direction, { unit }) | R RationalInterval | |
+
+| F.linearization(point) | ScalarField | the tangent plane |
+
+| F.along({ x: "cos(t)", y: "sin(t)" }) | AnalyticFunction | the field along a curve; F.substitute fixes some variables |
+
+| F.range(region, { digits }) | R RationalInterval | |
+
+| F.integral(region, { digits, maxBoxes }) | R RationalInterval | product Simpson or Boole rules with proven error terms, refined where the enclosure is widest |
+
+| F.criticalPoints(box, { digits }) | R records | { kind: min \| max \| saddle \| degenerate \| possible, unique, point, value }; a box with no record holds no critical point |
+
+| divergence(F, vars), curl(F, vars), jacobian(F, vars) | ScalarFields | F is a list of formulas |
+
+| lineIntegral(F, vars, curve, [t0, t1]) | R RationalInterval | ∫ F·dr for a list, ∫ f ds for one formula |
+
+| surfaceIntegral(F, vars, surface, ["u", "v"], region) | R RationalInterval | the flux for a list, ∫∫ f dS for one formula |
+
+A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: ["0", "x^2"] }`, region text such as `"0:x:1 && 0:y:x"`, or a Core `MultiRegion` (`R.region`).
+
+### Fourier series
+
+| call | returns | notes |
+
+| fourier(f, [a, b], { terms = 10, digits = 10, kind }) | R FourierSeries | f is a formula, a function or a piecewise function; kind is "full", "sine" or "cosine" (half-range) |
+
+| S.a, S.b, S.coefficient(n), S.amplitude(n) | RationalIntervals | a[0] is a₀, so the mean is a₀/2 |
+
+| S.partial(N) | AnalyticFunction | the partial sum, for plotting |
+
+| S.value(x, N) | RationalInterval | the partial sum at a point |
+
+| S.meanSquare(), S.meanSquareError(N) | RationalInterval | (1/L)∫f² and (1/L)∫(f − SN)², by Parseval |
+
+### Sequences and series
+
+| call | returns | notes |
+
+| sequence(term, { variable = "n", from = 1 }) | Sequence | term(n), terms(count), limit(), monotone(), bounds(), series(). n! is read as a factorial. See Sequences |
+
+| recursive(next, { start, variable = "x" }) | RecursiveSequence | terms(count), fixedPoints([a, b]), limit([a, b]) proven by contraction |
+
+| sum(term, { variable = "n", from = 1 }) | Series | partial(N); divergenceTest, ratioTest, rootTest, comparisonTest, integralTest, alternatingTest, tests(); convergence(); sum({ digits }) with a proven tail. See Series and convergence tests |
+
+| powerSeries(coefficient, { index = "n", from = 0, centre = 0 }) | PowerSeries | radius(), interval() with both ends examined, partial(N), at(x), value(x), derivative(), integral(). See Power series |
+
+| taylorRemainder(f, { about, order, on }) | { coefficients, M, radius, bound, actual, holds } | Lagrange's bound beside the true maximum error |
+
+| functionSequence(term, { variable = "x", index = "n" }) | FunctionSequence | member(n), pointwise(x), supDistance(n, [a, b], limit), uniform([a, b], limit) |
+
+### Theorems of vector calculus
+
+| call | returns | notes |
+
+| greens([P, Q], [x, y], region, { flux }) | { statement, left, right, agree, overlap } | both sides enclosed; the boundary is built from the region. See Green, Stokes and the divergence theorem |
+
+| stokes(F, vars, surface, [u, v], region) | the same shape | circulation around the image of the parameter region's boundary against the flux of the curl |
+
+| divergenceTheorem(F, vars, solid, { surface }) | the same shape | flux through top, bottom and walls against the triple integral of the divergence |
+
+| changeOfVariables(f, vars, map, newVars, region, { original }) | { jacobian, determinant, sign, factor, integrand, value } | See Change of variables, potentials, multipliers |
+
+| potential(F, vars) | { conservative, curl, witness, potential, check, value } | conservative is true, false or null |
+
+| lagrange(f, g, vars, box, { multiplier }) | { lagrangian, candidates, max, min, complete } | candidates are certified critical points of f − λg |
+
+### Differential equations: methods
+
+| call | returns | notes |
+
+| firstOrder(rhs, { x, y, method }) | { type, types, steps, general, implicit, singular, through(x0, y0) } | linear, separable, Bernoulli, homogeneous. See First-order equations |
+
+| exactEquation(M, N) | the same with { exact, factor, potential } | integrating factors in x alone or y alone |
+
+| linearODE(coefficients, forcing) | { characteristic, roots, basis, particular, method, general, initial(values, x0) } | See Linear equations and Laplace transforms |
+
+| laplace(f), inverseLaplace(F) | formula; { partialFractions, result } | with heaviside(t - c) and dirac(t - c); see Steps and impulses |
+
+| laplaceSolve(coefficients, forcing, initial) | { transform, solution, pieces, verified, steps, at(t) } | See Steps and impulses |
+
+| linearSystem(A) | { eigenvalues, kind, stability, exponential, solution(x0) } | Any size; kinds for 2 by 2. See Systems in the plane |
+
+| planarSystem([f, g], [x, y]) | PlanarSystem | equilibria(box), jacobian(), nullclines(), conserves(H), along(V), orbit({ from, until }) |
+
+| seriesSolution({ p, q, about, order }) | { kind, indicial, exponents, solutions, notes, radius, provenRadius }; each solution has remainder(ρ) and enclose(x) with a proven bound | See Series solutions |
+
+| heat, laplaceRectangle, laplaceDisc | series solutions with at(…) → { value, partial, tail } | See Heat, waves and potentials |
+
+| wave({ c, length, position, velocity }) | { at(x, t), travelling, modes(N) } | d'Alembert's formula |
+
+| sturmLiouville({ p, q, w, interval, count }) | [{ index, eigenvalue, proven }] | shooting, each eigenvalue bracketed by validated solutions |
+
+| antiderivative(tree, name), partialFractions(N, D) | | the integrals and partial fractions the methods use |
+
+### Differential geometry
+
+| call | returns | notes |
+
+| curve(components, parameter, { params }) | Curve | speed(), curvature(), torsion(), evolute(), length([a, b]), totalCurvature([a, b]), at(t). See Curves |
+
+| surface(components, [u, v], { params }) | Surface | first(), second(), normal(), gaussian(), mean(), at(u, v), area(region). See Surfaces and curvature |
+
+| metric({ E, F, G }, [u, v]) | Metric | christoffel(), gaussian(), geodesic({ from, direction, until }), transport(path, [a, b], vector), geodesicCurvature(path, t), gaussBonnet(region). See Geodesics and Gauss-Bonnet |
+
+| tidy(tree) | formula tree | quotient of polynomials in variables and calls, with sin² + cos² = 1 used and common factors cancelled |
+
+| ode.solve({ …, track: false }) | | skips tracking the initial value, which is faster for a single starting point over a short span |
+
+### Fourier transforms
+
+| call | returns | notes |
+
+| fourierTransform(f, { convention, support }) | FourierTransform | at(ω) as { re, im } enclosures, formula for the standard pairs (checked against the integrals), check(ω), parseval(), inversion(x). See The Fourier transform |
+
+| inverseFourier(F).at(x) | { re, im } | from a formula for F |
+
+| convolution(f, g) | object | at(x) enclosed; theorem(x) checks it against the product of the transforms |
+
+| heatLine({ k, initial }) | object | the heat equation on the whole line: at(x, t), viaTransform(x, t), check(x, t), heat() |
+
+| dft(values), fft(values) | object | exact in the field of n-th roots of unity; fft counts its multiplications and compares with the definition. See The discrete Fourier transform |
+
+| rootOfUnity(n, k), cyclotomic(n), Cyclotomic | | exact numbers built from roots of unity |
+
+| alias(frequency, rate), sinusoidSamples(spec), sample(f, spec) | | the alias frequency, exact samples of a sinusoid, enclosed samples of a formula |
+
+### Numerical methods, with their true errors
+
+| call | returns | notes |
+
+| floatParts(x, typed?) | object | sign, exponent, mantissa, bits, the exact rational the double is, its ulp and neighbours; with the typed decimal, the exact representation error. See Floating point, exactly |
+
+| exactOf(x), nearestDouble(q), floatOp(op, a, b) | | a double as a rational, the double nearest a rational, and one operation with the rounding it added |
+
+| roundoff(formula, inputs) | object | the calculation in doubles and exactly, digitsLost, and steps showing where the digits go |
+
+| bisection(f, [a, b]), newton(f, x0), secant(f, x0, x1), fixedPoint(g, x0) | object | iterations each with its true error against the certified root, and the observed order. See Root-finding methods |
+
+| interpolate(points) or interpolate(f, { nodes }) | object | divided differences, newton, lagrange, polynomial, at(x), error(x), maxError([a, b]). See Interpolation and approximation |
+
+| equallySpaced(a, b, n), chebyshevNodes(a, b, n) | Rational[] | nodes; the Chebyshev ones rounded to short rationals |
+
+| spline(points), leastSquares(points, degree) | object | the natural cubic spline and the least-squares polynomial, exact |
+
+| differences(f, x, { kind, steps }), richardson(f, x) | object | difference quotients in doubles with true error and truncation term; the extrapolation table. See Differences and quadrature rules |
+
+| quadratureRule(f, [a, b], { rule, n }), romberg(f, [a, b]), gaussRule(f, [a, b], n) | object | the rule's value, the certified integral, the true error and the textbook bound |
+
+| legendre(n), gaussLegendre(n) | | exact Legendre coefficients; certified nodes and weights |
+
+| odeMethod(f, { method, t0, y0, until, steps }), stepSizeStudy(f, { …, counts }), stability(method) | object | Euler, Heun, midpoint, RK4 and Adams-Bashforth with the true global error at every step, observed order, and the stability interval. See Euler to Runge-Kutta |
+
+### Taylor models
+
+| call | notes |
+
+| Domain(R`a:b`, { centre }) | centre defaults to the midpoint |
+
+| TM.x(D, { order = 12, bits = 96 }), TM.constant(D, v), TM.polynomial(D, [a0, a1, …]) | sources |
+
+| .add .subtract .negate .multiply .divide .pow(n) | with models or numbers |
+
+| exp sin cos tan log log1p atan asin acos sqrt cbrt erf sinh cosh tanh reciprocal power(g, a) | elementary functions of models |
+
+| .at(x) .range() .integral(a, b) .integrate() .derivative() | derivative only for exact polynomials |
+
+| .coefficients .remainder .centre .order .describe() .toJSON() | |
+
+| series(D, { coefficient or coefficients, degree, order, centre, rule, M, q, error, lookahead }) | user series; rules lagrange, ratio, alternating, explicit |
+
+### Fast, then certified
+
+| call | notes |
+
+| job.quick | { value, trust }, trust is good, rough or unsure; computed on first read |
+
+| job.stages() | generator: the preview, progress ticks { done, of, step, partial }, then the exact stage { value, via } |
+
+| job.exact(), job.exactStage() | run to the end synchronously; the value, or the whole stage with its via line |
+
+| await job.settle({ signal, sliceMs = 8, onStage, onProgress }) | run in time slices without blocking a page; abort with an AbortController |
+
+| job.settled | true once the exact answer is cached |
+
+| live(compute, onStage, { idleMs = 30, sliceMs, onProgress, onError }) | returns update(...args): each call cancels the last job, shows its preview at once and its exact answer after idleMs of quiet |
+
+### Errors
+
+Every refusal is an `AnalyticError` with a `code`. The common ones:
+
+| code | when |
+
+| domain | log, sqrt or a power is applied outside its domain (log of a range that reaches 0) |
+
+| division-by-zero | a divisor's range contains 0 |
+
+| not-smooth | abs, min or max at a corner inside the domain |
+
+| overflow | exp of an argument above 2¹⁶, or a value too large to enclose |
+
+| hypothesis | a series rule fails on the checked terms |
+
+| outside-domain | a model or ODE solution asked about a point outside where it is valid |
+
+| unbound | a name in a formula has no value |
+
+| bad-expression, bad-region, bad-piecewise, bad-ode, bad-series | input that does not parse or does not make sense |
+
+| budget | a series or search ran past its limit |
+
+### Points, constants, plumbing
+
+| call | notes |
+
+| enclose.exp(x, bits) (also log, sqrt, cbrt, atan, asin, acos, sin, cos, tan, sinh, cosh, tanh, erf, log1p) | points or intervals → RationalInterval |
+
+| constants.pi(bits), constants.e(bits) | |
+
+| createScope({ digits, bits, order }) | callable set for evaluators: exp, sin, …, model, integral, range, fn, d, ode, zeros, … |
+
+| Refinement, live(compute, onStage, { idleMs }) | the shared fast-then-exact shape |
+
+| parse, format, differentiate(ast, name), compileFloat(ast), modelOf(ast, env, base), encloseAst(ast, env, bits), freeVariables(ast) | expression tools |
+
+| num(v), v(name), op(o, ...args), call(name, ...args) | build an AST by hand |
+
+| parsePiecewiseText(text) | [[region, rule], …] or null when the text is not piecewise |
+
+### Try it
+
+```js
+// Look something up in the tables above and try it here.
+const f = fn("x^2*exp(-x)");
+PRINT("f(1) =", f.value(1, { digits: 15 }).exact());
+PRINT("f' =", f.derivative().toString());
+f.range(R`0:5`, { digits: 6 }).exact()
+```
+
+---
+
+Page: https://ratmath.com/analytic/explore.html
+
+Explore
+
+## Ask anything about a function
+
+Type a formula, or a piecewise function such as `x - n if n:x:!n+1`. Names other than `x` become sliders in steps of 1/8. Choose which questions to ask. Each answer shows its float preview at once and its certified form when it arrives. Your last function is remembered in this browser.
+
+zeros, fmaxima and minimainflection pointspolesopen: undecided, a hole, or a one-sided limit
+
+### Try it
+
+```js
+// Everything the explorer does is a few calls.
+const f = fn("sin(x)/x");
+PRINT("f(1/2) =", f.value("1/2", { digits: 25 }).exact());
+PRINT("range on [1, 10]:", f.range(R`1:10`, { digits: 4 }).exact());
+PRINT("zeros on [1, 10]:", zeros(f, [1, 10]).exact().length);
+PRINT("poles on [-1, 1]:", poles(f, [-1, 1]).exact());
+f.integral(1, 10, { digits: 8 }).exact()
+```
+
+---
+
+Page: https://ratmath.com/analytic/fast.html
+
+Idea
+
+## Fast, then certified
+
+Certified answers cost more than floating-point ones, sometimes a thousand times more. Someone dragging a slider needs a picture now; someone writing down a result needs it to be true. So every question returns a `Refinement` that can answer both ways. It is the same class the RatMath linear algebra and graphics libraries use, so one loop can drive all three.
+
+```js
+const job = fn("exp(sin(3x))*x").range(R`0:3`, { digits: 6 });
+job.quick;            // { stage: "float", value: [lo, hi], trust: "rough" }
+for (const s of job.stages()) …   // float, then progress ticks, then the certified stage
+job.exact();          // run to the end now (fine in a Worker)
+await job.settle({ signal, sliceMs: 8, onProgress });   // the same, in time slices
+```
+
+### A worked run
+
+The range above, run through `stages()` by hand, yields 21 stages:
+
+| stage | what it holds |
+
+| float | [0, 7.1735…] from 256 samples, trust rough. The upper end is a sampled value, so the true maximum may be a little higher. |
+
+| progress 1 of 256 | partial: a certified range from one Taylor model on all of [0, 3], from about −1.5·10⁹ to 1.5·10⁹. Valid, and useless. |
+
+| progress 2 … 19 | partial: the outer bound tightens as the pieces holding the extremes are split; by the second tick it is already about [−186, 196] |
+
+| exact | an interval from just below 0 to 7.17352…, via "Taylor models (order 8) on 25 pieces" |
+
+Every partial is a true enclosure, so a display may show it as soon as it arrives. `of` is the budget (maxPieces), not a forecast: this run stopped after 19 of 256 because outer and inner bounds met.
+
+### What each question previews
+
+| question | preview | trust |
+
+| f.value(x) | the float formula at x | good, or unsure if not finite |
+
+| f.range(I) | min and max of 256 samples | rough |
+
+| f.integral(a, b) | 16-panel Gauss–Legendre | good (rough for piecewise) |
+
+| zeros, extrema, inflections | { kind: "guess", at } from sign changes of f, f′ or f″ on samples | rough |
+
+| p.breaks | none | unsure |
+
+| ode.solve | RK4 samples { t, y } on 200 steps | good, or unsure if it blows up |
+
+### How far to trust a preview
+
+`trust` is `good` when the float computation is normally accurate (a value, an integral by Gauss–Legendre), `rough` when it can miss things (a range from samples can miss a narrow peak; zero guesses come from sign changes, so a double root is invisible), and `unsure` when the float answer is not finite.
+
+### Progress and partial answers
+
+Progress ticks look like `{ stage: "progress", done, of, step, partial }`. `partial` is the answer so far: a range that is already valid but still wide, an integral over the pieces done, the ODE steps validated so far, the zeros found so far. A display can sharpen as they arrive.
+
+### Sliders: live
+
+```js
+const f = fn("a*sin(x)", { params: { a: 1 } });
+const update = live((a) => f.with({ a }).value("1/2"), (stage) => show(stage.value, stage.exact), { idleMs: 30 });
+slider.oninput = () => update(`${slider.value}/8`);
+```
+
+Each update shows the preview at once. Certified work starts once the input has been still for `idleMs`, runs in slices, and is cancelled by the next update, so only the latest question is ever finished.
+
+### Your own refinement
+
+A `Refinement` is two functions: one that returns the preview, and a generator that yields progress and returns the certified answer. Anything built this way gets `stages`, `exact`, `settle` and `live` for free.
+
+```js
+import { Refinement, fn } from "@ratmath/analytic";
+
+const f = fn("exp(-x^2)");
+const area = new Refinement(
+  () => ({ value: 0.8820813907, trust: "good" }),   // erf(2)·√π/2 from a table
+  function* () {
+    const parts = [];
+    for (let k = 0; k  a.add(b)), via: "four certified integrals" };
+  },
+);
+const total = await area.settle({ onProgress: (p) => console.log(p.done, "/", p.of) });
+```
+
+Cancelling is cooperative: `settle` checks the signal between slices, so a generator that yields often stops quickly. A generator that never yields runs to the end in one slice.
+
+### Try it
+
+```js
+const job = fn("exp(sin(3x))*x").range(R`0:3`, { digits: 6 });
+PRINT("quick:", job.quick);
+for (const s of job.stages()) {
+  if (s.stage === "progress") continue;      // there are many progress ticks
+  PRINT(s.stage, s.value, s.via ?? "");
+}
+// settle() is the same work in time slices, so a page stays responsive:
+await fn("x*cos(x)").integral(0, 3, { digits: 12 }).settle({ sliceMs: 8 })
+```
+
+---
+
+Page: https://ratmath.com/analytic/models.html
+
+Idea
+
+## Taylor models
+
+A Taylor model on a domain D = [a, b] with centre c is a pair (P, I): a polynomial P with exact rational coefficients and a rational interval I, such that
+
+f(x)−P(x−c)∈Ifor every x∈D.
+This is the basic object of validated numerics (Berz and Makino's Taylor models, building on Moore's interval analysis). It says more than a value does: it describes f on the whole domain, so ranges, integrals and compositions all come from it with the error already counted. Everything certified in this library is built from it.
+
+### A small example by hand
+
+Take f(x) = eˣ on D = [0, 1/2] with centre c = 1/4 and order 2. Taylor's theorem with the Lagrange remainder says
+
+ex=ec(1+t+2t2​)+eξ6t3​,t=x−c,  ξ between c and x.
+Here |t| ≤ 1/4, and e^ξ ≤ e^(1/2) < 1.65, so the last term lies in [−0.0043, 0.0043]. The coefficient e^c is irrational, so the library encloses it, puts the midpoint of each coefficient into P, and adds the leftover radius times the range of its power of t to I. The result is a polynomial with exact rational coefficients and a remainder interval that together contain eˣ for every x in D.
+
+### Arithmetic on models
+
+- Sums add the polynomials and add the remainders.
+
+- Products multiply the polynomials exactly, keep the terms up to the order, and move the rest into the remainder: the dropped high-degree part (bounded over D), plus P·J + Q·I + I·J for (P, I)·(Q, J).
+
+- Division is multiplication by the reciprocal model, which needs the divisor's range to exclude 0.
+
+- Constants may be intervals, so a parameter known only to lie in [1, 2] is a model with P = 3/2 and I = [−1/2, 1/2].
+
+Each bound in these steps is a range of an exact polynomial, so nothing is lost except what is deliberately moved into the remainder.
+
+### Elementary functions of a model
+
+To apply exp, sin, log and the others to a model g, the library uses the outer function's own Taylor series about c₀ = g(c), the value at the centre, and substitutes the model of g − c₀. The Lagrange remainder f⁽ⁿ⁺¹⁾(ξ)/(n+1)!·(g − c₀)ⁿ⁺¹ needs a bound on f⁽ⁿ⁺¹⁾ over the whole range of g:
+
+| f | bound on f⁽ⁿ⁺¹⁾ used | condition |
+
+| exp | e^(max of g) | max of g below 2¹⁶ |
+
+| sin, cos | 1 | none |
+
+| log, 1/x | n!/\|g\|ⁿ⁺¹ at the end nearest 0 | range of g excludes 0 (log: above 0) |
+
+| sqrt | from the binomial series | range of g above 0 |
+
+| atan | (k − 1)!/(1 + g²)^(k/2) | none |
+
+When the condition fails, the library refuses with a reason. Coefficients that are irrational, like e^c, are certified intervals; their midpoints go into P and their radii into I.
+
+```js
+import { TM, Domain, exp, sin } from "@ratmath/analytic";
+import { R } from "@ratmath/core";
+
+const D = Domain(R`0:1/2`);          // centre defaults to the midpoint, 1/4
+const x = TM.x(D, { order: 12 });    // the identity model
+const g = exp(sin(x)).multiply(x);
+g.coefficients;   // exact Rationals, in powers of (x − 1/4)
+g.remainder;      // a tiny RationalInterval
+g.at(R`1/5`);     // enclosure of g(1/5)
+g.range();        // Bernstein bounds with bisection
+g.integral();     // certified ∫ over D
+g.describe();     // domain, order, remainder width, rules used
+```
+
+### How fast the remainder shrinks
+
+For a function that is analytic on a neighbourhood of D, the remainder of an order-n model behaves like (h/2)ⁿ⁺¹/(n+1)!·max|f⁽ⁿ⁺¹⁾|, where h is the width of D. Two levers make it small: a higher order, or a narrower domain. Higher orders pay off until n passes the size of f's derivatives; after that each extra order buys a roughly fixed number of digits. Narrower domains pay off for any function, which is why ranges and integrals split into pieces.
+
+Order costs time too: a product of two order-n models is an O(n²) polynomial product with exact rationals, and each elementary function needs n + 1 of them. The defaults (order 12, 96 bits for irrational constants) are a balance for interactive use.
+
+### Derivatives
+
+The remainder of a model says nothing about the derivative's error: f could wiggle inside the band P ± I with any slope. So `model.derivative()` only works for exact polynomials, and derivatives are taken from the formula instead ([symbolic d/dx](https://ratmath.com/analytic/expressions.html)), then modelled afresh with their own remainder.
+
+### Try it
+
+```js
+const D = Domain(R`0:1/2`);             // centre: the midpoint, 1/4
+const x = TM.x(D, { order: 12 });       // the identity model on D
+const g = exp(sin(x)).multiply(x);
+PRINT("first coefficients:", g.coefficients.slice(0, 4));
+PRINT("remainder:", g.remainder);
+PRINT("g(1/5) is in", g.at(R`1/5`));
+PRINT("range:", g.range());
+PRINT("integral over D:", g.integral());
+g.describe()
+```
+
+---
+
+Page: https://ratmath.com/analytic/values.html
+
+Topic
+
+## Values to many digits
+
+Ask for f(x) at a rational x and you get two answers. The first is a double-precision float, computed at once. The second is a rational interval that provably contains the true value, narrowed until it is good to the number of significant digits you asked for. This page is about the second one: how a finite computation can promise something about e^(1/3), which no finite decimal equals.
+
+### Reading the answer
+
+Results are shown in RatMath's interval notation. `0.46235716975[69:70]` means the value lies between 0.4623571697569 and 0.4623571697570: the digits outside the brackets are shared by both ends, and the bracket gives the last digits of each end. When the two ends are equal the value is exact, and only one number is shown.
+
+"Digits" means significant digits relative to max(1, |value|). So 20 digits of e^30 ≈ 1.07·10¹³ is an interval about 10⁻⁷ wide, while 20 digits of sin(10⁻⁵) is an interval about 10⁻²⁰ wide. Values near 0 are measured against 1, because "20 significant digits of a number that might be 0" has no finite answer.
+
+```js
+import { fn } from "@ratmath/analytic";
+
+const v = fn("exp(x)").value("1/3", { digits: 50 });
+v.quick.value;     // 1.3956124250860895 (a double, right away)
+v.exact();         // RationalInterval, width ≤ 10^-50 · 1.39…
+v.exactStage().via // "certified enclosure at 191 bits"
+
+fn("x^2 + 1/x").value("3/7").exact();   // 370/147 exactly: no irrational step
+```
+
+### Series with a tail you can bound
+
+Every elementary function is computed at a point by summing a power series and adding an explicit bound for the part that was not summed. A series alone is not enough: e^x = Σ xᵏ/k! converges for every x, but at x = 100 its largest term is about 10⁴², so the sum would need hundreds of digits of cancellation. The trick in each case is to move the argument to where the series converges fast, sum there, and move back with an operation whose effect on the error is known.
+
+| Function | Reduction | Series and tail bound |
+
+| exp | r = x / 2ˢ with s chosen so \|r\| 4, subtract 2πk with π certified to extra bits; π's uncertainty times k becomes extra width (both are 1-Lipschitz) | alternating series; once the terms shrink, the tail is at most the last term. Summed in fixed-point integers with outward rounding |
+
+| atan | for x > 2, atan x = π/2 − atan(1/x); for 1/2
+
+### Precision bookkeeping
+
+Each step that can lose accuracy is paid for in advance with extra bits. Squaring doubles a relative error, so s squarings in the exp reduction cost s bits; the series is summed with that many more. Terms are rounded to dyadic rationals (a whole number over a power of 2) so their denominators stay small, and every rounding adds one unit in the last place to a running error term that becomes part of the interval. Nothing is estimated: the width of the answer is an upper bound built from the tail bound, the rounding count and the reduction error.
+
+If the first precision is not enough (a value close to a large cancellation, or a composite like exp(sin(x)) whose inner error grows through the outer function), the certified stage doubles the working bits and tries again, up to `maxBits` (default 8192). Each try is a progress tick with a partial interval, so a page can show the answer sharpening.
+
+### Composite formulas
+
+A formula like `exp(sin(x))·x` is evaluated as a Taylor model of order 0 on the point domain {x}: each function receives an interval and returns an interval. At a point that is ordinary interval arithmetic with the certified point values above. The answer is good to the digits asked for when the final width says so, not because each step was given a fixed number of digits.
+
+```js
+import { enclose, constants } from "@ratmath/analytic";
+import { R } from "@ratmath/core";
+
+enclose.exp(R`1/3`, 200);   // an Iv with relative width about 2^-200
+constants.pi(256);          // π to 256 bits
+constants.e(128);
+```
+
+### Try it
+
+```js
+const v = fn("exp(x)").value("1/3", { digits: 50 });
+PRINT("quick:", v.quick.value);
+PRINT("certified:", v.exact());
+PRINT("how:", v.exactStage().via);
+PRINT("rational formula, exact:", fn("x^2 + 1/x").value("3/7").exact());
+PRINT("π to 128 bits:", constants.pi(128));
+enclose.exp(R`1/3`, 100)
+```
+
+---
+
+Page: https://ratmath.com/analytic/expressions.html
+
+Topic
+
+## Formulas and derivatives
+
+Everything in the library that works with "a function" starts from a formula in calculator notation. `fn(text)` parses it into a small tree, and every question (a value, a range, an integral, zeros, a derivative) is answered by walking that tree in one of three ways.
+
+### The notation
+
+| Write | Means |
+
+| + − * / | the usual operations, left to right at equal precedence: x/2y is (x/2)·y |
+
+| ^ or ** | powers; -x^2 is −(x²) |
+
+| 2x, 2(x+1), x sin(x) | implicit multiplication |
+
+| sin x | a function applied to the next factor, the same as sin(x) |
+
+| sin cos tan asin acos atan exp log ln log1p sqrt cbrt sinh cosh tanh erf | the elementary functions (log and ln are both natural log) |
+
+| abs min max | non-smooth functions, modelled where they are smooth (see below) |
+
+| pi e | constants, certified to the working precision |
+
+| 1/3, 0.25, 2.5E-3 | exact rationals: 0.25 is 1/4, not a double |
+
+### Three ways to walk the tree
+
+- Floats. compileFloat turns the tree into a JavaScript closure on doubles. This drives every preview, plot and slider: thousands of evaluations a frame.
+
+- Taylor models. modelOf evaluates the tree with Taylor models in place of numbers, which gives polynomial-plus-remainder enclosures on a whole interval. Ranges, integrals and many-digit values use this.
+
+- Plain intervals. encloseAst evaluates with intervals. It is cruder but cheap, and the zero finder uses it thousands of times to throw away pieces where f cannot vanish.
+
+The tree is shared with `@ratmath/graphics`, so the formula a plot draws is literally the formula the proofs are about.
+
+### Symbolic d/dx
+
+Derivatives are taken on the tree with the rules from a first calculus course, and the result is a new formula:
+
+| Rule | d/dx |
+
+| sum, product | u′ + v′, u′v + uv′ |
+
+| quotient | (u′v − uv′)/v² |
+
+| constant power | n·uⁿ⁻¹·u′ |
+
+| general power | uᵛ·(v′·ln u + v·u′/u) |
+
+| chain | sin u → cos u·u′, exp u → exp u·u′, log u → u′/u, atan u → u′/(1 + u²), sqrt u → u′/(2·sqrt u), … |
+
+The builders simplify as they go: constants fold, 0·u and 1·u disappear, u − (−v) becomes u + v, and (uᵐ)ⁿ becomes uᵐⁿ. That keeps derivative trees small enough to evaluate quickly, which matters because the zero finder needs f′, f″ and sometimes f‴. Shared subtrees (sin(u) → cos(u)·u′ keeps the same u) are evaluated once.
+
+```js
+fn("x^3 + 2x - 1/x").derivative().toString();   // "3*x^2 + 2 + 1/x^2"
+format(differentiate(parse("atan(x^2)"), "x"));  // "2*x/(1 + x^4)"
+format(differentiate(parse("sin(x)/x"), "x"));   // "(cos(x)*x - sin(x))/x^2"
+```
+
+Why not differentiate a Taylor model instead? Because the remainder only bounds f − P, not f′ − P′: f could wiggle inside the remainder band with any slope. The derivative is a new formula, modelled afresh with its own proven remainder.
+
+### Parameters, sliders and intervals
+
+Names other than the variable are parameters. They must be given values, and `with` makes a copy with new values, which is what a slider does:
+
+```js
+const f = fn("a*x^2 + b", { params: { a: "3/8", b: 1 } });
+f.with({ a: 2 }).value(3).exact();      // 19, exactly
+fn("y*t", { variable: "t", params: { y: 2 } });   // a different variable name
+```
+
+A parameter can also be an interval. Then every answer holds for every value of the parameter in that interval at once: the range below is a range over both x and a. This is how uncertainty in a measured constant carries through to a proven conclusion. The answer cannot be sharper than the parameter allows: here the range search stops at its piece budget, and the outer bound it reports is still a valid range for all a at once.
+
+### Non-smooth pieces
+
+`abs`, `min` and `max` have no Taylor series at their corners. They are modelled exactly where they are smooth on the domain (the argument of abs keeps one sign, or one argument of min stays below the other) and refused where they are not, with a reason. Split the domain at the corner, or write the function [piecewise](https://ratmath.com/analytic/piecewise.html), where each piece is smooth by construction.
+
+### Refusals
+
+A formula that cannot be bounded on the domain is refused with an `AnalyticError` that has a `code` and a reason: `log` of a range that reaches 0, a divisor whose range contains 0, `sqrt` of something that may be negative, `exp` of something above 2¹⁶. The library never returns a bound it has not proven.
+
+### Try it
+
+```js
+PRINT(fn("x^3 + 2x - 1/x").derivative().toString());
+PRINT(format(differentiate(parse("atan(x^2)"), "x")));
+PRINT(format(differentiate(parse("sin(x)/x"), "x")));
+
+const f = fn("a*x^2 + b", { params: { a: "3/8", b: 1 } });
+PRINT("with a = 2, f(3) =", f.with({ a: 2 }).value(3).exact());
+fn("y*t", { variable: "t", params: { y: 2 } }).value(5).exact()
+```
+
+---
+
+Page: https://ratmath.com/analytic/ranges.html
+
+Topic
+
+## Ranges and integrals
+
+The range of f on [a, b] is the interval from its smallest to its largest value there. Sampling finds values inside the range, but it can miss a narrow peak between samples, so a sampled range is only ever a lower estimate of the true one. A certified range is an interval that provably contains every value, and that is tight enough to be useful.
+
+### The dependency problem
+
+The simplest certified method is interval arithmetic: replace x by the interval [a, b] and compute. Every operation's result contains all possible results, so the answer is valid. But it forgets that the two x's in a formula are the same number. On [0, 1], x·(1 − x) becomes [0, 1]·[0, 1] = [0, 1], while the true range is [0, 1/4]. And x − x becomes [−1, 1] instead of 0. The overestimate shrinks only in proportion to the width of the interval.
+
+Taylor models fix most of this. They keep the dependence on x as a polynomial with exact coefficients, so x − x is exactly the zero polynomial and x·(1 − x) is exactly x − x². What is left is to bound a polynomial, and that has a good answer.
+
+### Bounding a polynomial: the Bernstein form
+
+Rewrite P on [a, b] in the Bernstein basis: with t = (x − a)/(b − a),
+
+P(x)=k=0∑n​βk​(kn​)tk(1−t)n−k.
+The basis functions are nonnegative and add up to 1, so P(x) is a weighted average of the coefficients βₖ: its range lies between min βₖ and max βₖ. The end coefficients are exact values, β₀ = P(a) and βₙ = P(b). The coefficients come from the power-basis ones by an exact rational transformation, and when the interval is halved (de Casteljau's algorithm), the gap between the Bernstein bound and the true range shrinks like the square of the width. The library bisects a few times by default.
+
+A Taylor model's range is then that polynomial bound plus the remainder interval.
+
+### Adaptive pieces
+
+`f.range(I)` keeps a list of pieces, each with its own Taylor model. Two bounds are tracked:
+
+- the outer bound: the hull of every piece's model bound. The true range is inside it.
+
+- the inner bound: from certified values at piece midpoints. The true maximum is at least the largest of them, and the true minimum at most the smallest.
+
+Only the pieces that hold the current outer extremes are split, so the work goes to where the maximum and minimum are, and the search stops when outer and inner bounds agree to the requested digits. The answer is the outer bound, so it is a true enclosure whose excess is at most that tolerance.
+
+```js
+const r = fn("x*cos(x)").range(R`0:3`, { digits: 6 });
+r.quick.value;   // [lo, hi] from 256 samples, marked "rough"
+r.exact();       // RationalInterval containing every value of x·cos(x) on [0, 3]
+r.exactStage().via   // "Taylor models (order 8) on 28 pieces"
+```
+
+### Integrals
+
+A Taylor model integrates exactly: if f(x) − P(x − c) ∈ I on [a, b], then
+
+∫ab​f∈∫ab​P(x−c)dx+I⋅(b−a),
+and the integral of P is an exact rational. The width of the answer is the width of I times the length of the interval. `f.integral(a, b)` splits [a, b] into pieces until each piece's width is at most its share of the tolerance (in proportion to its length), so the effort goes to the parts where f is hard to approximate. The preview is a 16-panel Gauss–Legendre sum on doubles.
+
+The number of pieces grows slowly with the digits asked for. An order-n model on a piece of width h has a remainder of order hⁿ⁺¹, so halving every piece gains about n + 1 bits, or around 4 digits at order 12, while doubling the work.
+
+### Integrable singularities and holes
+
+A removable gap in a rational part, as in (x² − 1)/(x − 1) + sin(2x)/2, is cancelled exactly before integrating, so the integral across x = 1 works. A true singularity, such as 1/√x at 0, makes the models' remainders unbounded and the integral is refused rather than guessed.
+
+### Try it
+
+```js
+const r = fn("x*cos(x)").range(R`0:3`, { digits: 6 });
+PRINT("quick (sampled):", r.quick.value, r.quick.trust);
+PRINT("certified:", r.exact());
+PRINT("how:", r.exactStage().via);
+const I = fn("exp(-x^2)").integral(0, 2, { digits: 12 });
+PRINT("∫₀² exp(−x²):", I.exact());
+I.exactStage().via
+```
+
+---
+
+Page: https://ratmath.com/analytic/zeros.html
+
+Topic
+
+## Zeros, poles and extrema
+
+Finding where f = 0 numerically is easy. Proving it is harder: that there is a zero in a bracket, that there is only one, and that there are none elsewhere. The library uses two engines.
+
+### Rational functions: exact
+
+When f is built from + − × ÷ and integer powers with rational numbers, it is read exactly as N/D. Then:
+
+- Holes. G = gcd(N, D) cancels. Points where G = 0 are holes: f is undefined there, but the limit exists, and the library reports it.
+
+- Multiplicity. Yun's square-free decomposition writes N/G = a₁·a₂²·a₃³⋯ with each aᵢ free of repeated roots, so every root comes with its multiplicity, and every pole with its order.
+
+- Isolation. A Sturm sequence counts the distinct roots in any interval exactly. Bisection splits at the simplest rational in the middle half of each bracket, so roots like 1 or −2/3 are hit exactly, and irrational roots end in brackets like [1393/985, 1970/1393] around √2.
+
+### Everything else: Krawczyk
+
+For a bracket X with midpoint m, Y ≈ 1/f′(m), and an interval bound F′(X) on the derivative,
+
+K=m−Yf(m)+(1−YF′(X))(X−m)
+contains every zero of f in X. If K misses X, there is no zero. If K lies inside X, there is exactly one, and replacing X by K ∩ X narrows it quadratically, like Newton's method but with proof. Where F′(X) contains 0 (a double root, two close roots), the test cannot decide, so the bracket is reported as `possible`, with `atMost: m` when the m-th derivative is proven nonzero there: by Rolle's theorem, f then has at most m zeros there, counted with multiplicity.
+
+At an exact zero, the derivatives that are exactly 0 there give a lower bound on the multiplicity. When Rolle's bound matches it nearby, the multiplicity is proven. So sin(x)² has a zero of multiplicity exactly 2 at 0, while near π it can only say "at most 2": no finite computation can tell a double root from two very close roots, or from a near miss.
+
+### Functions flat to every order
+
+e^(−1/x²) and all its derivatives tend to 0 at x = 0. Near 0 it is smaller than any number the library can represent, so it cannot be told apart from 0 there. Those brackets come back as `possible` with `bound`, the proven maximum of |f| on them, and with no `atMost`, because every derivative is just as flat. Outside them f is proven positive.
+
+### Poles, extrema, inflections
+
+Poles are zeros of denominators (and of cos inside tan) where the numerator is proven nonzero, and only where the blow-up reaches f. A division inside exp is not a pole of f: e^(−1/x²) tends to 0. Extrema are zeros of f′, classified by the sign of f″ or by the sign change of f′. Inflection points are zeros of f″ where f″ changes sign.
+
+When f′ has the same proven sign at both ends of an undecided bracket, the record carries `touching: true`. Then either f′ only touches 0 there and f has no extremum (1 + cos 2x at π/2 is like this), or a maximum and a minimum sit together inside the bracket. No finite precision can tell these apart when the touch is at an irrational point, so this is the strongest honest answer.
+
+### Holes and removable points
+
+Some formulas are undefined at a point where the function has an obvious value. The library handles two common kinds exactly.
+
+- Rational parts. In (x² − 1)/(x − 1) + sin(2x)/2, the summands that are rational functions of x are combined into N/D and the exact gcd is cancelled. Questions are then answered for x + 1 + sin(2x)/2, and x = 1 is reported as a hole with the limit as its value.
+
+- Quotients with a polynomial denominator. For sin(x)/x (also 4·sin(x)/x or sin(x)/x + x, which are rewritten as one quotient), the denominator's exact zero c = 0 is a hole when the numerator vanishes there to the same order k. L'Hôpital's rule gives the limit u⁽ᵏ⁾(c)/v⁽ᵏ⁾(c), exactly 1 here. Near c, the m-th derivative is written as Nₘ/v^(m+1) and enclosed with the mean-value form of Taylor's theorem, so the searches for extrema and inflections pass straight through the hole.
+
+Results exactly at a hole are dropped from zeros, extrema and inflections, because f itself is not defined there; `poles` lists the hole with its value, so a plot can draw an open dot.
+
+```js
+poles("sin(x)/x", [-4, 4]).exact();    // [{ kind: "hole", at: 0, value: [1, 1] }]
+extrema("sin(x)/x", [-8, 8]).exact();  // min, min at ±4.4934 and max, max at ±7.7253
+```
+
+### Logs and square roots
+
+ln(g) tends to −∞ where g tends to 0 from above, so `poles` reports a zero of g as `kind: "pole"` with `source: "log"`, again only where the blow-up reaches f: x·ln(x) has none, since it tends to 0. Zeros of sqrt(g), gᵖ (p > 0), abs(g) and constant multiples are found as zeros of g, which avoids the infinite slope of the square root at its zeros. Through an even power, sqrt or abs, f does not change sign at the zero, so a proven single zero inside a bracket is reported as `isolated` rather than `sign-change`.
+
+### Budgets
+
+The general engine works through a stack of brackets and pauses every 15 ms, so a page that calls `settle()` stays responsive. Each starting piece has a budget (`maxBoxes`, default 2000, and a share of `maxMs`, default 8000). Brackets left when it runs out come back as `possible`, and the `via` line says the budget was hit.
+
+### Try it
+
+```js
+PRINT("poles of sin(x)/x:", poles("sin(x)/x", [-4, 4]).exact());
+for (const e of extrema("sin(x)/x", [-8, 8]).exact()) PRINT(e.kind, "near", e.lo.toDecimal(5), e.unique ? "(unique)" : "");
+const z = zeros("x^3 - 2", [0, 2]).exact();
+PRINT("cube root of 2 lies in", z[0].lo, "to", z[0].hi);
+inflections("x^3 - 3x", [-2, 2]).exact()
+```
+
+---
+
+Page: https://ratmath.com/analytic/piecewise.html
+
+Topic
+
+## Piecewise functions
+
+A piecewise function is a list of pairs: a region and a rule. The first region that contains x decides the rule. Regions use a betweenness chain on x:
+
+| region | meaning |
+
+| 2:x:8 | 2 ≤ x ≤ 8 |
+
+| _:x:8 2:x:_ | x ≤ 8 x ≥ 2 (_ is an unbounded side) |
+
+| 2:!x:8 2:x:!8 | 2 1 |
+
+| all, else, otherwise | every x |
+
+A name in a bound that is not a parameter is an integer variable. Bounds must be affine in it (like 2n + 1 or 3 − n/2). For each x the library solves for the integer n that fits, and the rule can use n too: `x - n if n:x:!n+1` is the sawtooth. A region can also be a plain function `x => boolean`; it answers point questions, but ranges, integrals and zeros need breakpoints, which only chains provide.
+
+```js
+fn("x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise");
+piecewise([["2n:x:!2n+1", "1"], ["2n+1:x:!2n+2", "-1"]]);   // a square wave
+where`${a}:!x:${b}`;                                          // a Region from a template
+```
+
+### Breaks
+
+`breaks([a, b])` lists each breakpoint with the value there (if any piece contains it), the limits from the left and right rules, and a kind. `continuous` means all three are proven equal. `jump` means the two limits are proven different. `removable` means the limits agree but the value is missing or different. That is what a plot needs to draw filled and open dots.
+
+### Worked example: breaks
+
+```js
+const f = fn("x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise");
+f.breaks([-1, 3]).exact();
+```
+
+| at | value | left | right | kind |
+
+| 1 | 1 (from x², since _:x:1 is closed) | 1 | 2 | jump |
+
+| 2 | 1 (from 3 − x, since 1:!x:2 is closed at 2) | 1 | 1/2 | jump |
+
+Each limit is the rule of the neighbouring piece evaluated at the breakpoint, enclosed as an interval. A jump is proven when the left and right enclosures are disjoint; continuity is proven when all three are exact and equal; `edge` marks a break with a piece on only one side. When the enclosures overlap without being equal (a limit like sin(π)/π that is 0 but is only known to lie in a tiny interval) the kind is `unproven`, never a guess.
+
+### How the integer variable is solved
+
+For a chain such as `2n : x :! 2n+1` the bounds are affine in n, so each inequality is a bound on n: 2n ≤ x gives n ≤ x/2, and x < 2n + 1 gives n > (x − 1)/2. The library takes the floor and ceiling of those rational bounds and checks the integers between them, so it never searches. `breakpoints(a, b)` works the same way in reverse: it lists the integers n whose bounds 2n and 2n + 1 fall in [a, b], which is how ranges, integrals and zeros know where to split.
+
+Exact answers follow. The sawtooth `x - n if n:x:!n+1` has integral 1/2 + 1/2 + 1/8 = 9/8 from 0 to 5/2, and the library returns the point interval 9/8. The square wave above has integral 1 − 1 + 1 − 1/2 = 1/2 from 0 to 7/2, also exactly.
+
+### Questions piece by piece
+
+Values, ranges, integrals, zeros, extrema and inflections are answered on each open piece with that piece's rule, then combined. A sign change across a jump is not a zero. The zero finder only looks inside pieces and at points where the value is exactly 0.
+
+```js
+const g = fn("x^2 - 2 if _:x:!1; x - 1/2 otherwise");
+g.zeros([-3, 3]).exact();
+// one record: sign-change in [−1970/1393, −1393/985], unique: the zero −√2.
+// x − 1/2 is never 0 on x ≥ 1, and the drop from −1 to 1/2 at x = 1 is a jump, not a zero.
+```
+
+The range of a piecewise function is the hull of the ranges of its pieces and of the values at its breakpoints. A piece that is open at a breakpoint contributes its limit there to the outer bound, so the range of the sawtooth on [0, 3] comes back as [0, 1]: a true enclosure, even though the value 1 is approached and never taken.
+
+### Try it
+
+```js
+const f = fn("x^2 if _:x:1; 3 - x if 1:!x:2; 1/2 otherwise");
+for (const x of ["0", "1", "3/2", "5/2"]) PRINT(`f(${x}) =`, f.value(x).exact());
+PRINT("breaks:", f.breaks([-1, 3]).exact());
+const g = fn("x^2 - 2 if _:x:!1; x - 1/2 otherwise");
+PRINT("zeros of g:", g.zeros([-3, 3]).exact());
+const wave = piecewise([["2n:x:!2n+1", "1"], ["2n+1:x:!2n+2", "-1"]]);
+[0, "1/2", 1, "3/2", "7/2"].map((x) => wave.value(x).exact())
+```
+
+---
+
+Page: https://ratmath.com/analytic/odes.html
+
+Topic
+
+## Differential equations
+
+An ordinary differential equation y′ = F(t, y) with a starting value y(t₀) = y₀ usually has no formula for its solution. A numerical method such as Runge–Kutta gives good approximations, but with no statement of how good. A validated solver gives an enclosure: a tube of functions that provably contains the true solution on the whole time span.
+
+### The fixed-point idea
+
+Integrating both sides turns the equation into a fixed-point problem. The solution is the function y with
+
+y=Φ(y),Φ(y)(t)=y0​+∫t0​t​F(s,y(s))ds.
+Picard iteration applies Φ repeatedly, starting from the constant y₀. Each application adds one correct Taylor coefficient. That gives the polynomial part of the enclosure. The proof comes from looking for a set that Φ maps into itself.
+
+### One validated step
+
+On a step [t₀, t₀ + h]:
+
+- Iterate Φ on polynomials, n times for order n, to get P ≈ y on the step.
+
+- Guess a remainder interval I and evaluate Φ(P + I) in Taylor-model arithmetic. If the result lies inside P + I, Φ maps the set of functions within I of P into itself. That set is convex and Φ is compact there, so by Schauder's fixed-point theorem it holds a fixed point, which is a solution; for the smooth right-hand sides here the solution is unique, so the true solution stays within I of P on the whole step.
+
+- If the inclusion fails, widen I a few times; if it still fails, halve h and start the step again.
+
+- Once it holds, apply Φ again: the image is a tighter enclosure, often by a lot.
+
+The step ends with an enclosure of y(t₀ + h), which is the starting set for the next step.
+
+```js
+import { ode } from "@ratmath/analytic";
+
+const sol = ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2", order: 10 });
+sol.quick.value;       // { t, y }: an RK4 preview on 200 steps
+const S = sol.exact(); // an ODESolution
+S.final;               // RationalInterval enclosing y(1/2)
+S.at("1/4");           // enclosure at any t in the span
+S.steps;               // [{ t0, t1, models }]: one Taylor model per step
+S.describe();
+```
+
+### Step sizes
+
+A long step needs fewer steps but a larger remainder; a short one is tighter but costs more. The solver measures how much width each step adds beyond the width it inherited. It halves h while halving still reduces that excess, doubles h after a success (up to the first step size), and gives up on a span only when h falls below `minStep`. A solution that blows up, such as y′ = y² from y(0) = 1 near t = 1, ends with `complete: false` and a reason, never with a wrong enclosure.
+
+### Uncertain starting values
+
+The starting value can be an interval. Then the enclosure contains every solution that starts in it. For y′ = y the solutions are y₀·eᵗ, so the true set of solutions grows in width by exactly eᵗ. The enclosure grows faster than that, because each step treats its starting interval as a fresh interval and loses the fact that all its points move together. The answer is still a proof; it is just looser than it could be. Keeping the dependence on y₀ as an extra variable of the Taylor models would fix this, and is on the list of things not built yet.
+
+### Systems and the wrapping effect
+
+A system has one equation per component, and the enclosure is a box: one interval per component. Give the right-hand sides as a list and name the variables:
+
+```js
+ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 3 });     // x″ = −x
+ode.solve({ f: ["y2", "-y1 + mu*(1 - y1^2)*y2"], y0: [2, 0], until: 1, params: { mu: 1 } });
+```
+
+Boxes have a weakness. A rotating flow turns each box, and the smallest box around a turned box is larger than the box was. Each step inherits that larger box, so over long spans the enclosure grows even when the true set of solutions does not. This is the wrapping effect, first described by Moore. The solver counters it by also following how the solution depends on its starting value (the variational equation) and carrying the uncertainty in coordinates that turn with the flow, so the box is not redrawn at every step. For the oscillator this ends near 10⁻¹⁴ wide at t = 3. Pass `track: false` to switch it off: steps are then 2 to 5 times faster and the box grows as described. `until` may also be less than `t0`, which integrates backward in time.
+
+### Try it
+
+```js
+const sol = ode.solve({ f: "y^2 + t", y0: "1/2", until: "1/2", order: 10 });
+const S = sol.exact();
+PRINT("y(1/2) is in", S.final);
+PRINT("y(1/4) is in", S.at("1/4"));
+PRINT("steps:", S.steps.length);
+// a system: x″ = −x, so x = cos t
+const osc = ode.solve({ f: ["v", "-x"], vars: ["x", "v"], y0: [1, 0], until: 1 }).exact();
+PRINT("x(1), v(1) =", osc.final, "  cos 1 ≈", Math.cos(1));
+S.describe()
+```
+
+---
+
+Page: https://ratmath.com/analytic/bvp.html
+
+Topic
+
+## Boundary value problems
+
+An initial value problem fixes y and y′ at one end. A boundary value problem fixes one condition at each end of an interval, and asks for the solution in between:
+
+```js
+// y″ = −y, y(0) = 0, y(1) = 1
+const s = bvp({ f: "-y", interval: [0, 1], left: { y: 0 }, right: { y: 1 } }).exact();
+s.start;       // the slope y′(0), enclosed: 1/sin(1)
+s.at("1/2");   // y(1/2), enclosed
+s.unique;      // true: the equation is linear
+```
+
+`f` is the formula for y″ in `x`, `y` and `dy` (rename them with `time` and `vars`). Each condition is `{ y: value }` or `{ dy: value }`.
+
+### Shooting, with proof
+
+One value at the left end is not given: the slope, when y(a) is. Call it s. For each s the initial value problem has a solution, and the right-hand condition is missed by some amount g(s). The preview finds a root of g in Float64, by the secant method on RK4 solves. The exact stage then:
+
+- takes a small bracket [s₋, s₊] around that root;
+
+- solves the initial value problem from s₋ and from s₊ with the validated solver (see Differential equations), and checks that the enclosures of g(s₋) and g(s₊) have opposite signs;
+
+- solves once more from the whole bracket. If that solve reaches b, every solution starting in the bracket exists up to b, so g is continuous on the bracket.
+
+By the intermediate value theorem, g has a root in the bracket: a solution of the boundary value problem exists, its left-end value lies in `start`, and the tube from step 3 encloses it at every x. If a bracket fails, a wider one is tried.
+
+### What is and is not claimed
+
+For a linear equation g is a straight line, so the root is the only one and `unique` is true. For a nonlinear equation there may be other solutions with other slopes; the result is one solution, proven to exist, near the one the preview found. A different `guess` for the unknown value can lead to another. If the Float64 shooting does not converge, there is nothing to certify and the call refuses.
+
+The cost is three validated solves. Linear problems take a fraction of a second. Nonlinear ones are slow over long intervals, because the validated solver is: the pendulum y″ = −sin y on [0, 1] takes about half a minute. Run them in a Worker and show the preview meanwhile.
+
+### Try it
+
+```js
+const r = bvp({ f: "y + x", interval: [0, 1], left: { dy: 0 }, right: { y: 1 } });
+PRINT("preview of y(0):", r.quick.value.start);
+const s = r.exactStage();
+PRINT(s.via);
+PRINT("y(0) lies in", s.value.start);
+PRINT("y(1/2) lies in", s.value.at("1/2"));
+s.value.slopeAt(1)
+```
+
+---
+
+Page: https://ratmath.com/analytic/methods.html
+
+Topic
+
+## First-order equations: the methods
+
+The [validated solver](https://ratmath.com/analytic/odes.html) answers "what is y(2)?" with a proof and no formula. A course asks for the formula and for the method that finds it. `firstOrder` recognises the standard types of equation y′=f(x,y), carries out the method, and reports every step. `exactEquation` does the same for Mdx+Ndy=0.
+
+```js
+const s = firstOrder("x - 2*y");          // y' = x - 2y
+s.type;       // "linear"
+s.general;    // "y = 1/2*x - 1/4 + C*exp(-2*x)"
+s.steps;      // [{ what, formula }, …]
+
+const p = s.through(0, 1);                // the solution with y(0) = 1
+p.solution;   // "1/2*x - 1/4 + 5/4*exp(-2*x)"
+p.check(1);   // { agree: true, numeric: […], formula: […] }
+```
+
+### A formula that has been checked
+
+Every closed form here can be compared with the validated numerical solution. `check(x1)` solves the initial value problem to x1​ with proven error bounds and evaluates the formula there with proven error bounds; the two enclosures of y(x1​) must meet. For a solution given only as a relation G(x,y)=C, the relation is evaluated on the numerical enclosure and must contain the constant. A wrong formula fails this test, so a mistake in the algebra cannot pass unnoticed. A check takes from a fraction of a second to some seconds, depending on the equation.
+
+### The types
+
+| type | form | method |
+
+| linear | y′=a(x)+b(x)y | multiply by μ=e−∫bdx; then (μy)′=μa |
+
+| separable | y′=g(x)h(y) | ∫dy/h(y)=∫g(x)dx+C |
+
+| Bernoulli | y′=p(x)y+q(x)yn | v=y1−n makes it linear |
+
+| homogeneous | y′=F(y/x) | y=vx makes it separable: xv′=F(v)−v |
+
+| exact | Mdx+Ndy=0 with My​=Nx​ | find φ with φx​=M, φy​=N; solutions are φ=C |
+
+An equation can be of several types: y′=xy is linear and separable. `types` lists all that apply and `type` is the one used; pass `{ method }` to choose. A linear equation is solved as linear because that gives y outright. A separable equation gives a relation between x and y, reported as `implicit`, and where the relation is easily solved (a logarithm, a reciprocal, an arctangent) also as `general`.
+
+Dividing by h(y) loses the constant solutions y=y0​ with h(y0​)=0. They are listed in `singular`.
+
+### Why the integrating factor works
+
+For y′−by=a, multiply by μ(x). The left side becomes μy′−μby, which is the derivative of the product μy exactly when μ′=−μb, that is μ=e−∫b. Then (μy)′=μa is solved by one integration:
+
+y=μ1​(∫μadx+C).
+
+### Exact equations
+
+If φ(x,y) is constant along a solution then φx​dx+φy​dy=0. So Mdx+Ndy=0 is solved at once if M=φx​ and N=φy​ for some φ, and since mixed partials agree that requires My​=Nx​. When the test fails, a factor μ may repair it: if (My​−Nx​)/N depends on x alone then μ(x)=e∫(My​−Nx​)/Ndx works, and likewise with the roles exchanged. `exactEquation` tries both.
+
+```js
+const e = exactEquation("3*x*y + y^2", "x^2 + x*y");
+e.exact;       // false
+e.factor;      // "x"
+e.potential;   // "y*x^3 + 1/2*y^2*x^2"     solutions: that = C
+```
+
+### The integrals
+
+The methods need antiderivatives. `antiderivative(tree, name)` covers polynomials, rational functions by partial fractions, exponentials and sines of linear arguments with polynomial factors, and one level of substitution; it returns nothing unless differentiating its answer gives the integrand back. When an integral is not found, `type` is `null` and the validated solver is still there. The fuller engine is in the symbolic package.
+
+| call | returns |
+
+| firstOrder(rhs, { x = "x", y = "y", method }) | { equation, type, types, steps, general, implicit, singular, through } |
+
+| exactEquation(M, N, { x, y }) | the same, with { exact, factor, potential } |
+
+| s.through(x0, y0) | { constant, solution, relation, at(x), check(x1) } |
+
+| antiderivative(tree, name) | { tree, trust: "proven" \| "checked" } or null |
+
+### Try it
+
+```js
+// Four equations, four methods; each formula checked against the validated solution.
+const show = (s) => {
+  PRINT(`${s.equation}    [${s.type}; also fits: ${s.types.filter((t) => t !== s.type).join(", ") || "none"}]`);
+  for (const step of s.steps) PRINT(`    ${step.what}:  ${step.formula}`);
+};
+
+const linear = firstOrder("x - 2*y");
+show(linear);
+const p = linear.through(0, 1);
+const c = p.check(1);
+PRINT(`  through (0, 1): y = ${p.solution}`);
+PRINT(`  at x = 1 the formula gives ${c.formula.low.toDecimal(12)}, the validated solver [${c.numeric.low.toDecimal(9)}, ${c.numeric.high.toDecimal(9)}]: agree ${c.agree}`);
+
+const logistic = firstOrder("y*(1 - y)");
+show(logistic);
+PRINT("  through (0, 1/10): y =", logistic.through(0, "1/10").solution, "  constant solutions:", logistic.singular.join(", "));
+
+show(firstOrder("x*y^2", { method: "separable" }));
+
+const exact = exactEquation("2*x*y + 1", "x^2 + 3*y^2");
+show(exact);
+exact.through(0, 1).relation;
+```
+
+---
+
+Page: https://ratmath.com/analytic/linearodes.html
+
+Topic
+
+## Linear equations and Laplace transforms
+
+`linearODE` solves an​y(n)+⋯+a1​y′+a0​y=g(x) with rational coefficients: the characteristic roots, the solutions of the homogeneous equation, a particular solution by undetermined coefficients or variation of parameters, and the constants from initial values. `laplace` and `inverseLaplace` are the transform route to the same answers.
+
+```js
+const s = linearODE([1, -3, 2], "exp(x)");     // y'' - 3y' + 2y = e^x
+s.characteristic;   // "r^2 - 3*r + 2 = 0"
+s.roots;            // [{ root: "1", … }, { root: "2", … }]
+s.basis;            // ["exp(x)", "exp(2*x)"]
+s.particular;       // "-(x*exp(x))"      resonance: e^x already solves the homogeneous equation
+s.general;          // "y = C1*exp(x) + C2*exp(2*x) - x*exp(x)"
+
+const i = s.initial([1, 0]);                   // y(0) = 1, y'(0) = 0
+i.solution;         // "y = -(x*exp(x)) + exp(x)"
+i.check(1);         // against the validated numerical solution
+```
+
+### The characteristic equation
+
+Trying y=erx in the homogeneous equation gives an​rn+⋯+a0​=0. Each root contributes solutions:
+
+| root | solutions |
+
+| real r, once | erx |
+
+| real r, m times | erx, xerx, …, xm−1erx |
+
+| α±βi | eαxcosβx, eαxsinβx (times powers of x if repeated) |
+
+Roots are found exactly: rational roots with their multiplicities, then quadratic factors, whose roots are written with square roots. A polynomial with an irreducible factor of degree three or more has roots that square roots do not reach, and `linearODE` refuses and points to the numerical solver.
+
+### Undetermined coefficients
+
+When g is a sum of terms xkeaxcoswx or xkeaxsinwx, a particular solution has the same shape with unknown coefficients. If a+wi is a characteristic root s times, the trial solution is multiplied by xs: this is resonance, and it is why y′′+4y=cos2x has the growing solution 41​xsin2x.
+
+The coefficients are found without guessing. On the space spanned by xjeaxcoswx and xjeaxsinwx, differentiation is a matrix, so the whole operator is a matrix, and the coefficients solve a linear system with exact rational arithmetic. `verified` reports that substituting the result back leaves exactly zero.
+
+### Variation of parameters
+
+For other right-hand sides of a second-order equation, with homogeneous solutions y1​,y2​ and Wronskian W=y1​y2′​−y2​y1′​,
+
+yp​=−y1​∫a2​Wy2​g​dx+y2​∫a2​Wy1​g​dx.
+It is used when the integrals are found; `method` says which route was taken.
+
+### Laplace transforms
+
+The transform F(s)=∫0∞​e−stf(t)dt turns differentiation into multiplication, L{y′}=sY−y(0), so a linear equation with initial values becomes algebra. The inverse is found by partial fractions.
+
+```js
+laplace("t^2*exp(-t)");              // "2/(s + 1)^3"
+laplace("t*sin(3*t)");               // "6*s/(s^2 + 9)^2"
+laplace("t", { delay: 2 });          // "exp(-2*s)/s^2"   for u(t - 2)·(t - 2)
+
+inverseLaplace("1/(s^2*(s + 1))");
+// { partialFractions: "-(1/s) + 1/s^2 + 1/(s + 1)", result: "-1 + t + exp(-t)" }
+```
+
+| f(t) | F(s) |
+
+| tkeat | k!/(s−a)k+1 |
+
+| eatcoswt | (s−a)/((s−a)2+w2) |
+
+| eatsinwt | w/((s−a)2+w2) |
+
+| u(t−c)f(t−c) | e−csF(s) |
+
+`laplace` transforms sums of terms tkeatcoswt and tkeatsinwt. `inverseLaplace` inverts rational functions whose denominators split over the rationals into linear factors (to any power) and single quadratic factors. Forcing that switches on at a time, written `heaviside(t - c)`, and impulses, written `dirac(t - c)`, are on the page [Steps and impulses](https://ratmath.com/analytic/switches.html), together with `laplaceSolve`.
+
+| call | returns |
+
+| linearODE(coefficients, forcing = 0, { x, y }) | { characteristic, roots, basis, homogeneous, particular, method, verified, steps, general, initial } |
+
+| s.initial(values, x0 = 0) | { constants, solution, at(x), check(x1) } |
+
+| laplace(f, { t, s, delay }) | a formula in s |
+
+| inverseLaplace(F, { s, t }) | { partialFractions, result } |
+
+| partialFractions(N, D) | { poly, linear, quadratic } for polynomials given as coefficient arrays |
+
+### Try it
+
+```js
+// A driven oscillator at resonance: y'' + 4y = cos(2x), starting at rest.
+const s = linearODE([1, 0, 4], "cos(2*x)");
+for (const step of s.steps) PRINT(`${step.what}:  ${step.formula}`);
+PRINT("general:", s.general);
+const start = s.initial([0, 0]);
+PRINT("from rest:", start.solution);
+const c = start.check(3);
+PRINT(`y(3): formula ${c.formula.low.toDecimal(10)}, validated solver [${c.numeric.low.toDecimal(8)}, ${c.numeric.high.toDecimal(8)}], agree: ${c.agree}`);
+
+// The same initial value problem by Laplace transform: (s^2 + 4)·Y = s/(s^2 + 4).
+PRINT("L{cos 2t} =", laplace("cos(2*t)"));
+PRINT("L{t sin 2t / 4} =", laplace("t*sin(2*t)/4"), " which is s/(s^2 + 4)^2, the transform of the solution");
+
+// A damped equation with a repeated root and a polynomial right-hand side.
+const d = linearODE([1, 2, 1], "x^2");
+PRINT(d.general);
+inverseLaplace("(s + 3)/(s^2 + 2*s + 5)").result;
+```
+
+---
+
+Page: https://ratmath.com/analytic/switches.html
+
+Topic
+
+## Steps and impulses
+
+Forces that switch on at a time, or strike at an instant, are where the Laplace transform is at its best. A factor `heaviside(t - c)` switches a term on at time c. `dirac(t - c)` is a unit impulse at c. `laplaceSolve` solves a linear equation with such forcing by transform, and then proves the answer piece by piece.
+
+```js
+laplace("heaviside(t - 2)");            // "exp(-2*s)/s"
+laplace("heaviside(t - 1)*t");          // "exp(-s)*(1/s + 1/s^2)"
+laplace("heaviside(t - 1)*sin(t)");     // "exp(-s)*(sin(1)*(s/(s^2 + 1)) + cos(1)*(1/(s^2 + 1)))"
+laplace("t*dirac(t - 2)");              // "exp(-2*s)*2"
+
+inverseLaplace("exp(-2*s)/s^2").result;      // "heaviside(t - 2)*(t - 2)"
+inverseLaplace("exp(-3*s)").result;          // "dirac(t - 3)"
+
+const r = laplaceSolve([1, 0, 1], "heaviside(t - 1)", [0, 0]);   // y'' + y = u(t − 1), at rest
+r.solution;    // "heaviside(t - 1)*(-cos(t - 1) + 1)"
+r.pieces;      // [{ from: "0", y: "0" }, { from: "1", y: "-cos(t - 1) + 1" }]
+r.verified;    // true
+```
+
+### The shift theorems
+
+Write u(t−c) for the unit step that is 0 before c and 1 after, with c≥0. Then
+
+L{u(t−c)g(t)}=e−csL{g(t+c)},L{δ(t−c)g(t)}=e−csg(c).
+For the first, substitute τ=t−c in ∫c∞​e−stg(t)dt. For a term g=tkeatcoswt, the shifted g(t+c) is expanded exactly: (t+c)k by the binomial theorem, and cos(wt+wc) by the addition formula. That leaves constants such as eac, coswc and sinwc, which stay as exact formulas. The second is the defining property of the impulse: ∫0∞​e−stδ(t−c)g(t)dt=e−csg(c).
+
+Going back, `inverseLaplace` groups the terms of F(s) by their factor e−cs, inverts each group by partial fractions, and shifts: e−csR(s)↦u(t−c)r(t−c). A constant left over after the partial fractions is an impulse: e−cs↦δ(t−c). A polynomial of higher degree would need derivatives of the impulse, and is refused.
+
+### Solving with switched forcing
+
+For an​y(n)+⋯+a0​y=g(t) with y(0),…,y(n−1)(0) given, transforming gives
+
+p(s)Y(s)=G(s)+j=1∑n​aj​i<j∑​sj−1−iy(i)(0),p(s)=an​sn+⋯+a0​,
+and Y=(…)/p(s) is inverted group by group. `steps` records each stage.
+
+```js
+const kick = laplaceSolve([1, 2, 5], "dirac(t - 2)", [1, 0]);   // a damped spring, struck at t = 2
+kick.solution;
+// "cos(2*t)*exp(-t) + 1/2*sin(2*t)*exp(-t) + heaviside(t - 2)*(1/2*sin(2*t - 4)*exp(-t + 2))"
+
+const pulse = laplaceSolve([1, 3, 2], "heaviside(t - 1) - heaviside(t - 3)", [0, 0]);   // on from 1 to 3
+pulse.pieces.map((p) => p.from);   // ["0", "1", "3"]
+```
+
+### Why the answer is proved, not just computed
+
+Between switching times the forcing is an ordinary formula, and so is the solution. `laplaceSolve` checks, by exact symbolic differentiation:
+
+- On each interval, the piece satisfies the equation identically.
+
+- The first piece has the given initial values.
+
+- At each switching time c, the pieces join with y,y′,…,y(n−2) continuous. At an impulse wδ(t−c), y(n−1) jumps by exactly w/an​; everywhere else it is continuous too.
+
+That is exactly the meaning of a solution with step and impulse forcing. The uniqueness theorem for linear equations then says it is the solution, so `verified: true` is a proof.
+
+| call | returns |
+
+| laplace(f, { t, s, delay }) | a formula in s; f may contain heaviside(t - c) factors and dirac(t - c) |
+
+| inverseLaplace(F, { s, t }) | { partialFractions, result } for sums of e−cs times rational functions |
+
+| laplaceSolve(coefficients, forcing, initial, { t, s }) | { transform, partialFractions, solution, pieces, verified, steps, at(time) } |
+
+`heaviside` and `dirac` are understood by these transform tools only. To evaluate or plot a switched solution, take its pieces.
+
+### Try it
+
+```js
+// A spring at rest is pushed by a constant force from t = 1 to t = 3, then struck at t = 5.
+const r = laplaceSolve([1, 0, 4], "heaviside(t - 1) - heaviside(t - 3) + dirac(t - 5)", [0, 0]);
+for (const step of r.steps) PRINT(`${step.what}${step.value ? ":  " + step.value : ""}`);
+for (const p of r.pieces) PRINT(`for t > ${p.from}:  y = ${p.y}`);
+PRINT("y(2) =", r.at(2));
+// The transform of the pushing force, and back again.
+const F = laplace("heaviside(t - 1) - heaviside(t - 3)");
+PRINT("L{u(t-1) - u(t-3)} =", F);
+inverseLaplace(F).result
+```
+
+---
+
+Page: https://ratmath.com/analytic/systems.html
+
+Topic
+
+## Systems in the plane
+
+`linearSystem` solves x′=Ax exactly: for a 2 by 2 matrix it names the kind of equilibrium, and for larger matrices it gives eAt and the stability. `planarSystem` takes a nonlinear system, finds every equilibrium in a box with proof, and classifies each from its linearisation.
+
+```js
+const s = linearSystem([[1, 2], [3, 2]]);
+s.eigenvalues;      // ["-1", "4"]
+s.kind;             // "saddle"
+s.exponential;      // e^{At} as four formulas in t
+s.solution([1, 0]); // ["2/5*exp(4*t) + 3/5*exp(-t)", "3/5*exp(4*t) - 3/5*exp(-t)"]
+
+const pendulum = planarSystem(["y", "-sin(x) - y/2"], ["x", "y"]);
+pendulum.equilibria({ x: [-4, 4], y: [-2, 2] });
+// three records: saddle at (-π, 0), stable spiral at (0, 0), saddle at (π, 0)
+```
+
+### Linear systems
+
+With τ=trA and Δ=detA, the eigenvalues are λ=21​(τ±τ2−4Δ​), and the origin is
+
+| condition | kind |
+
+| Δ | saddle: real eigenvalues of opposite signs |
+
+| Δ>0, τ2>4Δ | node: stable if τ, unstable if τ>0 |
+
+| Δ>0, τ20 |
+
+| Δ>0, τ=0 | centre: closed orbits |
+
+| Δ>0, τ2=4Δ | degenerate node, or a star when A is a multiple of the identity |
+
+| Δ=0 | a line of equilibria |
+
+The entries are rational, so the signs of τ, Δ and τ2−4Δ are decided exactly and the borderline cases are recognised for what they are.
+
+The solution is x(t)=eAtx(0). For a 2 by 2 matrix, with μ=τ/2 and δ=μ2−Δ,
+
+eAt=eμt(c(t)I+s(t)(A−μI)),(c,s)=⎩⎨⎧​(coshωt, sinh(ωt)/ω)(1, t)(cosωt, sin(ωt)/ω)​δ=ω2>0δ=0δ=−ω2<0,​
+which follows from (A−μI)2=δI (Cayley-Hamilton).
+
+### Larger systems
+
+For an n by n matrix, eAt is the inverse Laplace transform of (sI−A)−1, because L{eAt}=(sI−A)−1. The Faddeev–LeVerrier recursion gives this inverse with exact rational coefficients: with M1​=I,
+
+Mk​=AMk−1​+cn−k+1​I,cn−k​=−k1​tr(AMk​),(sI−A)−1=p(s)∑k=1n​Mk​sn−k​,
+where p(s)=sn+cn−1​sn−1+⋯+c0​ is the characteristic polynomial. Each entry is then inverted by partial fractions. This works when p splits over the rationals into linear factors and quadratics. The result is checked: dtd​eAt=AeAt identically and eA⋅0=I, and `verified` reports it.
+
+```js
+const s3 = linearSystem([[0, 1, 0], [0, 0, 1], [-6, -11, -6]]);
+s3.characteristic;   // "s^3 + 6*s^2 + 11*s + 6 = 0"
+s3.eigenvalues;      // ["-1", "-2", "-3"]
+s3.stability;        // "asymptotically stable"
+s3.solution([1, 0, 0])[0];   // "3*exp(-t) - 3*exp(-2*t) + exp(-3*t)"
+linearSystem([[0, 1, 0], [0, 0, 1], [0, 0, 0]]).exponential[0];   // ["1", "t", "1/2*t^2"]
+```
+
+Stability is read from the real parts of the eigenvalues, whose signs are decided exactly. If every real part is negative, the system is asymptotically stable; if any is positive, it is unstable. Eigenvalues on the imaginary axis give stability that is not asymptotic, if each is semisimple, which is checked exactly by a rank. Otherwise the system is unstable: a repeated zero eigenvalue with a Jordan block makes eAt grow like a power of t. For other matrices, use the matrix exponential in the linear algebra package.
+
+### Nonlinear systems
+
+An equilibrium of x′=f(x,y), y′=g(x,y) is a common zero of f and g. `equilibria(box)` bisects the box, discards pieces where interval arithmetic shows f or g has no zero, and applies a Krawczyk test to the rest: when the test succeeds there is exactly one equilibrium in that piece. The returned list has `complete: true` when every part of the box was either proven empty or proven to hold exactly one equilibrium.
+
+Near an equilibrium the system looks like its linearisation, x′=Jx with J the Jacobian matrix there. If no eigenvalue of J has zero real part (the equilibrium is hyperbolic), the nonlinear system has the same kind of equilibrium with the same stability (Hartman-Grobman). The trace and determinant of J are enclosed over the small box that holds the equilibrium, so a reported saddle, node or spiral is proven. When the linear part is a centre, the nonlinear terms decide, and the record says so.
+
+Two tools settle such cases. `conserves(H)` checks that Hx​f+Hy​g is identically zero: a conserved quantity with a strict extremum at the equilibrium makes it a centre. `along(V)` gives V˙=Vx​f+Vy​g for a candidate Lyapunov function.
+
+| call | returns |
+
+| linearSystem([[a, b], [c, d]]) | { trace, determinant, discriminant, eigenvalues, eigenvectors, kind, stability, exponential, solution(x0) } |
+
+| linearSystem(A), A n by n | { characteristic, eigenvalues, stability, exponential, verified, solution(x0) } |
+
+| planarSystem([f, g], [x, y], { params }) | PlanarSystem |
+
+| s.jacobian(), s.nullclines() | formulas |
+
+| s.equilibria({ x: [a, b], y: [c, d] }) | records { point, unique, jacobian, trace, determinant, kind, stability, hyperbolic }, with complete on the list |
+
+| s.conserves(H), s.along(V) | boolean, formula |
+
+| s.orbit({ from, until }) | a Refinement like ode.solve |
+
+### Try it
+
+```js
+// Linear systems across the trace-determinant plane.
+for (const A of [[[1, 2], [3, 2]], [[-2, 1], [1, -2]], [[-1, -2], [2, -1]], [[0, 1], [-1, 0]], [[-1, 1], [0, -1]]]) {
+  const s = linearSystem(A);
+  PRINT(`${JSON.stringify(A)}: eigenvalues ${s.eigenvalues.join(" and ")} -> ${s.kind}`);
+}
+PRINT("rotation:", JSON.stringify(linearSystem([[0, 1], [-1, 0]]).exponential));
+const big = linearSystem([[0, 1, 0], [-1, 0, 0], [0, 0, -2]]);
+PRINT("3 by 3:", big.eigenvalues.join(", "), "->", big.stability, "; verified", big.verified);
+
+// Competing species: every equilibrium in the box, proven and classified.
+const species = planarSystem(["x*(3 - x - 2*y)", "y*(2 - x - y)"], ["x", "y"]);
+const eq = species.equilibria({ x: [-1, 4], y: [-1, 4] });
+PRINT("searched the whole box:", eq.complete);
+for (const e of eq) PRINT(`  (${e.point.map((c) => c.low.toDecimal(4)).join(", ")}): ${e.kind}`);
+
+// Predator and prey: the linear part at (1, 1) is a centre, and a conserved quantity shows the orbits close.
+const lv = planarSystem(["x*(1 - y)", "y*(x - 1)"], ["x", "y"]);
+lv.conserves("x - log(x) + y - log(y)");
+```
+
+---
+
+Page: https://ratmath.com/analytic/seriessolutions.html
+
+Topic
+
+## Series solutions
+
+Many equations of physics have no solution in elementary functions: Airy's, Bessel's, Legendre's. Their solutions are defined by power series. `seriesSolution` builds those series for y′′+p(x)y′+q(x)y=0 about a point, with exact rational coefficients, and says what kind of point it is.
+
+```js
+seriesSolution({ q: "-x", order: 7 });            // Airy: y'' = x y
+// kind "ordinary", solutions "1 + 1/6*x^3 + 1/180*x^6 + …" and "x + 1/12*x^4 + 1/504*x^7 + …"
+
+seriesSolution({ p: "1/x", q: "(x^2 - 1/4)/x^2" });   // Bessel of order 1/2
+// kind "regular singular", indicial "r^2 - 1/4 = 0", exponents [1/2, -1/2], two series
+```
+
+### Ordinary points
+
+If p and q are analytic at x0​, every solution is a power series ∑an​(x−x0​)n there, and it converges at least as far as the nearest singularity of p or q in the complex plane. Substituting the series and matching powers gives a recurrence that determines every an​ from a0​ and a1​:
+
+(n+2)(n+1)an+2​=−k=0∑n​(pk​(n−k+1)an−k+1​+qk​an−k​).
+The two solutions returned are the ones with (y,y′)(x0​)=(1,0) and (0,1). `radius` estimates the distance to the nearest singularity.
+
+### Regular singular points and Frobenius
+
+If p has at most a simple pole and q at most a double pole at x0​, the point is a regular singular point. Write xp(x)=∑Pk​xk and x2q(x)=∑Qk​xk (taking x0​=0). Frobenius' method looks for y=xr∑an​xn; the lowest power gives the indicial equation
+
+r(r−1)+P0​r+Q0​=0,
+and for each root r the recurrence
+
+[(n+r)(n+r−1)+P0​(n+r)+Q0​]an​=−k=1∑n​(Pk​(n−k+r)+Qk​)an−k​.
+The larger root always gives a series. The smaller root gives a second one unless the roots are equal or differ by a whole number, in which case the bracket on the left can vanish for some n; then the second solution contains logx, and `notes` says so. (When the right side happens to vanish too, the series exists after all, as for Bessel's equation of order one half.)
+
+A point where the poles are worse is an irregular singular point, and the method does not apply.
+
+### A proven remainder
+
+A truncated series is only useful with a bound on what was cut off. Each solution y=(x−x0​)rg(x), g=∑an​(x−x0​)n, carries one: `remainder(ρ)` returns a rational B with
+
+​g(x)−n≤N∑​an​(x−x0​)n​≤Bfor all complex x with ∣x−x0​∣≤ρ,
+for any ρ below `provenRadius`. `enclose(x)` evaluates the partial sum at a rational point and puts that bound on either side.
+
+```js
+const cos = seriesSolution({ q: "1", order: 12 }).solutions[0];   // y'' + y = 0, y(0) = 1, y'(0) = 0
+cos.remainder(1).bound;        // 447/1000000000000: the terms beyond x^12 are below 4.47e-10 on the unit disc
+const e = cos.enclose("1/2");  // { partial, bound, low, high }
+e.low.toDecimal(15), e.high.toDecimal(15);   // both 0.877582561890372…: cos(1/2) to 13 places, proven
+```
+
+The proof is the classical convergence argument made quantitative. Take x0​=0. First, a radius: the reciprocals of the roots of the denominators of p and q are bounded by root squaring (Graeffe) and Fujiwara's bound, in exact arithmetic, giving R with no singular point in 0; that is `provenRadius`, within about one percent of the true distance. Second, for a radius s, numbers MP​,MQ​ with ∣Pk​∣≤MP​/sk and ∣Qk​∣≤MQ​/sk for all k≥1: the first hundred or so coefficients are used exactly and the rest are bounded by a majorant of the form (1−x/R)−m. Third, the recurrence. With bn​=∣an​∣sn and cj​=MP​(∣r∣+j)+MQ​ it gives
+
+n(n+δ)bn​≤Sn​:=j<n∑​cj​bj​,Sn+1​≤Sn​(1+εn​),εn​=n(n+δ)cn​​,
+where δ=2r−1+P0​, because the bracket in the recurrence equals n(n+δ). SN+1​ is known exactly from the coefficients already computed, and εn​ decreases to 0. So for ∣x∣≤ρ the tail ∑n>N​bn​(ρ/s)n is at most a few explicit terms plus a geometric series, once (1+εn​)ρ/s<1. Several values of s are tried and the smallest bound kept. Every step is rational arithmetic rounded upward.
+
+The bound covers the series g; the factor (x−x0​)r is explicit. Near the edge of the disc a bound still exists but is weak, as it must be: the series itself converges slowly there.
+
+### Checking a series
+
+The coefficients are exact, and a partial sum is a polynomial whose value at a rational point is an exact rational. Comparing it with the validated solution of the same initial value problem shows the true truncation error next to the proven bound, as in the box below.
+
+| call | returns |
+
+| seriesSolution({ p, q, about = 0, order = 8, x = "x" }) | { about, kind, indicial, exponents, solutions, notes, radius, provenRadius } |
+
+| solutions[i] | { exponent, coefficients, text, remainder, enclose }, coefficients exact |
+
+| solutions[i].remainder(ρ) | { radius, terms, bound, approx, text }: a proven bound for the terms left out, on the disc of radius ρ |
+
+| solutions[i].enclose(x) | { partial, bound, low, high, exponent }: the series factor at a rational x |
+
+### Try it
+
+```js
+// Airy's equation y'' = x·y about 0.
+const airy = seriesSolution({ q: "-x", order: 12 });
+PRINT(airy.kind, "point");
+for (const s of airy.solutions) PRINT("  ", s.text);
+
+// The partial sum at x = 1 against the validated solution of y'' = x·y, y(0) = 1, y'(0) = 0.
+const a = airy.solutions[0].coefficients;
+let partial = new Rational(0);
+for (const c of a) partial = partial.add(c);            // x = 1: just add the coefficients
+const exact = ode.solve({ f: ["v", "x*y"], vars: ["y", "v"], time: "x", y0: [1, 0], until: 1 }).exact().final[0];
+PRINT("partial sum at 1:", partial.toDecimal(12), " validated:", exact.low.toDecimal(12));
+PRINT("truncation error about", exact.low.subtract(partial).toDecimal(10));
+PRINT("proven bound on the unit disc:", airy.solutions[0].remainder(1).text);
+const at1 = airy.solutions[0].enclose(1);
+PRINT("so y(1) lies in [", at1.low.toDecimal(12), ",", at1.high.toDecimal(12), "]");
+
+// Bessel's equation of order 0: equal exponents, so one series and a logarithm.
+const j0 = seriesSolution({ p: "1/x", q: "1", order: 8 });
+PRINT(j0.kind, " indicial:", j0.indicial);
+PRINT("  J0 =", j0.solutions[0].text);
+PRINT("  note:", j0.notes[0]);
+
+// Legendre's equation with n = 2: one solution is a polynomial, and the radius is 1.
+const leg = seriesSolution({ p: "-2*x/(1 - x^2)", q: "6/(1 - x^2)", order: 8 });
+PRINT("Legendre:", leg.solutions[0].text, "  radius", leg.radius.toFixed(3), "  proven radius", leg.provenRadius.toNumber().toFixed(3));
+PRINT("  second solution,", leg.solutions[1].remainder("1/2").text);
+PRINT("  and", leg.solutions[1].remainder("9/10").text);
+seriesSolution({ p: "1/x^2", q: "1" }).kind;
+```
+
+---
+
+Page: https://ratmath.com/analytic/pdes.html
+
+Topic
+
+## Heat, waves and potentials
+
+The three classical partial differential equations, solved by separation of variables with certified Fourier coefficients and a proven bound on the part of the series left out; the wave equation by d'Alembert's formula; and the eigenvalue problems behind separation of variables, by shooting.
+
+```js
+const rod = heat({ k: 1, length: 1, initial: "x*(1 - x)", terms: 6 });
+rod.at("1/2", "1/10");
+// { value: [0.0961618714341, 0.0961618714350], partial: […], tail: 4.9e-22 }
+
+const string = wave({ c: 1, length: 1, position: "sin(pi*x)" });
+string.at("1/4", "1/3");             // exact up to rounding: d'Alembert's formula
+
+const plate = laplaceRectangle({ top: "x*(1 - x)", terms: 8 });
+plate.at("1/2", "3/4");
+```
+
+### The heat equation
+
+For ut​=kuxx​ on 0 with both ends held at 0, try u=X(x)T(t). Then T′/(kT)=X′′/X, a function of t equal to a function of x, so both are a constant −λ. The boundary conditions force X=sin(nπx/L) and λ=(nπ/L)2, and superposing,
+
+u(x,t)=n=1∑∞​bn​e−k(nπ/L)2tsinLnπx​,bn​=L2​∫0L​f(x)sinLnπx​dx.
+The bn​ are the sine coefficients of the initial temperature, which [fourier](https://ratmath.com/analytic/fourier.html) encloses. With insulated ends (`ends: "insulated"`) the series is in cosines and the temperature tends to its mean.
+
+The tail. Since ∣bn​∣≤2sup∣f∣, and e−cn2≤ρn for n>N with ρ=e−c(N+1), c=kπ2t/L2,
+
+​n>N∑​bn​e−cn2sinLnπx​​≤2sup∣f∣⋅1−ρρN+1​.
+So `at(x, t)` returns the partial sum as an enclosure, this bound as `tail`, and their sum `value`, which contains the true temperature. For any t>0 the tail is tiny after a few terms: the heat equation smooths. At t=0 the series is the Fourier series of f, no such bound holds, and `value` is `null`.
+
+### Laplace's equation
+
+On the rectangle 0, 0 with u=f(x) on the top edge and 0 on the others,
+
+u(x,y)=n=1∑∞​bn​sinh(nπb/a)sinh(nπy/a)​sinanπx​,
+and on the disc of radius R with boundary values f(θ),
+
+u(r,θ)=2a0​​+n=1∑∞​(Rr​)n(an​cosnθ+bn​sinnθ).
+Both tails are geometric away from the boundary and are bounded the same way. At the centre of the disc only a0​/2 survives: the value of a harmonic function at the centre of a circle is the mean of its values on the circle. For the disc, a point is given as (r,s) with θ=2πs, so that a rational s names an exact direction.
+
+### The wave equation
+
+Every solution of utt​=c2uxx​ is a wave travelling right plus a wave travelling left. With u(x,0)=f and ut​(x,0)=g, d'Alembert's formula is
+
+u(x,t)=2f(x−ct)+f(x+ct)​+2c1​∫x−ctx+ct​g(s)ds.
+On an interval with fixed ends the same formula holds once f and g are continued as odd functions of period 2L: the reflections at the ends are built in. `wave` uses this, so its values need no series and carry no truncation error. `modes(N)` lists the standing waves sin(nπx/L)cos(nπct/L) with their certified amplitudes.
+
+### Sturm-Liouville problems
+
+Separation of variables leads to eigenvalue problems −(py′)′+qy=λwy with y(a)=y(b)=0. Solve from a with y(a)=0, y′(a)=1: the value y(b;λ) is a continuous function of λ that vanishes exactly at the eigenvalues. `sturmLiouville` finds the sign changes in floating point, then proves each: two validated solutions, at the ends of a small interval of λ, have y(b) of opposite proven signs, so an eigenvalue lies between them.
+
+| call | returns |
+
+| heat({ k, length, initial, ends = "fixed", terms = 8 }) | { coefficients, modes, at(x, t), formula(terms) } |
+
+| laplaceRectangle({ width, height, top, terms }) | { coefficients, modes, at(x, y), formula } |
+
+| laplaceDisc({ radius, boundary, terms, angle = "theta" }) | { coefficients, mean, at(r, s), formula } |
+
+| s.at(…) | { value, partial, tail } |
+
+| wave({ c, length, position, velocity }) | { at(x, t), travelling, modes(N) }; no length means the whole line |
+
+| sturmLiouville({ p, q, w, interval, count = 3, width = "1e-6", certify = true }) | [{ index, eigenvalue, estimate, proven }] |
+
+### Try it
+
+```js
+// A rod with temperature x(1 - x), ends held at 0.
+const rod = heat({ k: 1, length: 1, initial: "x*(1 - x)", terms: 6 });
+PRINT("first terms:", rod.formula(3));
+for (const t of ["1/100", "1/20", "1/5"]) {
+  const u = rod.at("1/2", t);
+  PRINT(`u(1/2, ${t}) in [${u.value.low.toDecimal(10)}, ${u.value.high.toDecimal(10)}]   tail <= ${u.tail.toNumber().toExponential(1)}`);
+}
+
+// A plucked string: the same point one period later is back where it started.
+const string = wave({ c: 1, length: 1, position: "x*(1 - x)" });
+PRINT("string at (1/3, 0):", string.at("1/3", 0).low.toDecimal(8), "  at (1/3, 2):", string.at("1/3", 2).low.toDecimal(8), "  at (1/3, 1):", string.at("1/3", 1).low.toDecimal(8));
+
+// A pulse on the whole line splits in two.
+const pulse = wave({ c: 1, position: "exp(-x^2)" });
+PRINT("pulse at x = 3, t = 3:", pulse.at(3, 3).low.toDecimal(8), " (half the height it started with)");
+
+// Steady temperature on a disc whose rim is at cos²θ: the centre is at the mean.
+const disc = laplaceDisc({ boundary: "cos(theta)^2", terms: 4 });
+PRINT("centre:", disc.mean.low.toDecimal(8), "  halfway out along θ = 0:", disc.at("1/2", 0).partial.low.toDecimal(8));
+
+// The first eigenvalues of -y'' = λy on [0, 1] are π², 4π²: bracketed with proof.
+for (const e of sturmLiouville({ interval: [0, 1], count: 2 })) PRINT(`λ${e.index} in [${e.eigenvalue.low.toDecimal(6)}, ${e.eigenvalue.high.toDecimal(6)}]  proven: ${e.proven}`);
+rod.modes[0].rate;
+```
+
+---
+
+Page: https://ratmath.com/analytic/several.html
+
+Topic
+
+## Several variables
+
+A `field` is a formula in several named variables. It answers the questions of multivariable calculus the same way `fn` does in one variable: a quick Float64 preview, then an enclosure with a proof.
+
+```js
+const f = field("x^2*y + sin(x*y)", ["x", "y"]);
+f.gradient();                       // [2*x*y + cos(x*y)*y, x^2 + cos(x*y)*x], as fields
+f.jet([1, "1/2"]);                  // value, gradient and Hessian as intervals
+f.integral({ x: [0, 1], y: [0, 1] }).exact();
+f.range("0:x:1 && 0:y:x").exact();  // over a triangle
+f.criticalPoints({ x: [-2, 2], y: [-2, 2] }).exact();
+```
+
+### Partials, gradients, tangent planes
+
+`partial`, `gradient`, `hessian` and `laplacian` are symbolic and return fields. `jet(point)` evaluates the value, the gradient and the Hessian together with interval arithmetic; given a box instead of a point, it encloses them over the whole box. Where the formula has a kink inside the box (`abs`, `min`, a square root at 0), `smooth` is false and no derivative is reported. `directional(point, direction)` and `linearization(point)` build on the same pieces.
+
+### Regions
+
+Integrals and ranges take a region in one of three forms.
+
+- A box: { x: [0, 1], y: [0, 2] }.
+
+- Iterated bounds: { x: [-1, 1], y: ["-sqrt(1-x^2)", "sqrt(1-x^2)"] }, each bound a formula in the variables before it. This is the usual way to write a double integral, and it covers curved sides.
+
+- A region in Core's notation: "0:x:_ && 0:y:_ && _:y:4-x && _:y:3-x/2", or a MultiRegion from @ratmath/core. Core cuts it into cells with one lower and one upper bound per variable, and each cell becomes iterated bounds. Polygons and polytopes are therefore integrated exactly when the integrand is a polynomial of low degree.
+
+Each piece is mapped to a box by y=lo+s(hi−lo), which multiplies the integrand by hi−lo.
+
+### How an integral is proven
+
+On a box, the product Boole rule (five points a side) is exact for polynomials up to degree five in each variable. Its error on a side of width w is at most w7max∣∂6f∣/1935360, so the whole error is at most
+
+vol⋅i∑​2688wi6​∣c6,i​∣​,c6,i​∋6!1​∂xi6​∂6f​ over the box.
+The Taylor coefficients c6,i​ come from one pass of interval Taylor arithmetic in each direction, done in fixed point. Simpson's rule with the fourth derivative is tried as well, and the smaller bound wins. Boxes wait in a heap ordered by the width of their enclosure, and the widest is halved along the side that contributes most. Where the integrand is not smooth on a box, the plain bound (volume times range) is used, which still converges as the boxes shrink.
+
+A cylinder of radius 1 and a sphere show the cost of curved sides: the area of the unit disc to six digits takes about 0.2 s, because the square root is not smooth at the ends of the x range.
+
+### Ranges and critical points
+
+`range` is branch and bound: each box gets an enclosure from the mean value form f(m)+∇f(B)⋅(B−m), boxes that cannot hold the minimum or the maximum are dropped, and the rest are halved.
+
+`criticalPoints` looks for zeros of the gradient. A box where some partial derivative has one sign is dropped. On the others an interval Newton step (Krawczyk's operator, with the interval Hessian as the Jacobian) is tried: if its image lies inside the box, there is exactly one critical point there, and repeating the step narrows it. The kind comes from the signs of the Hessian's pivots, by Sylvester's law of inertia, in interval arithmetic: all positive is a minimum, all negative a maximum, mixed a saddle. A saddle like x·y, whose diagonal entries vanish, is settled with a 2×2 pivot. Where the Hessian may be singular the point is `degenerate`. A curve of critical points (x²y² along the axes) cannot be isolated; it comes back as one `possible` record around the whole set.
+
+### Vector calculus
+
+`divergence`, `curl` and `jacobian` are symbolic. `lineIntegral(F, variables, curve, [a, b])` substitutes the curve and integrates in one variable; with one expression in place of the list it is the integral with respect to arc length. `surfaceIntegral(F, variables, surface, [u, v], region)` is the flux of F through a parametrised surface, or with one expression the integral over its area. Surface areas of curved surfaces are slow (tens of seconds for a sphere to four digits), because the integrand is a square root of a sum of squares and interval arithmetic does not see that sin² + cos² = 1.
+
+| call | returns |
+
+| field(expr, variables, { params }) | ScalarField |
+
+| f.partial(...names), f.gradient(), f.hessian(), f.laplacian() | fields (symbolic) |
+
+| f.jet(point or box, { digits, order }) | { value, gradient, hessian, smooth } |
+
+| f.value(point), f.directional(point, direction) | R RationalInterval |
+
+| f.linearization(point), f.substitute({ y: 2 }), f.along(curve) | field or function |
+
+| f.integral(region, { digits = 6, maxBoxes = 4000 }) | R RationalInterval |
+
+| f.range(region, { digits }) | R RationalInterval |
+
+| f.criticalPoints(box, { digits, maxBoxes }) | R records { kind, unique, point, value } |
+
+| divergence, curl, jacobian, lineIntegral, surfaceIntegral | |
+
+### Try it
+
+```js
+const f = field("x^3 - 3x + y^2", ["x", "y"]);
+PRINT("gradient:", f.gradient().map(String));
+for (const p of f.criticalPoints({ x: [-2, 2], y: [-2, 2] }).exact()) PRINT(p.kind, "at", p.point.map((c) => c.low.toDecimal(6)), "value", p.value.low.toDecimal(6));
+PRINT("∫ x*y over the triangle 0 ≤ y ≤ x ≤ 1:", field("x*y", ["x", "y"]).integral("0:x:1 && 0:y:x").exact());
+const disc = field("1", ["x", "y"]).integral({ x: [-1, 1], y: ["-sqrt(1-x^2)", "sqrt(1-x^2)"] }, { digits: 4 });
+PRINT("area of the unit disc, preview:", disc.quick.value);
+disc.exact()
+```
+
+---
+
+Page: https://ratmath.com/analytic/improper.html
+
+Topic
+
+## Limits and improper integrals
+
+A limit at infinity cannot be found by plugging in a large number, and an improper integral cannot be found by integrating a long way out. Both need a statement about all large x. The library gets one from a small calculus of growth rates.
+
+```js
+fn("(2x^2+1)/(x^2-3)").limit("inf");            // exactly 2
+fn("(1+1/x)^x").limit("inf");                   // e, to 20 digits
+fn("1/x").limit(0, { side: "right" });          // Infinity
+fn("exp(-x^2)").improperIntegral("-inf", "inf").exact();   // √π
+fn("1/x").improperIntegral(1, "inf").exact();   // Infinity: proven to diverge
+fn("1/sqrt(x)").improperIntegral(0, 1).exact(); // 2
+```
+
+### The growth calculus
+
+On a ray [X, ∞) every subexpression is written as
+
+g(x)=ekxxp(logx)m(ℓ+ρ(x)),∣ρ(x)∣≤Cebxxa(logx)c,
+with exact rational exponents, a constant ℓ known as an interval, and a remainder ρ whose bound decays. Sums, products, quotients, powers and the elementary functions keep this form. In a sum the term of larger order leads and the other joins the remainder; exp of a growing negative argument is bounded by an exponential; sin of something small is that thing times 1 + ρ. Where no constant leads, as in sin x, the node only carries a range. Rational parts are expanded exactly first, so leading terms that cancel are cancelled.
+
+`fn(...).asymptotic()` shows the result: `fn("(3x^2+1)/(x-1)").asymptotic()` has `term: "x"` and coefficient 3.
+
+### Limits
+
+If the term decays, the limit is 0. If the term is constant and ℓ is a true constant, the limit is ℓ, exactly: no large X is ever substituted. If the term grows and the sign of ℓ + ρ is settled, the limit is ±∞. If only a range is known and it does not decay, the answer is an `AnalyticError` with code `no-limit`. That covers sin x, but also cases this calculus cannot settle, such as √(x² + x) − x, where the leading terms cancel inside a square root.
+
+A one-sided limit at a point c is the limit at infinity of f(c ± 1/t). `limit(c)` without a side first tries the removable case (sin(x)/x at 0), and otherwise compares the two sides.
+
+### Improper integrals
+
+The ray is cut at some X. Up to X the integral is ordinary, done on doubling pieces [1, 2], [2, 4], … by Taylor series in fixed point. Beyond X the growth form decides:
+
+- Converges, with a closed form for the tail. For x^p, e^(kx), x^n·e^(kx) and x^p·log(x)^n the tail is written down exactly, times ℓ, plus a bound for the remainder. So ∫₁^∞ dx/x² needs no large X at all.
+
+- Converges, with a bound. Otherwise the tail is bounded by an integrable envelope, and X is raised until the bound is small. For an oscillating integrand like sin(x)/x² this is slow, and the answer may be wider than asked; the via line says so.
+
+- Diverges. If the integrand keeps one sign and is at least a constant times a term that is not integrable (x^p with p ≥ −1, anything growing), the exact value is Infinity or -Infinity. This is the p-test, with proof.
+
+- Undecided. For sin(x)/x, which converges only by cancellation, the calculus has no answer and refuses with code undecided.
+
+An end where f is undefined is moved to infinity by x = c ± 1/t, so 1/√x on (0, 1] becomes t^(−3/2) on [1, ∞). A singular point strictly inside the interval must be named: `improperIntegral(-1, 1, { singular: [0] })`. Both ends of the real line are handled separately, so ∫ x dx over the whole line is reported as divergent (the value is `NaN`: the two ends diverge with opposite signs) rather than as the principal value 0.
+
+### Try it
+
+```js
+PRINT("lim (1+1/x)^x:", fn("(1+1/x)^x").limit("inf"));
+PRINT("x*log(x) as x → 0+:", fn("x*log(x)").limit(0, { side: "right" }));
+PRINT("leading behaviour:", fn("x^2*exp(-2x) + 1/x").asymptotic().term);
+for (const p of ["1/2", "1", "101/100", "2"]) PRINT(`∫ dx/x^${p} from 1:`, fn(`1/x^(${p})`).improperIntegral(1, "inf").exact());
+const g = fn("exp(-x^2)").improperIntegral("-inf", "inf");
+PRINT("preview:", g.quick.value);
+g.exactStage()
+```
+
+---
+
+Page: https://ratmath.com/analytic/special.html
+
+Topic
+
+## Special functions
+
+Beyond the elementary functions, formulas may use the gamma function and its relatives, the Bessel functions of the first kind, the sine integral and the Fresnel integrals. Each has a certified enclosure at a rational point and over an interval, a Float64 version for previews, and a derivative, so values, ranges, integrals, zeros and extrema work as for any other formula.
+
+| in a formula | meaning | direct call |
+
+| gamma(x) | Γ(x), exact at positive integers; poles at 0, −1, −2, … | enclose.gamma(x, bits) |
+
+| lgamma(x) | log Γ(x) for x > 0 | enclose.lgamma |
+
+| digamma(x), trigamma(x) | Γ′/Γ and its derivative | enclose.digamma, enclose.polygamma(m, x) |
+
+| beta(a, b) | Γ(a)Γ(b)/Γ(a+b), written out as it is read | enclose.beta(a, b) |
+
+| besselJ(n, x) | J_n(x) for a whole number n | enclose.besselJ(n, x) |
+
+| Si(x) | ∫₀ˣ sin(t)/t dt | enclose.Si |
+
+| fresnelS(x), fresnelC(x) | ∫₀ˣ sin(πt²/2) dt and ∫₀ˣ cos(πt²/2) dt | enclose.fresnelS, enclose.fresnelC |
+
+| | P(a, x) and Q(a, x) = 1 − P, the regularized incomplete gamma functions | enclose.gammaP(a, x), enclose.gammaQ(a, x) |
+
+| | I_x(a, b), the regularized incomplete beta function | enclose.betaI(x, a, b) |
+
+| erfc(x) | 1 − erf(x), written out as it is read | enclose.erfc |
+
+### Gamma by Stirling's series
+
+For large y,
+
+logΓ(y)=(y−21​)logy−y+21​log2π+k=1∑n​2k(2k−1)y2k−1B2k​​+Rn​,
+and for real y > 0 the error R_n is smaller than the first term left out. The series does not converge, but its terms shrink until k is about πy, so y is first raised by Γ(x) = Γ(x + N)/(x(x+1)⋯(x+N−1)) until the smallest term is below the precision asked for. The Bernoulli numbers B₂ₖ are exact rationals (`bernoulli(m)`). The polygamma functions use the derivative of the same series.
+
+Over an interval between two poles, |Γ| is log-convex, so its maximum is at an end, and ψ = Γ′/Γ increases. The mean value form Γ(m) + Γ(X)·ψ(X)·(X − m) then gives an enclosure that tightens as the interval shrinks.
+
+### Entire functions by their power series
+
+J_n, Si and the Fresnel integrals are sums of power series that converge everywhere:
+
+Jn​(x)=k≥0∑​k!(k+n)!(−1)k(x/2)2k+n​,Si(x)=k≥0∑​(2k+1)(2k+1)!(−1)kx2k+1​.
+The terms are built in fixed point, each rounded both down and up, with as many guard bits as the largest term needs (about 1.45·|x| bits, since the terms reach e^|x| before they fall). Once they more than halve, the rest of the series is below twice the last term. This is exact about what it claims, but it limits the range: |x| ≤ 4096 for J_n and Si, |x| ≤ 43 for the Fresnel integrals. Over an interval, each of these has a derivative bounded by 1, so the value at the midpoint, give or take the radius, is an enclosure.
+
+### Incomplete gamma and beta functions
+
+These are the gamma and beta integrals stopped part of the way, divided by the whole:
+
+P(a,x)=Γ(a)1​∫0x​ta−1e−tdt,Ix​(a,b)=B(a,b)1​∫0x​ta−1(1−t)b−1dt.
+They are the cumulative probabilities of the gamma, chi-square, beta, t and F distributions, which is what `@ratmath/stats` uses them for. Both come from series whose terms are all positive, so nothing cancels:
+
+P(a,x)=Γ(a)xae−x​n≥0∑​a(a+1)⋯(a+n)xn​,Ix​(a,b)=aB(a,b)xa(1−x)b​n≥0∑​(a+1)n​(a+b)n​​xn.
+The terms are carried as intervals rounded outward. Once the ratio of one term to the one before is below some ρ < 1 for good, the rest of the series is at most the last term times ρ/(1 − ρ). For the beta function with x > 1/2 the reflection I_x(a, b) = 1 − I_(1−x)(b, a) is used first, so the ratios tend to at most 1/2. Far to the right, where 1 − P(a, x) is smaller than the precision asked for, the bound Γ(a, x) ≤ x^(a−1)e^(−x)·x/(x − a + 1) settles the answer without the series.
+
+The parameters a and b are exact positive rationals; x may be a point or an interval, since both functions increase with x. The precision is absolute: the enclosure is about 2^(−bits) wide wherever the value lies in [0, 1].
+
+### What works with them
+
+Taylor models do not know these functions, so `integral` switches to Taylor series in fixed point on halved pieces (the `via` line says so), and ranges and zero searches use interval evaluation. The Bessel functions carry their neighbours along: the series of J_n needs J_(n−1) and J_(n+1) one order lower, from J_n′ = (J_(n−1) − J_(n+1))/2. Limits at infinity and improper tails do not follow special functions.
+
+The gamma function also appears without being named: Γ(5/2) is `fn("t^(3/2)*exp(-t)", { variable: "t" }).improperIntegral(0, "inf")`, and the two enclosures agree.
+
+### Try it
+
+```js
+PRINT("Γ(1/2)² =", enclose.gamma(R`1/2`).multiply(enclose.gamma(R`1/2`)), "(π)");
+PRINT("Γ(5) =", enclose.gamma(R`5`), " B₁₂ =", bernoulli(12));
+PRINT("first zeros of J₀:", zeros("besselJ(0, x)", [0, 10]).exact().map((z) => z.lo.toDecimal(8)));
+PRINT("the minimum of Γ on x > 0:", extrema("gamma(x)", ["1/2", 3]).exact().map((e) => `${e.kind} near ${e.lo.toDecimal(6)}`));
+PRINT("P(3, 2) =", enclose.gammaP(3, 2).low.toDecimal(20), " which is 1 − 5/e² =", R`1`.subtract(R`5`.divide(enclose.exp(2).low)).toDecimal(20));
+PRINT("I at 1/3 with a = 2, b = 3:", enclose.betaI(R`1/3`, 2, 3), "(exactly 11/27)");
+PRINT("∫₀¹⁰ J₀:", fn("besselJ(0, x)").integral(0, 10).exactStage().via);
+fn("besselJ(0, x)").integral(0, 10).exact()
+```
+
+---
+
+Page: https://ratmath.com/analytic/fourier.html
+
+Topic
+
+## Fourier series
+
+`fourier(f, [a, b])` computes the coefficients of the Fourier series of f on [a, b], each as a certified interval. f may be a formula or a piecewise function, so square waves and sawtooths are first-class.
+
+```js
+const F = fourier("-1 if -1:x:!0; 1 if 0:x:1", [-1, 1], { terms: 9 }).exact();
+F.b[1];                 // 4/π, enclosed
+F.partial(5);           // the partial sum as a function, to plot
+F.toString(3, 4);       // "1.2732*sin(pi*x) + 0.4244*sin(3*pi*x)"
+F.meanSquareError(5);   // (1/L)·∫ (f − S₅)², proven
+```
+
+With L = b − a,
+
+f(x)∼2a0​​+n≥1∑​an​cosL2πnx​+bn​sinL2πnx​,an​=L2​∫ab​f(x)cosL2πnx​dx.
+`kind: "sine"` or `"cosine"` gives the half-range series in πn(x − a)/L instead, which extends f as an odd or an even function of period 2L. These are the series that solve the heat and wave equations on an interval.
+
+### How the coefficients are enclosed
+
+Each coefficient is an integral of f times a sine or cosine. On a piece with centre c and half-width h, f(c + hs) is expanded in powers of s to order 14 in fixed-point interval arithmetic; the even terms integrate exactly, and the coefficient of order 14, enclosed over the whole piece, bounds the rest. The widest piece is halved until the total is narrow enough. A piecewise function is integrated rule by rule between its breakpoints, so a jump costs nothing.
+
+### Parseval and the error of a partial sum
+
+The mean square of f equals the sum of the squares of the coefficients:
+
+L1​∫ab​f2=4a02​​+21​n≥1∑​(an2​+bn2​).
+The partial sum S_N is the best approximation by harmonics up to N in the mean-square sense, and its error is what is left of the sum. `meanSquare()` encloses the left side, and `meanSquareError(N)` subtracts the part of the right side that S_N uses. This is a proven statement about the whole function, not a sample of points. It says nothing about any single point: near a jump the partial sums overshoot by about 9% however many terms are taken (the Gibbs phenomenon), which `F.partial(N).range(...)` will show.
+
+| call | returns |
+
+| fourier(f, [a, b], { terms = 10, digits = 10, kind }) | R: preview { a, b } as numbers, exact FourierSeries |
+
+| F.a[n], F.b[n], F.coefficient(n), F.amplitude(n) | RationalInterval; a[0] is a₀ |
+
+| F.partial(N) | AnalyticFunction (coefficients at the midpoints) |
+
+| F.value(x, N) | the partial sum at a rational point, certified |
+
+| F.meanSquare(), F.meanSquareError(N) | RationalInterval |
+
+| F.toString(N, places), F.period, F.length, F.kind, F.terms | |
+
+### Try it
+
+```js
+const F = fourier("-1 if -1:x:!0; 1 if 0:x:1", [-1, 1], { terms: 9 }).exact();
+PRINT(F.toString(5, 4));
+PRINT("b₁ lies in", F.b[1], "and 4/π ≈", 4 / Math.PI);
+for (const N of [1, 3, 5, 9]) PRINT(`mean-square error with ${N} harmonics:`, F.meanSquareError(N).low.toDecimal(6));
+PRINT("overshoot of S₉ near the jump:", F.partial(9).range([0, "1/4"]).exact().high.toDecimal(4));
+fourier("x^2", [-1, 1], { terms: 4 }).exact().toString()
+```
+
+---
+
+Page: https://ratmath.com/analytic/transforms.html
+
+Topic
+
+## The Fourier transform
+
+A Fourier series describes a function on an interval by a list of coefficients. The Fourier transform does the same for a function on the whole line, and the list becomes a function of a continuous frequency. `fourierTransform(f)` gives its values as certified enclosures, and, when f is one of the standard pairs, the formula as well.
+
+```js
+const T = fourierTransform("exp(-x^2)");
+T.at(2);                 // { re, im }: two certified integrals
+T.formula.text;          // "sqrt(pi)*exp(-1/4*w^2)"
+T.check("1/3").agrees;   // formula and integral side by side
+T.parseval();            // { time, frequency, agrees }
+T.inversion("1/2");      // the inverse transform beside f(1/2)
+```
+
+F(ω)=∫−∞∞​f(x)e−iωxdx,f(x)=2π1​∫−∞∞​F(ω)eiωxdω.
+That is the default convention, `"angular"`. `convention: "unitary"` puts 1/2π​ on both integrals, and `"frequency"` uses e−2πiξx with no factor on either. Whichever is chosen is used consistently by the inverse, by Parseval and by the checks.
+
+### Values
+
+Since e−iωx=cosωx−isinωx, the real part of F(ω) is the integral of f(x) cos ωx and the imaginary part is minus the integral of f(x) sin ωx. Each is an [improper integral](https://ratmath.com/analytic/improper.html), and `at(ω)` returns the two enclosures. They are proven: the part of the line far out is bounded from the leading behaviour of f, which is the reason the function must be absolutely integrable. For 1/(1 + |x|) the integral of |f| diverges and `at` refuses. A function that is zero outside an interval is given with `support: [a, b]`; an end may be `"inf"`.
+
+When f decays only like a power of x, the far part is known only by a bound and the enclosure is correspondingly wider (a few digits for 1/(1 + x²)). It is still an enclosure.
+
+### The standard pairs
+
+| f(x) | F(ω) | name |
+
+| e−ax2 | π/a​e−ω2/4a | Gaussian |
+
+| e−a∣x∣ | a2+ω22a​ | two-sided exponential |
+
+| x2+s21​ | sπ​e−s∣ω∣ | Lorentzian |
+
+| e−ax for x > 0, else 0 | a+iω1​ | one-sided exponential |
+
+| 1 on [a, b], else 0 | iωe−iaω−e−ibω​ | box |
+
+Three rules extend the table. A shift f(x − c) multiplies the transform by e−icω. Multiplying f by x differentiates the transform: xf(x)↦iF′(ω). And the transform is linear, so sums go term by term. With these, `fourierTransform` recognises any sum of terms of the form polynomial times e−ax2+bx+c or polynomial times e−a∣x−m∣, the Lorentzian with any centre, polynomial times e−ax on [0, ∞), and constants on a finite interval.
+
+A formula found this way is compared with the certified integrals at two frequencies before it is returned, so its trust is `"checked"`: a wrong formula cannot come back. When f is not in the table, `formula` is `null` and the values are still available.
+
+### Parseval and inversion
+
+∫−∞∞​∣f(x)∣2dx=2π1​∫−∞∞​∣F(ω)∣2dω.
+`parseval()` encloses both sides, the right one from the formula, and reports whether the enclosures meet. `inversion(x)` does the same for the inversion theorem: the inverse transform of the formula at x beside f(x). `inverseFourier(F)` is the inverse on its own, for a formula F you supply (a string for a real F, or `{ re, im }`).
+
+### Convolution
+
+(f∗g)(x)=∫−∞∞​f(t)g(x−t)dt,f∗g​=f^​g^​.
+`convolution(f, g).at(x)` is the integral, enclosed. `.theorem(x)` computes the same number a second way, as the inverse transform of the product of the two formulas, and checks that the two enclosures meet.
+
+### The heat equation on the whole line
+
+Transforming ut​=kuxx​ in x turns it into u^t​=−kω2u^, so each frequency simply decays: u^(ω,t)=F(ω)e−kω2t. Multiplying by a Gaussian in ω is convolving with a Gaussian in x:
+
+u(x,t)=∫−∞∞​f(y)4πkt​e−(x−y)2/4kt​dy.
+`heatLine({ k, initial })` gives `at(x, t)` from that integral, `viaTransform(x, t)` from the decaying frequencies, and `check(x, t)` for both together. `heat()` is the total ∫udx, which does not change with time. On an interval the same equation is solved by [Fourier series](https://ratmath.com/analytic/pdes.html), and the wave equation on the whole line is `wave({ c, position, velocity })` with no length, by d'Alembert's formula.
+
+| call | returns |
+
+| fourierTransform(f, { variable = "x", frequency = "w", convention, support, digits = 15 }) | FourierTransform |
+
+| T.at(ω), T.formulaAt(ω) | { re, im } of RationalInterval |
+
+| T.formula, T.pairs | { re, im, text, trust } or null; the names of the pairs used |
+
+| T.check(ω), T.parseval(), T.inversion(x) | both sides and agrees |
+
+| inverseFourier(F, { variable = "w", convention }).at(x) | { re, im } |
+
+| convolution(f, g).at(x), .theorem(x) | RationalInterval; { convolution, viaTransforms, transform, agrees } |
+
+| heatLine({ k = 1, initial, support }).at(x, t), .viaTransform(x, t), .check(x, t), .heat() | RationalInterval |
+
+### Try it
+
+```js
+const show = (iv) => iv.low.toDecimal(10);
+const T = fourierTransform("exp(-x^2)");
+PRINT("F(ω) =", T.formula.text, " pair:", T.pairs[0]);
+PRINT("F(2) from the integral:", show(T.at(2).re), " and √π/e =", Math.sqrt(Math.PI) / Math.E);
+for (const f of ["x*exp(-x^2)", "exp(-(x-1)^2)", "3*exp(-2*abs(x))", "1/(x^2+2*x+5)"]) PRINT(f, " ↦ ", fourierTransform(f).formula.text);
+PRINT("exp(-x) on [0, ∞) ↦ ", fourierTransform("exp(-x)", { support: [0, "inf"] }).formula.text);
+PRINT("exp(-x^4) has no formula:", fourierTransform("exp(-x^4)").formula, " but F(1) =", show(fourierTransform("exp(-x^4)").at(1).re));
+const p = T.parseval();
+PRINT("Parseval:", show(p.time), "=", show(p.frequency), p.agrees);
+const c = convolution("exp(-x^2)", "exp(-abs(x))").theorem(1);
+PRINT("(f∗g)(1):", show(c.convolution), " via transforms:", show(c.viaTransforms), c.agrees);
+const h = heatLine({ initial: "exp(-x^2)" });
+const u = h.check(1, "1/2");
+PRINT("heat: u(1, 1/2) =", show(u.kernel), "=", show(u.viaTransform), " exact:", Math.exp(-1 / 3) / Math.sqrt(3));
+`total heat ${show(h.heat())} = √π`
+```
+
+---
+
+Page: https://ratmath.com/analytic/dft.html
+
+Topic
+
+## The discrete Fourier transform
+
+For n numbers in a row, the transform is a finite sum, and the frequencies are the n-th roots of unity. With ζ=e2πi/n,
+
+Xk​=j=0∑n−1​xj​ζ−jk,xj​=n1​k=0∑n−1​Xk​ζjk.
+
+```js
+dft([1, 2, 3, 4]).text;            // ["10", "-2 + 2ζ", "-2", "-2 - 2ζ"]   (ζ = i here)
+dft(X.values, { inverse: true });  // back to the rationals, exactly
+fft([1, 2, 3, 4, 5, 6, 7, 8]);     // the same values, 12 multiplications instead of 64
+alias(7, 8);                       // 7 Hz sampled at 8 Hz looks like 1 Hz
+```
+
+### Exact arithmetic with roots of unity
+
+Floating point makes the transform of a pure tone a spike surrounded by entries like 1e-16. Here the entries are exact. Every power of ζ is a root of the cyclotomic polynomial Φn​, whose degree is φ(n), so each number built from rationals and powers of ζ can be written in exactly one way as a polynomial in ζ of degree below φ(n). `Cyclotomic` stores those coefficients. Two such numbers are equal exactly when their coefficients are, a zero is the number 0, and the inverse transform returns the rationals it started from.
+
+For n = 4, ζ is i and Φ4​=ζ2+1, so the entries are Gaussian rationals a + bζ. For n = 5, Φ5​=ζ4+ζ3+ζ2+ζ+1 and an entry is a combination of 1, ζ, ζ², ζ³. `enclose(digits)` turns any entry into certified real and imaginary parts, and `power()` gives ∣Xk​∣2, which is the product with the conjugate (ζ ↦ ζ⁻¹) and is computed exactly too.
+
+### The fast algorithm beside the definition
+
+The definition does n multiplications by a root of unity for each of n outputs: n² in all. When n is even, the sum splits into the even-numbered and the odd-numbered inputs,
+
+Xk​=Ek​+ζ−kOk​,Xk+n/2​=Ek​−ζ−kOk​,
+where E and O are transforms of half the length. So one transform of length n costs two of length n/2 and n/2 multiplications, and for n a power of two that is 2n​log2​n in all. `fft` runs this recursion in the same exact arithmetic, counts its multiplications, and compares its output with `dft`, exactly. For n = 1024 the counts are 5120 against 1048576.
+
+### Sampling and aliasing
+
+Sampling at rate r reads a signal only at the times k/r. At those times cos2πft and cos2π(f+r)t are the same list of numbers, because the extra term adds a whole number of turns at every sample. So every frequency has an alias between 0 and r/2 (the Nyquist frequency) that gives identical samples, and `alias(f, r)` computes it with exact rationals. A sine comes back with `sign: -1` when the fold reverses it: 7 Hz sampled at 8 Hz is a 1 Hz sine upside down.
+
+`sinusoidSamples({ frequency, rate, count })` gives the samples exactly, as Cyclotomic numbers (it needs the samples to cover whole periods). Their transform is exactly two spikes, one at the alias and one at its mirror image, and nothing else. `sample(f, { rate, count })` samples any formula as enclosures.
+
+| call | returns |
+
+| dft(values, { inverse }) | { n, values, text, enclose(digits), power(), multiplications } |
+
+| fft(values, { inverse, check }) | the same, with multiplications, definition, levels, perLevel, agrees |
+
+| rootOfUnity(n, k), cyclotomic(n) | Cyclotomic ζᵏ; the coefficients of Φₙ |
+
+| z.add, subtract, multiply, scale, rotate(k), conjugate(), norm2() | Cyclotomic |
+
+| z.equals(w), z.rational(), z.enclose(digits), z.toNumber(), z.toString() | |
+
+| alias(frequency, rate) | { frequency, rate, nyquist, alias, sign, aliased } |
+
+| sinusoidSamples({ frequency, rate, count, kind }), sample(f, { rate, count, from }) | Cyclotomic[]; { times, values } |
+
+### Try it
+
+```js
+const X = dft([1, 2, 0, 0, 1]);
+PRINT("n = 5:", X.text.join("  |  "));
+PRINT("X₁ ≈", X.enclose(8)[1].re.low.toDecimal(8), "+", X.enclose(8)[1].im.low.toDecimal(8), "i");
+PRINT("inverse:", dft(X.values, { inverse: true }).text.join(", "));
+PRINT("|X_k|²:", X.power().map(String).join("  |  "));
+
+const fast = fft([1, 2, 3, 4, 5, 6, 7, 8]);
+PRINT("fft, n = 8:", fast.text.join("  |  "));
+PRINT(`multiplications: ${fast.multiplications} against ${fast.definition}; equal to the definition exactly: ${fast.agrees}`);
+const big = fft(Array.from({ length: 256 }, (_, i) => i % 7));
+PRINT(`n = 256: ${big.multiplications} against ${big.definition}, agrees: ${big.agrees}`);
+
+const a = alias(7, 8);
+PRINT(`7 Hz at 8 samples a second: alias ${a.alias} Hz, sine sign ${a.sign}`);
+const seven = sinusoidSamples({ frequency: 7, rate: 8, count: 8 });
+PRINT("samples of cos(2π·7t):", seven.map(String).join(", "));
+PRINT("their transform:", dft(seven).text.join(", "));
+dft(sinusoidSamples({ frequency: 1, rate: 8, count: 8 })).text.join(", ")
+```
+
+---
+
+Page: https://ratmath.com/analytic/series.html
+
+Topic
+
+## Your own series
+
+Many functions are known by their power series and nothing else: special functions, generating functions, solutions found by undetermined coefficients. `series` turns coefficients aₖ into a Taylor model, f(x) = Σ aₖ (x − c)ᵏ, on a domain you choose. The hard part is the remainder: the coefficients alone never prove how big the tail Σ over k > p is. So `series` asks you to name the argument, checks what a computer can check, and records what it cannot.
+
+### Four rules for the tail
+
+| Rule | Hypothesis | Tail bound | What is checked |
+
+| alternating | the terms aₖ(x − c)ᵏ alternate in sign and shrink in size | between 0 and the first omitted term | the next 32 terms, for every x in the domain |
+
+| ratio | \|aₖ₊₁\|·r ≤ q·\|aₖ\| beyond p, with q A computer can check finitely many terms, and a rule is about all of them. So a model built with any rule is marked `assumed`, and `describe()` lists exactly what was assumed. A rule that fails on the checked terms is refused.
+
+```js
+import { series, Domain } from "@ratmath/analytic";
+import { R } from "@ratmath/core";
+
+const D = Domain(R`0:1/2`, { centre: 0 });
+// log(1 + x) = x − x²/2 + x³/3 − …
+const L = series(D, { coefficient: (k) => (k === 0 ? R`0` : R`${k % 2 ? 1 : -1}/${k}`), degree: 20, order: 20, rule: "alternating" });
+L.at(R`1/4`);       // encloses log(5/4)
+L.assumed;          // true: terms beyond the next 32 are assumed to keep alternating
+L.describe();
+
+// e^x with Lagrange: on [0, 1/2] every derivative of e^x is below 2
+series(D, { coefficient: (k) => R`1/${fact(k)}`, degree: 15, order: 15, rule: "lagrange", M: 2 });
+```
+
+The alternating rule really is checked: on [−1/2, 1/2] the log(1 + x) series is refused, because for negative x every term is negative.
+
+### Worked check: log(1 + x) at 1/4
+
+Keep degree 16 on [0, 1/2]. The first omitted term is at most (1/2)¹⁷/17 ≈ 5.8·10⁻⁷ anywhere on the domain, so the model's remainder is about that wide. At x = 1/4 alone the error is far smaller, (1/4)¹⁷/17 ≈ 3.4·10⁻¹², but a model promises a bound for the whole domain, and evaluating it at a point keeps the domain-wide remainder. For a sharper value at one point, use a narrower domain or a higher degree. The built-in `log` gets log(5/4) from its own series, so the two enclosures must overlap; the demo compares them.
+
+### Build one from a formula
+
+Write the coefficient as a formula in k and choose a rule. The coefficients must come out as exact rationals.
+
+### Once you have the model
+
+A series model is an ordinary Taylor model, so everything on the [Taylor models](https://ratmath.com/analytic/models.html) page applies: compose it with exp or sin, multiply it by other models, take its range or integral. The assumption travels with it, and `describe()` on the final result still says what was assumed.
+
+### Try it
+
+```js
+const D = Domain(R`0:1/2`, { centre: 0 });
+// log(1 + x) = x − x²/2 + x³/3 − …, an alternating series
+const L = series(D, { coefficient: (k) => (k === 0 ? R`0` : R`${k % 2 ? 1 : -1}/${k}`), degree: 20, order: 20, rule: "alternating" });
+PRINT("log(5/4) is in", L.at(R`1/4`), "  Math.log1p(0.25) =", Math.log1p(0.25));
+PRINT("assumed:", L.assumed);
+// e^x with a Lagrange bound: on [0, 1/2] every derivative of e^x is at most 2
+const fact = (k) => (k <= 1 ? 1n : BigInt(k) * fact(k - 1));
+const E = series(D, { coefficient: (k) => R`1/${fact(k)}`, degree: 15, order: 15, rule: "lagrange", M: 2 });
+E.at(R`1/2`)
+```
+
+---
+
+Page: https://ratmath.com/analytic/sequences.html
+
+Topic
+
+## Sequences
+
+A sequence is a formula in a whole number n, or a rule that makes each term from the one before. `sequence` and `recursive` give terms exactly, limits with a proof, and statements such as "decreasing from n = 3 on" that hold for every later term and not only the ones looked at.
+
+```js
+const a = sequence("(1 + 1/n)^n");
+a.terms(3);            // [2, 9/4, 64/27]   exact
+a.limit();             // an interval of width 10^-20 around e
+a.bounds();            // { lower, upper, bounded: true }: every term lies between them
+
+const b = sequence("n/(n^2 + 10)");
+b.monotone();          // { direction: "decreasing", from: 3, proven: "for every n ≥ 3" }
+sequence("n^2/(n + 1)").limit();   // Infinity
+sequence("2^n/n!").limit();        // 0, by the ratio of successive terms
+```
+
+Factorials are written `n!` or `(2n)!`. The index is `n` unless you pass `{ variable }`, and starts at 1 unless you pass `{ from }`.
+
+### What a limit means here
+
+A sequence an​ has limit L when for every ε>0 there is an N with ∣an​−L∣<ε for all n≥N. Computing many terms can suggest a limit and cannot prove one: the definition is about all the terms that were not computed.
+
+The library proves limits from the formula. On a ray x≥X it writes the term as
+
+a(x)=ekxxp(logx)m(ℓ+ρ(x)),∣ρ(x)∣≤a bound that decreases to 0,
+with exact exponents and an interval for ℓ. The limit, or the fact that the sequence grows without bound, is read off the exponents, and the bound on ρ holds for every x≥X at once. This is the same machinery as [limits at infinity](https://ratmath.com/analytic/improper.html). Where it finds no such form, as for sinn, `limit` refuses.
+
+### Monotone and bounded
+
+A sequence that is monotone and bounded converges; that theorem is how many limits are shown to exist before they are found. `monotone()` proves the direction by showing that the derivative of the formula has one sign on a ray [N,∞), then compares the terms before N one by one and moves N back as far as they agree. `bounds()` combines a bound valid on a ray with the finitely many terms before it.
+
+If no proof is found the call refuses. For example the derivative of (1+1/n)n is a difference of two terms that nearly cancel, and its sign is not settled by this method, although its limit and bounds are.
+
+### Recursive sequences
+
+```js
+const heron = recursive("x/2 + 1/x", { start: 2 });   // x₀ = 2, x_{k+1} = x_k/2 + 1/x_k
+heron.terms(5);              // [2, 3/2, 17/12, 577/408, 665857/470832]
+heron.fixedPoints([1, 2]);   // [{ point: [1.41421…], multiplier: [≈ 0], kind: "attracting", unique: true }]
+heron.limit([1, 2]);         // { limit: [1.41421…], enters: 1, rate: 0.696…, basin: [0.914…, 1.914…] }
+```
+
+If xk+1​=g(xk​) converges and g is continuous, the limit is a fixed point, g(x∗)=x∗. The multiplier g′(x∗) says what happens nearby: errors are multiplied by about g′(x∗) each step, so the fixed point attracts when ∣g′(x∗)∣<1 and repels when ∣g′(x∗)∣>1.
+
+`limit` turns that into a proof by the contraction principle. It finds an interval I around a fixed point such that g(I)⊂I and ∣g′∣≤q<1 on I; then g has exactly one fixed point in I and every sequence that enters I converges to it, with ∣xk+1​−x∗∣≤q∣xk​−x∗∣. It then follows the sequence with interval arithmetic until a term is proven to lie in I. The answer reports the step at which that happened and the rate q.
+
+Terms are exact fractions while they stay short (Heron's iteration doubles the number of digits each step) and certified intervals after that.
+
+| call | returns |
+
+| sequence(term, { variable = "n", from = 1, params }) | Sequence |
+
+| a.term(n), a.terms(count) | Rational where the formula is rational at n, else RationalInterval |
+
+| a.limit({ digits = 20 }) | RationalInterval, or ±Infinity; refuses with no-limit or undecided |
+
+| a.monotone() | { direction, from, proven } |
+
+| a.bounds() | { lower, upper, bounded }; null for a bound that does not exist |
+
+| a.series() | the series Σ a(n) |
+
+| recursive(next, { start, variable = "x" }) | RecursiveSequence |
+
+| r.terms(count, { maxDigits = 300 }) | Rationals, then RationalIntervals |
+
+| r.fixedPoints([a, b]) | records { point, multiplier, kind, unique } |
+
+| r.limit([a, b], { maxSteps = 400 }) | { limit, enters, rate, basin }; refuses when no contraction is proven |
+
+### Try it
+
+```js
+// A limit, a direction and bounds, each proven for every term.
+const a = sequence("(2n^2 + 3)/(n^2 + n)");
+PRINT("terms:", a.terms(5).map(String).join(", "));
+PRINT("limit:", a.limit().low.toDecimal(12));
+const m = a.monotone();
+PRINT(`${m.direction} ${m.proven}`);
+const b = a.bounds();
+PRINT("every term lies between", b.lower.toDecimal(6), "and", b.upper.toDecimal(6));
+
+// Heron's iteration for sqrt(2): exact terms, then the proof that it converges
+const heron = recursive("x/2 + 1/x", { start: 2 });
+for (const [k, x] of heron.terms(6).entries()) PRINT(`x${k} =`, x.toDecimal ? x.toDecimal(30) : x.low.toDecimal(30));
+const L = heron.limit([1, 2]);
+PRINT("enters the basin at step", L.enters, "and then shrinks by at least the factor", L.rate.toDecimal(4), "each step");
+
+// the logistic map at r = 3.2 has two fixed points and neither attracts
+recursive("3.2*x*(1 - x)", { start: "1/2" }).fixedPoints([0, 1]).map((p) => `${p.point.low.toDecimal(4)}: ${p.kind}, multiplier ${p.multiplier.low.toDecimal(3)}`)
+```
+
+---
+
+Page: https://ratmath.com/analytic/sums.html
+
+Topic
+
+## Series and convergence tests
+
+`sum(term)` is the series ∑an​. Each convergence test of a calculus course is a method that returns its verdict together with the quantity that decided it, and `sum()` encloses the value of a convergent series: finitely many terms, plus an interval proven to hold all the rest.
+
+```js
+const s = sum("1/n^2");
+s.convergence();   // { convergence: "absolutely convergent", by: "comparison", reason: "|a(n)| behaves like 1·n^-2, …" }
+s.partial(3);      // 49/36   exact
+s.sum();           // { enclosure: [1.6449340656…, 1.6449340674…], terms: 512, tail: […], by: "integral bounds for a convex term: …", met: true }
+
+sum("n/2^n").ratioTest();      // { test: "ratio", verdict: "convergent", limit: 1/2, reason: … }
+sum("(-1)^n/n").convergence(); // conditionally convergent, by the alternating series test
+sum("1/n").sum();              // refuses: the series diverges (comparison test: …)
+```
+
+### The tests
+
+Every test returns `{ test, verdict, reason, … }` with verdict `"convergent"`, `"divergent"` or `"inconclusive"`. Inconclusive is a real answer: the ratio test says nothing about ∑1/n2, and the method says so.
+
+| method | statement | also returns |
+
+| divergenceTest() | If an​→0 the series diverges. If an​→0, nothing follows. | limit |
+
+| ratioTest() | L=lim∣an+1​/an​∣: converges absolutely if L, diverges if L>1. | limit |
+
+| rootTest() | L=lim∣an​∣1/n, with the same conclusions. | limit |
+
+| comparisonTest() | Limit comparison with np(logn)m, which is summable exactly when p, or p=−1 and m. | like, exponent, log, coefficient |
+
+| integralTest() | For a positive decreasing term, ∑an​ and ∫a(x)dx converge or diverge together. | from, integral |
+
+| alternatingTest() | If the signs alternate and ∣an​∣ decreases to 0, the series converges. | from |
+
+`tests()` runs all six, and `convergence()` picks the conclusion: absolutely convergent, conditionally convergent (the alternating test passes and the series of sizes is proven to diverge), divergent or undecided.
+
+The limits in these tests are proven, not estimated. The term is first read as an​=(±1)nqn⋅(factorials)⋅r(n). In the ratio an+1​/an​ the power leaves the constant q and each factorial leaves a polynomial, exactly as when the ratio is simplified by hand, and what is left is handled by the [asymptotic form](https://ratmath.com/analytic/sequences.html) of r.
+
+### The sum, with a proven tail
+
+Write S=SN​+RN​ with SN​ the sum of the terms up to N and RN​ the tail. SN​ is computed exactly or enclosed. For RN​ one of these bounds is proven, and the result names it in `by`:
+
+- Ratio. If ∣an+1​∣≤ρ∣an​∣ for all n≥N with ρ, then ∣RN​∣≤∣aN+1​∣/(1−ρ). The bound on the ratio is proven on the whole ray [N,∞).
+
+- Integral. For a positive decreasing term, ∫N+1∞​a≤RN​≤∫N∞​a. If the term is also convex, comparing the curve with trapezoids and with midpoint rectangles gives the much tighter ∫N∞​adx−2aN​​≤RN​≤∫N+21​∞​adx. The improper integrals are the certified ones from Limits and improper integrals.
+
+- Alternating. The tail lies between 0 and its first term. If the sizes are convex as well, it lies between aN+1​/2 and −aN​/2, which gains several digits for slowly convergent series such as ∑(−1)n/n.
+
+- Comparison. If only a bound ∣an​∣≤Cnp(logn)m is known (as for sinn/n2), the tail is at most the integral of the bound.
+
+N is doubled until the enclosure is as narrow as `digits` asks (default 8) or `maxTerms` is reached; `met` says which. Whatever the width, the enclosure contains the sum.
+
+| call | returns |
+
+| sum(term, { variable = "n", from = 1 }) | Series |
+
+| s.term(n), s.partial(N) | Rational when exact, else RationalInterval |
+
+| s.divergenceTest(), s.ratioTest(), s.rootTest(), s.comparisonTest(), s.integralTest(), s.alternatingTest() | { test, verdict, reason, … } |
+
+| s.tests() | all six |
+
+| s.convergence() | { convergence, by, reason, test } |
+
+| s.sum({ digits = 8, maxTerms = 8192 }) | { enclosure, terms, upTo, partial, tail, by, met }; refuses for a divergent or undecided series |
+
+### Try it
+
+```js
+// Which test decides each series, and the sum where there is one.
+const show = (term, from = 1) => {
+  const s = sum(term, { from });
+  const c = s.convergence();
+  PRINT(`Σ ${term}:  ${c.convergence}${c.by ? ` (${c.by} test)` : ""}`);
+  if (/convergent/.test(c.convergence)) {
+    const r = s.sum();
+    PRINT(`    sum in [${r.enclosure.low.toDecimal(10)}, ${r.enclosure.high.toDecimal(10)}] from ${r.terms} terms`);
+  }
+};
+show("1/n^2");
+show("1/n");
+show("1/(n*log(n)^2)", 2);
+show("n^2/3^n");
+show("3^n/n!");
+show("(2n)!/(n!)^2/5^n");
+show("(-1)^n/n");
+show("(-1)^n*n/(n + 1)");
+show("sin(n)/n^2");
+
+// every test on one series
+for (const t of sum("n/2^n").tests()) PRINT(t.test.padEnd(12), t.verdict.padEnd(13), t.reason);
+
+// pi from the Basel sum: 6·Σ 1/n² encloses pi²
+const basel = sum("1/n^2").sum({ digits: 9 }).enclosure;
+"pi^2/6 lies in [" + basel.low.toDecimal(11) + ", " + basel.high.toDecimal(11) + "]"
+```
+
+---
+
+Page: https://ratmath.com/analytic/power.html
+
+Topic
+
+## Power series and uniform convergence
+
+`powerSeries(c)` is ∑cn​(x−a)n for a formula cn​. It finds the radius of convergence, examines each end of the interval, and evaluates the series with a proven tail. `taylorRemainder` puts Lagrange's bound beside the true error, and `functionSequence` measures the distance between a sequence of functions and its limit.
+
+```js
+const p = powerSeries("1/n", { from: 1 });      // x + x^2/2 + x^3/3 + …  = -log(1 - x)
+p.radius();          // { radius: 1, limit: 1, by: "ratio" }
+p.interval().text;   // "[-1, 1)"
+p.interval().left;   // { point: -1, convergence: "conditionally convergent", by: "alternating", … }
+p.interval().right;  // { point: 1,  convergence: "divergent", by: "comparison", … }
+
+powerSeries("1/n!").interval().text;            // "(-inf, inf)"
+powerSeries("n!").interval().text;              // "{0}"
+powerSeries("2^n/n^2", { from: 1 }).interval().text;   // "[-1/2, 1/2]"
+powerSeries("1/n!").value(1, { digits: 15 }).enclosure;   // e, to 15 digits
+```
+
+### Radius and end points
+
+A power series converges absolutely for ∣x−a∣ and diverges for ∣x−a∣>R, where
+
+R1​=n→∞lim​​cn​cn+1​​​
+when that limit exists. At the two points ∣x−a∣=R the theorem is silent, and anything can happen: ∑xn/n converges at −1 and diverges at 1, ∑xn/n2 converges at both, ∑xn at neither. So when R is an exact rational number, `interval()` forms the two numerical series ∑cn​(±R)n and runs the [convergence tests](https://ratmath.com/analytic/sums.html) on each. The bracket in `text` is square where the series is proven to converge, round where it is proven to diverge, and `?` where no test decided.
+
+### Operations
+
+Inside its interval a power series can be differentiated and integrated term by term, and the radius does not change (the ends may).
+
+```js
+const d = p.derivative();      // Σ x^n, the geometric series
+d.interval().text;             // "(-1, 1)": both ends are lost
+p.integral();                  // Σ x^n/(n(n - 1)) from n = 2
+p.partial(4);                  // x + 1/2*x^2 + 1/3*x^3 + 1/4*x^4 as a function, to plot or evaluate
+p.at("1/2").sum();             // the numerical series at x = 1/2: encloses log 2
+```
+
+### Taylor's remainder against the true error
+
+Taylor's theorem bounds the error of the polynomial Tn​ of order n about a:
+
+∣f(x)−Tn​(x)∣≤(n+1)!M∣x−a∣n+1​,M≥max∣f(n+1)∣ between a and x.
+`taylorRemainder` computes both sides on an interval. M is the certified range of the next derivative, so the bound is a proven one. The true maximum of ∣f−Tn​∣ is enclosed as well, so you can see how much the bound overestimates.
+
+```js
+const r = taylorRemainder("exp(x)", { about: 0, order: 4, on: [-1, 1] });
+r.M;        // [0.3678…, 2.7182…]: the range of |f⁽⁵⁾| = exp on [-1, 1]
+r.bound;    // 0.02265… = e/120
+r.actual;   // [0.009948…, 0.009948…]: the true largest error, at x = 1
+r.holds;    // true
+```
+
+### Pointwise and uniform convergence
+
+A sequence of functions fn​ converges to f pointwise on a set if fn​(x)→f(x) for each x, and uniformly if the largest error goes to zero:
+
+xsup​∣fn​(x)−f(x)∣→0.
+The difference matters: a uniform limit of continuous functions is continuous and can be integrated term by term, and a pointwise limit need not be. The standard example is xn on [0,1], whose pointwise limit jumps at 1.
+
+```js
+const f = functionSequence("x^n");
+f.pointwise("1/2");                  // 0
+f.supDistance(5, [0, "9/10"]);       // [0.59049, 0.59049]: sup |x^5 - 0| on the interval
+f.uniform(["1/10", "9/10"]).verdict; // "uniform": a bound for every x at once that tends to 0
+f.uniform([0, 1]).verdict;           // "not uniform so far": the supremum is 1 for every n tried
+```
+
+`supDistance` returns an interval for the supremum: the upper end is a proven bound from a certified [range](https://ratmath.com/analytic/ranges.html), the lower end a value the difference really takes. `uniform` returns the table of these for several n, and a verdict. It says `"uniform"` only with a proof, which is the asymptotic bound of the [sequences](https://ratmath.com/analytic/sequences.html) page carried out with x standing for the whole interval. When the suprema stay away from 0 it says `"not uniform so far"`, which is evidence about the n tried and is labelled as that. Otherwise the verdict is `"undecided"` and the table is what you have.
+
+| call | returns |
+
+| powerSeries(coefficient, { index = "n", from = 0, centre = 0 }) | PowerSeries |
+
+| p.radius() | { radius, limit, by }; radius is a RationalInterval, 0 or Infinity |
+
+| p.interval() | { radius, left, right, text } |
+
+| p.coefficient(n), p.partial(N), p.at(x), p.value(x, { digits }) | Rational; AnalyticFunction; Series; the result of sum() |
+
+| p.derivative(), p.integral() | PowerSeries |
+
+| taylorRemainder(f, { about, order, on: [a, b] }) | { coefficients, M, radius, bound, actual, holds } |
+
+| functionSequence(term, { variable = "x", index = "n" }) | FunctionSequence |
+
+| f.member(n), f.pointwise(x), f.supDistance(n, [a, b], limit = "0") | AnalyticFunction; RationalInterval or ±Infinity; RationalInterval |
+
+| f.uniform([a, b], limit = "0", { ns }) | { verdict, table, reason } |
+
+### Try it
+
+```js
+// Intervals of convergence, ends examined.
+for (const [c, from] of [["1", 0], ["1/n", 1], ["1/n^2", 1], ["n", 0], ["1/n!", 0], ["n!", 0], ["3^n/n", 1], ["(-1)^n/(2n + 1)", 0]]) {
+  const i = powerSeries(c, { from }).interval();
+  PRINT(`Σ (${c})·x^n`.padEnd(26), i.text);
+}
+
+// log 2 two ways: the series for -log(1 - x) at x = 1/2 (fast) and at x = -1 (slow)
+const p = powerSeries("1/n", { from: 1 });
+const fast = p.at("1/2").sum({ digits: 12 });
+const slow = p.at(-1).sum({ digits: 6 });
+PRINT("at  1/2:", fast.terms, "terms give", fast.enclosure.low.toDecimal(13));
+PRINT("at -1:  ", slow.terms, "terms give", slow.enclosure.low.toDecimal(8), "(this is -log 2)");
+
+// Lagrange's bound and the true error for sin about 0 on [-2, 2]
+for (const n of [3, 5, 7, 9]) {
+  const r = taylorRemainder("sin(x)", { order: n, on: [-2, 2] });
+  PRINT(`order ${n}: bound ${r.bound.toNumber().toExponential(2)}, true error ${r.actual.high.toNumber().toExponential(2)}`);
+}
+
+// x^n on [0, 1]: the largest distance to the limit 0 does not shrink
+functionSequence("x^n").uniform([0, 1], "0", { ns: [1, 5, 25] }).table.map((r) => `n = ${r.n}: sup = ${r.sup.low.toDecimal(3)}`)
+```
+
+---
+
+Page: https://ratmath.com/analytic/theorems.html
+
+Topic
+
+## Green, Stokes and the divergence theorem
+
+Each of the three theorems says that an integral over a region equals an integral over its boundary. `greens`, `stokes` and `divergenceTheorem` compute both sides, separately and with certified enclosures, and report whether the enclosures meet. The boundary is built from the description of the region, piece by piece, and each piece is returned.
+
+```js
+const g = greens(["-y^3", "x^3"], ["x", "y"], { x: [0, 1], y: [0, 1] });
+g.statement;      // "∮ P dx + Q dy = ∬ (∂Q/∂x − ∂P/∂y) dA"
+g.left.value;     // [2, 2]   the circulation, four sides added
+g.left.pieces;    // [{ side: "y = 0", curve: { x: "t", y: "0" }, value }, …]
+g.right.value;    // [2, 2]   the double integral of 3x² + 3y²
+g.agree;          // true
+```
+
+### Green's theorem
+
+For a region D in the plane with boundary C traversed counter-clockwise,
+
+∮C​Pdx+Qdy=∬D​(∂x∂Q​−∂y∂P​)dA.
+The region is given the way a double integral is written: `{ x: [a, b], y: [lo, hi] }`, where the bounds for `y` may be formulas in `x`. Its boundary is then four curves: the bottom y=lo(x) from left to right, the right side upward, the top y=hi(x) from right to left and the left side downward. A side of no length, such as the corner of a triangle, is left out.
+
+```js
+// the triangle 0 ≤ y ≤ x ≤ 1
+greens(["x*y", "x^2"], ["x", "y"], { x: [0, 1], y: [0, "x"] });
+
+// the area of a region as a line integral: P = -y/2, Q = x/2 makes the right side ∬ 1 dA
+greens(["-y/2", "x/2"], ["x", "y"], { x: [0, 1], y: ["x^2", "x"] }).left.value;   // 1/6
+
+// the flux form  ∮ F·n ds = ∬ div F dA
+greens(["x^2", "y^2"], ["x", "y"], { x: [0, 1], y: [0, 2] }, { flux: true });
+```
+
+### Stokes' theorem
+
+For a surface S with boundary curve C,
+
+∮C​F⋅dr=∬S​(∇×F)⋅ndS.
+The surface is a parametrisation r(u,v) over a region of the (u,v) plane, and ndS=ru​×rv​dudv. The boundary is the image of the boundary of the parameter region, taken counter-clockwise there, which is the orientation that matches this normal.
+
+```js
+// the paraboloid z = u² over the unit disc, in polar parameters
+const s = stokes(["z", "x", "y"], ["x", "y", "z"],
+  { x: "u*cos(v)", y: "u*sin(v)", z: "u^2" }, ["u", "v"], { u: [0, 1], v: [0, "2*pi"] });
+s.left.value;     // [3.14159247…, 3.14159283…]
+s.right.value;    // [3.14158913…, 3.14159623…]   both hold π
+s.right.normal;   // the components of r_u × r_v
+```
+
+In that example two of the four sides are the same segment traversed in opposite directions (v=0 and v=2π) and one is the single point u=0. Their contributions cancel or vanish, and the pieces show it.
+
+### The divergence theorem
+
+For a solid V with closed surface S and outward normal n,
+
+∬​S​F⋅ndS=∭V​∇⋅FdV.
+The solid is `{ x: [a, b], y: [c, d], z: [e, f] }` with the bounds for `y` formulas in `x` and those for `z` formulas in `x` and `y`. Its surface is a top, a bottom and up to four walls. On the top z=f(x,y) the outward normal times the area element is (−fx​,−fy​,1)dxdy, on a wall y=d(x) it is (−d′(x),1,0)dxdz, and so on; each face is one double integral.
+
+```js
+const d = divergenceTheorem(["x", "y^2", "z"], ["x", "y", "z"],
+  { x: [0, 1], y: [0, "1 - x"], z: [0, "1 - x - y"] });      // a tetrahedron
+d.left.pieces.map((p) => p.face);   // top, bottom, and the walls; two walls have no height
+d.left.value;                       // 5/12
+d.right.value;                      // 5/12
+```
+
+For a surface that is easier to parametrise than to cut into graphs, pass the pieces yourself as `{ surface: [{ r, parameters, region, orientation }] }`, with `orientation: -1` where ru​×rv​ points inward.
+
+### What "agree" means
+
+The two sides are computed by different integrals over different sets, so their enclosures are independent. The theorem says the two numbers are equal, hence the enclosures must have a point in common, and `overlap` is their intersection, which contains the common value. If they did not meet, either the hypotheses would be violated (a field that is not smooth on the region, a wrong orientation) or the library would have a bug. That makes these functions useful as checks of a hand calculation: compute one side yourself and see whether it lies in `overlap`.
+
+| call | returns |
+
+| greens([P, Q], [x, y], region, { digits = 8, flux }) | { statement, left, right, agree, overlap } |
+
+| stokes(F, [x, y, z], surface, [u, v], region, { digits = 6 }) | the same shape; right also has curl, normal, integrand |
+
+| divergenceTheorem(F, [x, y, z], solid, { digits = 5, surface }) | the same shape; left.pieces lists each face |
+
+| left.value, right.value, overlap | RationalInterval |
+
+See also [change of variables, potentials and Lagrange multipliers](https://ratmath.com/analytic/multipliers.html), and the tools these are built on in [Several variables](https://ratmath.com/analytic/several.html).
+
+### Try it
+
+```js
+const line = (name, r) => PRINT(name.padEnd(34), "left", r.left.value.low.toDecimal(8), " right", r.right.value.low.toDecimal(8), " agree:", r.agree);
+
+// Green on a region between two curves
+const g = greens(["exp(x)*y", "sin(x) + x*y"], ["x", "y"], { x: [0, 1], y: ["x^2", "x"] });
+line("Green, between y = x² and y = x", g);
+for (const p of g.left.pieces) PRINT("   ", p.side.padEnd(22), p.value.low.toDecimal(8));
+
+// Stokes on a tilted graph
+line("Stokes, z = 1 − u² − v²", stokes(["-y", "x", "z"], ["x", "y", "z"], { x: "u", y: "v", z: "1 - u^2 - v^2" }, ["u", "v"], { u: [-1, 1], v: [-1, 1] }));
+
+// the divergence theorem under a paraboloid
+const d = divergenceTheorem(["x", "y", "z^2"], ["x", "y", "z"], { x: [-1, 1], y: [-1, 1], z: [0, "2 - x^2 - y^2"] }, { digits: 4 });
+line("Divergence, under z = 2 − x² − y²", d);
+for (const p of d.left.pieces) PRINT("   ", p.face.padEnd(26), p.value.low.toDecimal(6));
+
+// area of the region between the curves, by a line integral
+"area between y = x² and y = x: " + greens(["-y/2", "x/2"], ["x", "y"], { x: [0, 1], y: ["x^2", "x"] }).left.value.low.toDecimal(10)
+```
+
+---
+
+Page: https://ratmath.com/analytic/multipliers.html
+
+Topic
+
+## Change of variables, potentials, Lagrange multipliers
+
+Three more tools from the same chapter of the course. `changeOfVariables` transforms a multiple integral and shows the Jacobian it used. `potential` decides whether a vector field is a gradient and finds the function it is the gradient of. `lagrange` finds the candidates for constrained extremes and proves each one exists.
+
+### Change of variables
+
+If T maps a region S one-to-one onto T(S), then
+
+∬T(S)​f(x,y)dxdy=∬S​f(T(u,v))∣detT′(u,v)∣dudv.
+The factor ∣detT′∣ is the local ratio of areas, and forgetting it is the classic mistake. The function returns the matrix, its determinant, and the new integrand, so the step is visible.
+
+```js
+const c = changeOfVariables("x^2 + y^2", ["x", "y"],
+  { x: "r*cos(t)", y: "r*sin(t)" }, ["r", "t"], { r: [0, 1], t: [0, "2*pi"] });
+c.jacobian;      // [["cos(t)", "-(r*sin(t))"], ["sin(t)", "r*cos(t)"]]
+c.determinant;   // "r"       (cos² + sin² has been used)
+c.sign;          // "positive on the region"
+c.integrand;     // "r^3"
+c.value;         // an interval around π/2
+```
+
+The sign of the determinant is proven on the region before the absolute value is dropped; if it changes sign there, `abs(…)` stays in the integrand and `sign` says so. With `{ original: region }`, the integral is also computed directly in the old variables and `agree` reports that the two enclosures meet. Three variables work the same way (cylindrical and spherical coordinates).
+
+### Conservative fields and potentials
+
+A field F is conservative when F=∇φ for some function φ, its potential. Then line integrals depend only on the end points: ∫C​F⋅dr=φ(B)−φ(A). On a region without holes the test is ∇×F=0 (in the plane, ∂Q/∂x=∂P/∂y).
+
+```js
+const p = potential(["2*x*y + z", "x^2", "x + 3*z^2"], ["x", "y", "z"]);
+p.conservative;        // true: every component of the curl multiplies out to 0
+String(p.potential);   // "x^2*y + x*z + z^3"
+p.check;               // ["0", "0", "0"]: each ∂φ/∂xᵢ − Fᵢ
+p.value([1, 2, 3]);    // 32 = φ(1, 2, 3) − φ(0, 0, 0), by a certified line integral
+
+const q = potential(["-y", "x"], ["x", "y"]);
+q.conservative;        // false
+q.witness;             // { point: { x: 1/2, y: 1 }, curl: [2, 2] }: the curl is not 0 there
+```
+
+`conservative` has three values. It is `true` when the curl multiplies out to zero identically, `false` when a certified evaluation finds a point where it is not zero, and `null` when neither is shown. For polynomial fields the potential is given in closed form, from φ(x)=∫01​F(tx)⋅xdt, and then differentiated as a check. For other conservative fields `value(p, from)` encloses φ(p)−φ(from) by the line integral along the segment.
+
+### Lagrange multipliers
+
+At an extreme of f on the set g=0, where ∇g=0, the gradients are parallel: ∇f=λ∇g. Together with g=0 that is a system of equations for the point and λ, and it is exactly the statement that the Lagrangian L=f−λg has a critical point in all its variables. So the candidates are found by the certified critical-point search of [Several variables](https://ratmath.com/analytic/several.html), applied to L.
+
+```js
+const r = lagrange("x*y", "x^2 + y^2 - 1", ["x", "y"], { x: [-2, 2], y: [-2, 2] });
+r.lagrangian;          // "x*y - lambda_*(x^2 + y^2 - 1)"
+r.candidates.length;   // 4, each proven to exist and to be alone in its small box
+r.candidates[0];       // { point: { x: […], y: […] }, multiplier: […], value: […], unique: true, proven: true }
+r.max;                 // { value: [0.5, 0.5], at: [two points] }
+r.min;                 // { value: [-0.5, -0.5], at: [two points] }
+```
+
+Each candidate comes with an interval for every coordinate, for the multiplier and for the value of f. `max` and `min` are the candidates with the largest and smallest values. They are the extremes of f on the constraint set when that set is closed and bounded, lies inside the box searched, and ∇g does not vanish on it. Those are the hypotheses of the method and are not checked by the function. The multiplier is searched in [−16,16] unless you pass `{ multiplier: [a, b] }`.
+
+| call | returns |
+
+| changeOfVariables(f, vars, map, newVars, region, { digits = 8, original }) | { jacobian, determinant, sign, factor, integrand, value, direct?, agree? } |
+
+| potential(F, vars) | { conservative, curl, witness, potential, check, value(p, from) } |
+
+| lagrange(f, g, vars, box, { multiplier, digits = 10 }) | { lagrangian, candidates, max, min, complete } |
+
+### Try it
+
+```js
+// The area of an ellipse x²/4 + y²/9 ≤ 1 by x = 2r·cos t, y = 3r·sin t
+const e = changeOfVariables("1", ["x", "y"], { x: "2*r*cos(t)", y: "3*r*sin(t)" }, ["r", "t"], { r: [0, 1], t: [0, "2*pi"] });
+PRINT("Jacobian", JSON.stringify(e.jacobian), " determinant", e.determinant);
+PRINT("area in", `[${e.value.low.toDecimal(10)}, ${e.value.high.toDecimal(10)}]`, " and 6π ≈", 6 * Math.PI);
+
+// A shear, checked against the integral in the old variables
+const s = changeOfVariables("x*y", ["x", "y"], { x: "u", y: "u + v" }, ["u", "v"], { u: [0, 1], v: [0, 1] }, { original: { x: [0, 1], y: ["x", "x + 1"] } });
+PRINT("shear: new", s.value.low.toDecimal(8), " direct", s.direct.low.toDecimal(8), " agree:", s.agree);
+
+// Is it a gradient?
+for (const F of [["y*z", "x*z", "x*y"], ["y", "-x", "0"], ["2*x*exp(y)", "x^2*exp(y)", "1"]]) {
+  const p = potential(F, ["x", "y", "z"]);
+  PRINT(`F = (${F.join(", ")}):`, p.conservative ? `conservative${p.potential ? ", φ = " + p.potential : ""}` : `not conservative, curl ${JSON.stringify(p.curl)}`);
+}
+
+// The closest and farthest points of the ellipse x² + 4y² = 4 from (1, 0)
+const L = lagrange("(x - 1)^2 + y^2", "x^2 + 4*y^2 - 4", ["x", "y"], { x: [-3, 3], y: [-2, 2] });
+for (const c of L.candidates) PRINT("candidate", c.point.x.low.toDecimal(6), c.point.y.low.toDecimal(6), " distance²", c.value.low.toDecimal(6));
+"nearest distance² " + L.min.value.low.toDecimal(8) + ", farthest " + L.max.value.low.toDecimal(8)
+```
+
+---
+
+Page: https://ratmath.com/analytic/curves.html
+
+Topic
+
+## Curves: length, curvature, torsion
+
+A curve is a list of two or three formulas in one parameter. `curve` differentiates them and returns what a first course in differential geometry computes, each as a formula and as a certified value at a point: speed and arc length, the Frenet frame, curvature and torsion, the osculating circle and the evolute.
+
+```js
+const helix = curve(["cos(t)", "sin(t)", "t/2"], "t");
+helix.speed();              // "sqrt(5/4)"
+helix.curvature();          // "4/5"
+helix.torsion();            // "2/5"
+helix.length([0, "2*pi"]);  // an interval around π√5
+
+const a = helix.at(1);      // every number an interval
+a.tangent; a.normal; a.binormal;
+a.curvature;                // [4/5, 4/5]
+a.radius; a.centre;         // the osculating circle
+```
+
+It is also available as `import { curve, surface, metric } from "@ratmath/analytic/geometry"`.
+
+### Speed and arc length
+
+For r(t) the velocity is r′(t) and the speed is ∣r′(t)∣. The length of the curve between t=a and t=b is
+
+L=∫ab​∣r′(t)∣dt.
+`length` encloses that integral; the ends may be formulas such as `"2*pi"`. A curve is regular where the speed is not zero. At a point where the velocity may vanish, such as the cusp of (t2,t3) at 0, there is no tangent and `at` refuses.
+
+### Curvature
+
+Curvature measures how fast the unit tangent T=r′/∣r′∣ turns per unit of length: κ=∣dT/ds∣. In terms of the parameter,
+
+κ=∣r′∣3∣r′×r′′∣​in space,κ=(x′2+y′2)3/2x′y′′−y′x′′​in the plane.
+In the plane the curvature has a sign: positive where the curve turns to the left. A circle of radius R has curvature 1/R, a line has curvature 0.
+
+The osculating circle at a point is the circle that fits the curve best there: it passes through the point with the same tangent and the same curvature. Its radius is 1/∣κ∣ and its centre is r+N/κ, where N is the unit normal. The centres trace the evolute; `evolute()` returns it as another curve, so the evolute of a parabola is one line of code.
+
+The integral of the curvature against arc length is the total turning of the tangent. For a simple closed curve in the plane it is 2π, whatever the shape; `totalCurvature` encloses it.
+
+### The Frenet frame and torsion
+
+In space the unit tangent T, the principal normal N=T′/∣T′∣ and the binormal B=T×N form a frame that travels with the curve. The Frenet formulas say how it turns:
+
+T′=κN,N′=−κT+τB,B′=−τN(derivatives in arc length).
+The torsion τ measures how fast the curve leaves its osculating plane:
+
+τ=∣r′×r′′∣2(r′×r′′)⋅r′′′​.
+A curve lies in a plane exactly when its torsion is zero, and a curve with constant curvature and constant torsion is a helix. Where the curvature may be zero the normal and binormal are not defined, and `at` reports them as `null`.
+
+### Formulas that come out readable
+
+The formulas are tidied by `tidy`, which writes a formula as a quotient of polynomials in its variables and function calls, uses sin2+cos2=1 and P​2=P, and cancels the common factor. It is exported for use on your own formulas: `format(tidy(parse("(x^2 - 1)/(x - 1)")))` is `"x + 1"`.
+
+| call | returns |
+
+| curve(components, parameter = "t", { params }) | Curve, in the plane or in space |
+
+| c.position, c.velocity, c.acceleration | formulas |
+
+| c.speed(), c.curvature(), c.torsion() | formulas |
+
+| c.evolute() | Curve (plane curves) |
+
+| c.length([a, b], { digits = 12 }), c.totalCurvature([a, b]) | RationalInterval |
+
+| c.at(t, { digits = 15 }) | { point, velocity, speed, tangent, normal, binormal, curvature, torsion, radius, centre } |
+
+| tidy(tree) | the tidied formula tree |
+
+### Try it
+
+```js
+// An ellipse: curvature at the ends of the axes, the osculating circles there,
+// its length (an elliptic integral, enclosed) and its total curvature.
+const ellipse = curve(["2*cos(t)", "sin(t)"], "t");
+PRINT("curvature:", ellipse.curvature());
+for (const t of [0, "pi/2"]) {
+  const a = ellipse.at(t);
+  PRINT(`t = ${t}: curvature ${a.curvature.low.toDecimal(6)}, circle of radius ${a.radius.low.toDecimal(6)} centred at (${a.centre.map((c) => c.low.toDecimal(4)).join(", ")})`);
+}
+PRINT("length:", ellipse.length([0, "2*pi"]).low.toDecimal(10));
+PRINT("total curvature:", ellipse.totalCurvature([0, "2*pi"]).low.toDecimal(8), "= 2π");
+PRINT("evolute:", ellipse.evolute().position.join(" , "));
+
+// A space curve whose torsion changes sign.
+const twisted = curve(["t", "t^2", "t^3"], "t");
+PRINT("torsion:", twisted.torsion());
+PRINT("binormal at t = 1:", twisted.at(1).binormal.map((c) => c.low.toDecimal(5)).join(", "));
+`the helix (cos t, sin t, t/2) has curvature ${curve(["cos(t)", "sin(t)", "t/2"]).curvature()} and torsion ${curve(["cos(t)", "sin(t)", "t/2"]).torsion()}`;
+```
+
+---
+
+Page: https://ratmath.com/analytic/surfaces.html
+
+Topic
+
+## Surfaces and curvature
+
+A surface is three formulas in two parameters. `surface` returns its two fundamental forms, its normal, and its Gaussian, mean and principal curvatures, as formulas and as certified values, and says what kind of point each point is.
+
+```js
+const torus = surface(["(2 + cos(v))*cos(u)", "(2 + cos(v))*sin(u)", "sin(v)"], ["u", "v"]);
+torus.first();        // { E: "cos(v)^2 + 4*cos(v) + 4", F: "0", G: "1" }
+torus.gaussian();     // "cos(v)/(cos(v) + 2)"
+torus.at(0, 0).kind;      // "elliptic"    the outer rim
+torus.at(0, "pi").kind;   // "hyperbolic"  the inner rim
+torus.area({ u: [0, "2*pi"], v: [0, "2*pi"] });   // an interval around 8π²
+```
+
+### The first fundamental form
+
+With r(u,v) the surface and ru​,rv​ its partial derivatives,
+
+E=ru​⋅ru​,F=ru​⋅rv​,G=rv​⋅rv​.
+These three functions hold everything that can be measured inside the surface. A curve (u(t),v(t)) on it has speed Eu′2+2Fu′v′+Gv′2​; the angle between two directions comes from the same form; and area is
+
+A=∬EG−F2​dudv.
+The parametrisation is regular where EG−F2>0. At a point where that fails (the poles of a sphere in latitude and longitude) `at` refuses.
+
+### The second fundamental form and curvature
+
+With unit normal n=(ru​×rv​)/∣ru​×rv​∣,
+
+L=ruu​⋅n,M=ruv​⋅n,N=rvv​⋅n.
+Cut the surface with a plane through the normal: the curvature of the section is the normal curvature in that direction. Its largest and smallest values over all directions are the principal curvatures k1​≤k2​, and
+
+K=k1​k2​=EG−F2LN−M2​,H=2k1​+k2​​=2(EG−F2)EN−2FM+GL​,k1,2​=H∓H2−K​.
+K is the Gaussian curvature and H the mean curvature. The sign of H depends on which way the normal points; K does not.
+
+| kind | condition | the surface near the point |
+
+| elliptic | K>0 | lies on one side of its tangent plane, like a dome |
+
+| hyperbolic | K | crosses its tangent plane, like a saddle |
+
+| parabolic | K=0, not planar | curved in one direction only, like a cylinder |
+
+| planar | L=M=N=0 | flat to second order |
+
+An enclosure can prove K>0 or K. It cannot prove K=0, so parabolic and planar are reported only when the formulas vanish exactly at the point; otherwise `kind` is `null`.
+
+### The Theorema Egregium
+
+K is defined through the normal, which is about how the surface sits in space. Gauss found that it can be computed from E,F,G alone: bend a sheet of paper without stretching it and K stays 0 everywhere. `intrinsicGaussian()` computes K from the first form by way of the Christoffel symbols and the curvature tensor, and it agrees with `gaussian()`.
+
+Because of that, the curvature makes sense for a `metric` with no surface behind it; see [Geodesics and Gauss-Bonnet](https://ratmath.com/analytic/geodesics.html).
+
+| call | returns |
+
+| surface(components, [u, v], { params }) | Surface (a Metric with a normal) |
+
+| s.first(), s.second(), s.normal() | { E, F, G }, { L, M, N }, r_u × r_v, as formulas |
+
+| s.gaussian(), s.mean(), s.intrinsicGaussian() | formulas |
+
+| s.at(u, v, { digits = 15 }) | { point, normal, E, F, G, L, M, N, gaussian, mean, principal, kind } |
+
+| s.area(region, { digits = 8 }), s.totalCurvature(region) | RationalInterval; region { u: [a, b], v: [lo(u), hi(u)] } |
+
+### Try it
+
+```js
+// A monkey saddle and a paraboloid, classified point by point.
+const saddle = surface(["u", "v", "u^3 - 3*u*v^2"], ["u", "v"]);
+PRINT("K =", saddle.gaussian());
+for (const [u, v] of [[1, 0], [0, 1], [0, 0]]) {
+  const a = saddle.at(u, v);
+  PRINT(`(${u}, ${v}): K in [${a.gaussian.low.toDecimal(5)}, ${a.gaussian.high.toDecimal(5)}], ${a.kind}`);
+}
+
+const bowl = surface(["u", "v", "u^2 + v^2"], ["u", "v"]);
+const b = bowl.at(1, 0);
+PRINT("bowl at (1, 0): principal curvatures", b.principal.map((k) => k.low.toDecimal(6)).join(" and "), "->", b.kind);
+PRINT("the same K from the metric alone:", bowl.intrinsicGaussian() === bowl.gaussian());
+
+// Area of the torus, 8π² = 78.9568...
+const torus = surface(["(2 + cos(v))*cos(u)", "(2 + cos(v))*sin(u)", "sin(v)"], ["u", "v"]);
+PRINT("torus area:", torus.area({ u: [0, "2*pi"], v: [0, "2*pi"] }).low.toDecimal(6));
+PRINT("total curvature of the torus:", torus.totalCurvature({ u: [0, "2*pi"], v: [0, "2*pi"] }).high.toDecimal(6), "(it is 0)");
+`torus: K = ${torus.gaussian()}`;
+```
+
+---
+
+Page: https://ratmath.com/analytic/geodesics.html
+
+Topic
+
+## Geodesics and Gauss-Bonnet
+
+The geometry inside a surface needs only its first fundamental form. A `metric` is that form on its own; a `surface` is a metric too. Both give Christoffel symbols, geodesics as validated solutions of their differential equations, parallel transport, geodesic curvature, and the Gauss-Bonnet theorem as a checked statement.
+
+```js
+const sphere = surface(["cos(u)*sin(v)", "sin(u)*sin(v)", "cos(v)"], ["u", "v"]);
+sphere.christoffel();     // { u_uv: "cos(v)/sin(v)", v_uu: "-(sin(v)*cos(v))", ... }
+
+const plane = metric({ E: "1/v^2", F: 0, G: "1/v^2" }, ["u", "v"]);   // the hyperbolic half-plane
+plane.gaussian();         // "-1"
+
+const g = plane.geodesic({ from: [0, 1], direction: [1, 0], until: 1 });
+g.quick.value;            // a preview at once: { t, y: [u, v, u', v'] }
+g.exact().final;          // certified enclosures of u, v, u', v' at the end
+
+sphere.gaussBonnet({ u: [0, 1], v: [1, 2] }).agree;   // true
+```
+
+### Christoffel symbols
+
+Write the metric as g11​=E, g12​=g21​=F, g22​=G and its inverse as gkl. The Christoffel symbols
+
+Γijk​=21​l∑​gkl(∂i​glj​+∂j​gli​−∂l​gij​)
+say how the coordinate directions turn from point to point. `christoffel()` lists the six different ones under keys such as `u_uv` for Γuvu​.
+
+### Geodesics
+
+A geodesic is a curve that does not turn within the surface: its acceleration has no tangential part. In coordinates,
+
+u′′=−i,j∑​Γiju​xi′xj′,v′′=−i,j∑​Γijv​xi′xj′,(x1,x2)=(u,v).
+Geodesics are the straight lines of the surface: great circles on a sphere, and in the half-plane model vertical lines and half-circles centred on the boundary. A short enough piece of a geodesic is the shortest path between its ends.
+
+`geodesic` solves this system from a point in a direction. Like every [differential equation here](https://ratmath.com/analytic/odes.html) it answers twice: `quick` is a floating-point preview, and `exact()` is a validated solution whose every value is an enclosure. Certified steps of this system take about a second each, so the defaults are modest (six digits); pass `order` and `tol` for more. With `{ unit: true }` the direction is scaled to unit speed, and the parameter is arc length.
+
+### Parallel transport
+
+Carrying a tangent vector V along a curve c(t) without turning it within the surface means solving
+
+Vk′=−i,j∑​Γijk​ci′Vj.
+Transport keeps lengths and angles. Carried around a closed curve a vector comes back rotated, and on a surface the rotation equals the integral of K over the region enclosed. Around the circle of colatitude φ on the unit sphere that is 2π(1−cosφ), which is why a Foucault pendulum away from the poles does not return to its plane in a day. `transport` reports the transported vector and the angle.
+
+### Geodesic curvature
+
+The curvature of a curve on a surface splits into a part along the normal and a part within the surface. The second is the geodesic curvature kg​: how much someone walking on the surface has to steer. For c(t)=(u(t),v(t)),
+
+kg​=∣c′∣3EG−F2​(u′Av−v′Au)​,Ak=xk′′+i,j∑​Γijk​xi′xj′.
+It is zero exactly along geodesics. The sign is positive when the curve turns towards the side to which u rotates into v.
+
+### The Gauss-Bonnet theorem
+
+For a region R on a surface bounded by a simple closed curve made of smooth pieces,
+
+∬R​KdA+∮∂R​kg​ds+i∑​θi​=2π,
+where the θi​ are the exterior angles at the corners. For a triangle with geodesic sides the middle term vanishes and the theorem says that the angles add to π+∬KdA: more than π on a sphere, less on a saddle.
+
+`gaussBonnet(region)` checks the theorem on the image of the region {a≤u≤b, lo(u)≤v≤hi(u)}. The three terms are enclosed separately: a double integral, one integral per side, and an angle per corner measured with the metric. It reports each, their sum, and whether the sum contains 2π. The theorem holds, so `agree` is a check of the computation and a way to see how the three terms trade off as the region changes. The patch must be regular up to its boundary.
+
+| call | returns |
+
+| metric({ E, F, G }, [u, v], { params }) | Metric |
+
+| m.christoffel(), m.gaussian() | formulas |
+
+| m.geodesic({ from, direction, until, unit, order, tol }) | a Refinement: quick, exact() an ODESolution in (u, v, u′, v′) |
+
+| m.transport(path, [a, b], vector, { order, tol }) | { start, vector, length, lengthAfter, angle, solution }; path { u: "…", v: "…" } in t |
+
+| m.geodesicCurvature(path, t) | a formula, or with t a RationalInterval |
+
+| m.gaussBonnet(region, { digits = 7 }) | { statement, curvature, boundary, angles, total, expected, agree } |
+
+| m.area(region), m.totalCurvature(region) | RationalInterval |
+
+### Try it
+
+```js
+// Gauss-Bonnet on a patch of the unit sphere (u is longitude, v colatitude).
+const sphere = surface(["cos(u)*sin(v)", "sin(u)*sin(v)", "cos(v)"], ["u", "v"]);
+const gb = sphere.gaussBonnet({ u: [0, 1], v: [1, 2] });
+PRINT(gb.statement);
+PRINT("  curvature inside:", gb.curvature.value.low.toDecimal(7));
+for (const p of gb.boundary.pieces) PRINT(`  side ${p.side}:`, p.value.low.toDecimal(7));
+PRINT("  exterior angles: ", gb.angles.value.low.toDecimal(7));
+PRINT("  total:", gb.total.low.toDecimal(6), "to", gb.total.high.toDecimal(6), " 2π inside:", gb.agree);
+
+// The same in the hyperbolic half-plane, where K = -1.
+const plane = metric({ E: "1/v^2", F: 0, G: "1/v^2" }, ["u", "v"]);
+const hb = plane.gaussBonnet({ u: [0, 1], v: [1, "2 + u"] });
+PRINT("hyperbolic patch: curvature", hb.curvature.value.low.toDecimal(6), "sides", hb.boundary.value.low.toDecimal(6), "angles", hb.angles.value.low.toDecimal(6), "agree:", hb.agree);
+
+// A geodesic of the half-plane from (0, 1) heading right is the unit circle: u^2 + v^2 = 1.
+const g = plane.geodesic({ from: [0, 1], direction: [1, 0], until: 2 });
+const q = g.quick.value;
+const end = [q.y[0].at(-1), q.y[1].at(-1)];
+PRINT("preview at s = 2:", end.map((x) => x.toFixed(6)).join(", "), " u^2 + v^2 =", (end[0] ** 2 + end[1] ** 2).toFixed(8));
+const sol = plane.geodesic({ from: [0, 1], direction: [1, 0], until: "1/8" }).exact();
+PRINT("certified at s = 1/8: u in", sol.final[0].low.toDecimal(8), "to", sol.final[0].high.toDecimal(8), " (tanh(1/8) = 0.12435300...)");
+`Christoffel symbols of the half-plane: ${JSON.stringify(plane.christoffel())}`;
+```
+
+---
+
+Page: https://ratmath.com/analytic/floats.html
+
+Numerical methods
+
+## Floating point, exactly
+
+This library returns proven answers and so avoids floating-point arithmetic for its results. That makes it a good place to study floating point: every double is an exact rational number, Core can hold it, and so the rounding error of each operation is a number that can be computed exactly, not estimated.
+
+```js
+exactOf(0.1);              // 3602879701896397/36028797018963968   what the double 0.1 IS
+floatParts(0.1, "0.1");    // sign, exponent, mantissa, bits, ulp, and the error against the 0.1 that was typed
+floatOp("+", 0.1, 0.2);    // { result: 0.30000000000000004, exact, error, relativeError, exactlyRepresentable: false }
+
+roundoff("(1 - cos(x))/x^2", { x: 1e-8 });
+// { float: 0, exact: [0.5, 0.5], relativeError: 1, digitsLost: 16, steps: […] }
+```
+
+These and the other numerical methods are also at `@ratmath/analytic/methods`.
+
+### What a double is
+
+A double is ±m⋅2e with a 53-bit mantissa 1≤m and an exponent −1022≤e≤1023 (plus zero, subnormals, infinities and NaN). So it is a fraction whose denominator is a power of two. The decimal 0.1 is not such a fraction, and the double written `0.1` is the nearest one that is:
+
+0.1double​=2553602879701896397​=0.1+1801439850948198401​.
+`floatParts` shows the three bit fields, the exact value, and the ulp: the gap to the next double. Rounding to nearest makes a relative error of at most 2−53≈1.1×10−16, the unit roundoff.
+
+### One operation
+
+IEEE arithmetic computes the exact result of a∘b on the two doubles and rounds it to the nearest double. `floatOp` gives both: `exact` is the true sum, difference, product or quotient of the two doubles as a rational, `result` is what the machine returns, and `error` is their exact difference. So 0.1+0.2=0.3 stops being a mystery: the two inputs are each slightly above their decimals, their exact sum is not a double, and it rounds up.
+
+### Cancellation
+
+Each operation is accurate to one part in 1016. A calculation is not. Subtracting two nearly equal numbers gives a small result whose leading digits have cancelled, and the rounding errors already present in the inputs are then large in proportion. `roundoff` follows a whole formula both ways, in doubles and with certified enclosures of the true value at the same inputs, and lists every subexpression with its relative error. The step where the error jumps is the step to rewrite:
+
+x21−cosx​=x22sin2(x/2)​.
+The two sides are equal; at x=10−8 the left gives 0 in doubles and the right gives 0.5, correct to the last bit.
+
+| call | returns |
+
+| exactOf(x) | the Rational equal to the double x |
+
+| nearestDouble(q) | the double nearest a Rational, ties to even |
+
+| floatParts(x, intended) | { sign, exponent, mantissa, bits, exact, ulp, next, previous, subnormal, intended, error, relativeError } |
+
+| floatOp(op, a, b) | { result, exact, error, relativeError, exactlyRepresentable } |
+
+| roundoff(formula, inputs) | { float, exact, error, relativeError, digitsLost, steps } |
+
+### Try it
+
+```js
+// What is stored when you type 0.1?
+const p = floatParts(0.1, "0.1");
+PRINT("bits:    ", p.bits);
+PRINT("exact:   ", p.exact.toString());
+PRINT("too big by", p.error.toString(), "=", p.error.toNumber().toExponential(3));
+
+// 0.1 + 0.2: the exact sum of the two doubles, and what the machine returns.
+const s = floatOp("+", 0.1, 0.2);
+PRINT("0.1 + 0.2 =", s.result, " exact sum of the doubles:", s.exact.toDecimal(22));
+PRINT("rounding moved it by", s.error.toNumber().toExponential(3), "(half an ulp is", (floatParts(0.3).ulp.toNumber() / 2).toExponential(3) + ")");
+
+// Cancellation, step by step.
+for (const formula of ["(1 - cos(x))/x^2", "2*sin(x/2)^2/x^2"]) {
+  const r = roundoff(formula, { x: 1e-8 });
+  PRINT(`${formula} at x = 1e-8: double ${r.float}, true ${r.exact.low.toDecimal(12)}, digits lost ${r.digitsLost}`);
+  for (const step of r.steps) PRINT(`    ${step.expression.padEnd(22)} ${String(step.float).padEnd(24)} relative error ${step.relativeError === null ? "-" : step.relativeError.toExponential(1)}`);
+}
+
+// The quadratic formula for x^2 - 1e8 x + 1: the small root, two ways.
+const naive = roundoff("(b - sqrt(b^2 - 4))/2", { b: 1e8 });
+const stable = roundoff("2/(b + sqrt(b^2 - 4))", { b: 1e8 });
+`small root: naive ${naive.float} (lost ${naive.digitsLost} digits), rewritten ${stable.float} (lost ${stable.digitsLost})`;
+```
+
+---
+
+Page: https://ratmath.com/analytic/rootmethods.html
+
+Numerical methods
+
+## Root-finding methods
+
+Bisection, fixed-point iteration, Newton's method and the secant method, each run in doubles the way a textbook runs it, with its table of iterations. Because the root is also known with certainty (from [zeros](https://ratmath.com/analytic/zeros.html)), every row carries the true error, and the order of convergence is measured, not assumed.
+
+```js
+const n = newton("x^2 - 2", 1);
+n.iterations;   // [{ n, x, fx, dfx, error }, …]   error = |x − √2|, the real one
+n.order;        // 1.9998   observed
+n.root;         // the certified root the errors are measured against
+
+bisection("x^2 - 2", [1, 2], { steps: 10 }).iterations;   // each with bound (b − a)/2ⁿ⁺¹ and the true error
+secant("x^3 - x - 1", 1, 2).order;                         // about 1.6
+fixedPoint("cos(x)", 1).multiplier;                        // g′ at the fixed point: −0.6736…
+```
+
+### Order of convergence
+
+With en​=∣xn​−x∗∣, a method has order p when en+1​≈Cenp​. Order 1 (with C) gains a fixed number of digits each step; order 2 doubles the number of correct digits each step. From three successive errors,
+
+p≈log(en​/en−1​)log(en+1​/en​)​,
+which is what `order` reports, using the last errors that are still well above rounding.
+
+| method | step | order | needs |
+
+| bisection | halve the bracket, keep the half with the sign change | 1, with C=21​ | a sign change; always converges |
+
+| fixed point | x←g(x) | 1, with C=∣g′(x∗)∣ | ∣g′(x∗)∣Expand f about xn​ and evaluate at the root: 0=f(xn​)+f′(xn​)(x∗−xn​)+21​f′′(ξ)(x∗−xn​)2. Dividing by f′(xn​) and rearranging,
+
+xn+1​−x∗=2f′(xn​)f′′(ξ)​(xn​−x∗)2.
+At a multiple root f′(x∗)=0, the argument fails, and the observed order drops to 1: try `newton("(x - 1)^2", 2)`.
+
+### Fixed points and the multiplier
+
+For x←g(x), xn+1​−x∗=g(xn​)−g(x∗)≈g′(x∗)(xn​−x∗). So each step multiplies the error by about g′(x∗). `fixedPoint` returns an enclosure of that multiplier at the certified fixed point and the observed `ratio` of successive errors, which should agree with it. The proof of convergence by the contraction principle is in [recursive sequences](https://ratmath.com/analytic/sequences.html).
+
+### What the true error shows
+
+A program cannot know its error, so in practice the step size ∣xn+1​−xn​∣ or the residual ∣f(xn​)∣ stands in for it. Here the error itself is in the table, measured against a root enclosed to 25 digits, so the stand-ins can be judged. The last rows show the floor that rounding sets: the error stops near 10−16 times the size of the root however many more steps are taken.
+
+| call | returns |
+
+| bisection(f, [a, b], { steps = 20 }) | { iterations: [{ n, a, b, x, fx, bound, error }], root, order } |
+
+| newton(f, x0, { steps = 10 }) | { iterations: [{ n, x, fx, dfx, error }], root, order, derivative } |
+
+| secant(f, x0, x1, { steps = 12 }) | { iterations: [{ n, x, fx, error }], root, order } |
+
+| fixedPoint(g, x0, { steps = 25 }) | { iterations, root, multiplier, ratio, order } |
+
+### Try it
+
+```js
+// Three methods on x^3 - x - 1 = 0, errors measured against the certified root.
+const f = "x^3 - x - 1";
+const table = (r) => r.iterations.map((row) => (row.error === null ? "?" : row.error.toExponential(1))).join("  ");
+
+const b = bisection(f, [1, 2], { steps: 8 });
+PRINT("bisection errors:", table(b));
+PRINT("   bounds:       ", b.iterations.map((row) => row.bound.toExponential(1)).join("  "));
+
+const n = newton(f, 1.5);
+PRINT("Newton errors:   ", table(n), "  observed order", n.order.toFixed(3));
+
+const s = secant(f, 1, 2);
+PRINT("secant errors:   ", table(s), "  observed order", s.order.toFixed(3));
+PRINT("root:", n.root.low.toDecimal(20));
+
+// Fixed-point iteration: the error shrinks by the multiplier each step.
+const c = fixedPoint("cos(x)", 1, { steps: 30 });
+PRINT(`x = cos(x): multiplier g'(x*) = ${c.multiplier.low.toDecimal(8)}, observed ratio of errors ${c.ratio.toFixed(6)}`);
+
+// A double root: Newton drops to order 1.
+newton("(x - 1)^2*(x + 2)", 2, { steps: 20 }).order.toFixed(2);
+```
+
+---
+
+Page: https://ratmath.com/analytic/interpolation.html
+
+Numerical methods
+
+## Interpolation and approximation
+
+The polynomial through a set of points, in Newton's and Lagrange's forms with exact divided differences; the error formula beside the true error; Chebyshev nodes and the Runge phenomenon; natural cubic splines and least-squares polynomials, all with exact rational coefficients.
+
+```js
+const p = interpolate([[0, 1], [1, 3], [2, 2]]);
+p.polynomial;            // "-3/2*x^2 + 7/2*x + 1"
+p.newton;                // "1 + 2*x - 3/2*x*(x - 1)"
+p.dividedDifferences;    // [[1, 3, 2], [2, -1], [-3/2]]   exact
+p.at("1/2");             // 19/8
+
+const q = interpolate("sin(x)", { nodes: equallySpaced(0, 1, 4) });
+q.maxError([0, 1]);      // { value, attained, at, textbook }
+```
+
+### Divided differences
+
+Through n+1 points with distinct xi​ there is exactly one polynomial of degree at most n. Newton's form builds it one node at a time:
+
+p(x)=f[x0​]+f[x0​,x1​](x−x0​)+f[x0​,x1​,x2​](x−x0​)(x−x1​)+…,f[xi​,…,xi+k​]=xi+k​−xi​f[xi+1​,…,xi+k​]−f[xi​,…,xi+k−1​]​.
+The table of divided differences is computed in exact rational arithmetic, so for data given as rationals the polynomial is the true one, with no rounding. Lagrange's form writes the same polynomial as ∑yi​ℓi​(x), where ℓi​ is 1 at xi​ and 0 at the other nodes.
+
+### The error formula
+
+If f has n+1 continuous derivatives, then for each x there is a ξ with
+
+f(x)−p(x)=(n+1)!f(n+1)(ξ)​i=0∏n​(x−xi​).
+`maxError` reports the true maximum of ∣f−p∣ on an interval, bracketed between a value attained and a proven upper bound, and beside it the bound the formula gives, max∣f(n+1)∣/(n+1)!⋅max∣∏(x−xi​)∣, with both maxima enclosed.
+
+### Runge's example and Chebyshev nodes
+
+More nodes need not mean a better fit. For f(x)=1/(1+25x2) on [−1,1] with equally spaced nodes the error near the ends grows without bound as the degree rises. The product ∏(x−xi​) is the part of the error formula that the choice of nodes controls, and it is smallest in maximum when the nodes are the Chebyshev points
+
+xi​=cos2n(2i+1)π​,i=0,…,n−1,
+which crowd towards the ends. `chebyshevNodes(a, b, n)` returns them rounded to nearby rationals.
+
+### Splines and least squares
+
+A natural cubic spline is a cubic on each interval between nodes, with two continuous derivatives across the nodes and zero second derivative at the two ends. The second derivatives at the nodes solve a tridiagonal system, here exactly. A least-squares polynomial of degree d minimises ∑(p(xi​)−yi​)2; its coefficients solve the normal equations ATAc=ATy, again exactly, and the residual is returned as an exact rational.
+
+| call | returns |
+
+| interpolate(points) or interpolate(f, { nodes }) | { nodes, values, dividedDifferences, newton, lagrange, polynomial, coefficients, at(x), error(x), maxError([a, b]) } |
+
+| equallySpaced(a, b, n), chebyshevNodes(a, b, n) | arrays of Rationals |
+
+| spline(points) | { pieces: [{ from, to, coefficients, polynomial }], moments, at(x) } |
+
+| leastSquares(points, degree = 1) | { coefficients, polynomial, residual, at(x) } |
+
+### Try it
+
+```js
+// The table of divided differences for four values of 1/x.
+const p = interpolate("1/x", { nodes: [1, 2, 3, 4] });
+p.dividedDifferences.forEach((row, k) => PRINT(`order ${k}:`, row.map(String).join("   ")));
+PRINT("Newton form:", p.newton);
+PRINT("expanded:   ", p.polynomial);
+const e = p.maxError([1, 4]);
+PRINT(`max |1/x - p| on [1, 4]: between ${e.attained.toDecimal(6)} and ${e.value.toDecimal(6)}; the error formula promises at most ${e.textbook.toDecimal(6)}`);
+
+// Runge's example: equally spaced nodes against Chebyshev nodes.
+const f = "1/(1 + 25*x^2)";
+for (const n of [5, 9]) {
+  const equal = interpolate(f, { nodes: equallySpaced(-1, 1, n) }).maxError([-1, 1], { tolerance: 0.05 });
+  const cheb = interpolate(f, { nodes: chebyshevNodes(-1, 1, n) }).maxError([-1, 1], { tolerance: 0.05 });
+  PRINT(`${n} nodes: equally spaced max error ${equal.value.toDecimal(4)}, Chebyshev ${cheb.value.toDecimal(4)}`);
+}
+
+// A natural spline and a least-squares line through the same points.
+const pts = [[0, 0], [1, 1], [2, 0], [3, 1]];
+for (const piece of spline(pts).pieces) PRINT(`spline on [${piece.from}, ${piece.to}]: ${piece.polynomial}`);
+const line = leastSquares(pts, 1);
+`least-squares line ${line.polynomial}, sum of squares ${line.residual}`;
+```
+
+---
+
+Page: https://ratmath.com/analytic/quadraturerules.html
+
+Numerical methods
+
+## Differences and quadrature rules
+
+The classical formulas for derivatives and integrals, with the true error of each beside the textbook estimate: difference quotients and the step size at which rounding takes over, Richardson extrapolation, the composite midpoint, trapezoid and Simpson rules, Romberg's table, and Gauss-Legendre rules with certified nodes and weights.
+
+```js
+const d = differences("exp(x)", 1, { kind: "central" });
+d.rows;    // [{ h, value, error, truncation }, …]  for h = 1e-1 … 1e-12
+d.best;    // the h with the smallest true error
+
+quadratureRule("exp(x)", [0, 1], { rule: "simpson", n: 4 });
+// { value, exact, error, bound, order: 4 }
+
+gaussLegendre(3);   // { polynomial: "5/2*x^3 - 3/2*x", nodes, weights }  enclosures
+```
+
+### Difference quotients
+
+| kind | formula | truncation error |
+
+| forward | hf(x+h)−f(x)​ | 21​f′′(x)h |
+
+| central | 2hf(x+h)−f(x−h)​ | 61​f(3)(x)h2 |
+
+| second | h2f(x+h)−2f(x)+f(x−h)​ | 121​f(4)(x)h2 |
+
+The truncation error shrinks with h. The rounding error grows: the numerator is a difference of nearly equal numbers, accurate to about ε∣f∣ with ε≈10−16, and dividing by h makes that ε∣f∣/h. The total is smallest near h≈ε​ for the forward difference and h≈ε1/3 for the central one. `differences` evaluates the quotient in doubles for a range of h and reports the true error of each against the certified derivative, so the turn is visible in the table, with the predicted truncation term beside it.
+
+### Richardson extrapolation
+
+The central difference has an error expansion in even powers, D(h)=f′(x)+c2​h2+c4​h4+…. Then (4D(h/2)−D(h))/3 cancels the h2 term, and repeating the idea cancels h4, h6, and so on. `richardson` builds the triangular table; `romberg` does the same for the trapezoid rule, whose error has the same kind of expansion (Euler-Maclaurin).
+
+### Composite rules
+
+| rule | on each panel of width h | error bound |
+
+| midpoint | hf(mid) | 24(b−a)h2​max∣f′′∣ |
+
+| trapezoid | 2h​(f(left)+f(right)) | 12(b−a)h2​max∣f′′∣ |
+
+| Simpson | 6h​(f(left)+4f(mid)+f(right)) | 2880(b−a)h4​max∣f(4)∣ |
+
+`quadratureRule` evaluates the rule with certified arithmetic, so `error` is the error of the method alone, with no rounding mixed in. `exact` is the certified integral and `bound` the textbook bound with the maximum of the derivative enclosed. The true error is always inside the bound, and usually well inside.
+
+### Gauss rules
+
+With n points chosen freely, a rule can be exact for all polynomials of degree below 2n. The points are the roots of the Legendre polynomial Pn​, and the weights are wi​=2/((1−xi2​)Pn′​(xi​)2). `gaussLegendre(n)` builds Pn​ with exact coefficients, isolates its roots with proof, and returns nodes and weights as enclosures to 25 digits.
+
+| call | returns |
+
+| differences(f, x, { kind = "central", steps }) | { exact, order, rows: [{ h, value, error, truncation }], best } |
+
+| richardson(f, x, { h = 0.5, levels = 5 }) | { table, errors, exact } |
+
+| quadratureRule(f, [a, b], { rule, n }) | { value, exact, error, bound, order, h } |
+
+| romberg(f, [a, b], { levels = 5 }) | { table, errors, exact } |
+
+| gaussLegendre(n), legendre(n) | { polynomial, nodes, weights }; coefficients of Pₙ |
+
+| gaussRule(f, [a, b], n = 3) | { value, exact, error, nodes, weights } |
+
+### Try it
+
+```js
+// The derivative of exp at 1 by central differences: the error falls like h², then rounding wins.
+const d = differences("exp(x)", 1, { kind: "central" });
+for (const r of d.rows) PRINT(`h = ${r.h.toExponential(0)}   error ${r.error.toExponential(2)}   truncation term ${r.truncation.toExponential(2)}`);
+PRINT("best h:", d.best.h, " Richardson from h = 1/2, five levels: error", richardson("exp(x)", 1).errors.at(-1).at(-1).toExponential(1));
+
+// Rules on the integral of exp over [0, 1]: true error against the textbook bound.
+for (const rule of ["midpoint", "trapezoid", "simpson"]) {
+  for (const n of [4, 8]) {
+    const q = quadratureRule("exp(x)", [0, 1], { rule, n });
+    PRINT(`${rule.padEnd(9)} n = ${n}: error ${q.error.low.toNumber().toExponential(3)}   bound ${q.bound.toNumber().toExponential(3)}`);
+  }
+}
+
+// Three Gauss points beat eight Simpson panels.
+const g = gaussRule("exp(x)", [0, 1], 3);
+PRINT("Gauss, 3 points: error", g.error.low.toNumber().toExponential(3));
+PRINT("nodes:", gaussLegendre(3).nodes.map((x) => x.low.toDecimal(15)).join(", "));
+romberg("exp(x)", [0, 1], { levels: 4 }).errors.map((row) => row.map((e) => e.toExponential(1)).join("  "));
+```
+
+---
+
+Page: https://ratmath.com/analytic/odemethods.html
+
+Numerical methods
+
+## Euler to Runge-Kutta
+
+The one-step methods for y′=f(t,y) and a two-step method, run in doubles with their table of steps. The [validated solver](https://ratmath.com/analytic/odes.html) supplies the true solution at every step, so the global error is in the table, and halving the step shows each method's order.
+
+```js
+const r = odeMethod("y - t^2 + 1", { y0: "1/2", until: 2, steps: 10, method: "rk4" });
+r.steps;        // [{ n, t, y, exact, error }, …]
+r.finalError;   // the true error at t = 2
+
+stepSizeStudy("y - t^2 + 1", { y0: "1/2", until: 2, method: "euler" }).rows;
+// [{ steps, h, error, ratio, observedOrder }, …]
+
+stability("rk4").interval;   // [-2.785…, 0]
+```
+
+### The methods
+
+| method | step from (t,y) with size h | order |
+
+| euler | y+hf(t,y) | 1 |
+
+| heun | y+2h​(k1​+f(t+h, y+hk1​)), k1​=f(t,y) | 2 |
+
+| midpoint | y+hf(t+2h​, y+2h​k1​) | 2 |
+
+| rk4 | y+6h​(k1​+2k2​+2k3​+k4​), the classical four stages | 4 |
+
+| ab2 | y+2h​(3fn​−fn−1​), Adams-Bashforth, started with one Heun step | 2 |
+
+### Local and global error
+
+A method of order p makes an error of size hp+1 in one step (the local error). Over the 1/h steps needed to cross a fixed interval these add up, and the global error at the end is of size hp. So halving h divides the final error by about 2p: by 2 for Euler, by 16 for the classical Runge-Kutta method. `stepSizeStudy` runs the same problem with several step counts and reports the ratio of successive errors and the order it implies.
+
+The errors are true ones: at each step the method's double is compared with the validated enclosure of y(tn​), and `error` is the largest possible distance between them.
+
+### Stability
+
+On the test equation y′=λy each of these methods multiplies y by a polynomial R(hλ) per step: 1+z for Euler, 1+z+21​z2 for the second-order methods, and the degree-4 Taylor polynomial of ez for rk4. The true solution decays when λ; the numerical one decays only when ∣R(hλ)∣. For real negative z that is an interval, (−2,0) for Euler and (−2.785…,0) for rk4, with the left end enclosed here as a root of R(z)=1. A step size outside it makes the computed solution grow although the true one dies away: the reason stiff equations force small steps on explicit methods.
+
+| call | returns |
+
+| odeMethod(f, { y0, t0 = 0, until, steps = 10, method }) | { method, order, h, steps: [{ n, t, y, exact, error }], finalError } |
+
+| stepSizeStudy(f, { …, counts }) | { rows: [{ steps, h, error, ratio, observedOrder }] } |
+
+| stability(method) | { polynomial, interval, largestStep(lambda) } |
+
+### Try it
+
+```js
+// y' = y - t^2 + 1, y(0) = 1/2 on [0, 2]: five methods, ten steps each.
+const problem = { y0: "1/2", until: 2, steps: 10 };
+for (const method of ["euler", "heun", "midpoint", "ab2", "rk4"]) {
+  const r = odeMethod("y - t^2 + 1", { ...problem, method });
+  PRINT(`${method.padEnd(8)} y(2) = ${r.steps.at(-1).y.toFixed(10)}   true error ${r.finalError.toExponential(3)}`);
+}
+PRINT("validated y(2):", odeMethod("y - t^2 + 1", { ...problem }).steps.at(-1).exact.low.toDecimal(12));
+
+// Halving the step: the error ratio shows the order.
+for (const method of ["euler", "heun", "rk4"]) {
+  const s = stepSizeStudy("y - t^2 + 1", { y0: "1/2", until: 2, method, counts: [10, 20, 40, 80] });
+  PRINT(`${method.padEnd(6)} observed orders: ${s.rows.slice(1).map((r) => r.observedOrder.toFixed(3)).join(", ")}`);
+}
+
+// A stiff problem: y' = -50(y - cos t). Euler is stable only for h < 2/50.
+for (const steps of [20, 30, 100]) {
+  const r = odeMethod("-50*(y - cos(t))", { y0: 0, until: 1, steps, method: "euler" });
+  PRINT(`Euler with h = ${r.h}: error at t = 1 is ${r.finalError.toExponential(2)}`);
+}
+`largest stable Euler step for λ = -50: ${stability("euler").largestStep(-50).low}; for rk4: ${stability("rk4").largestStep(-50).low.toDecimal(5)}`;
+```
