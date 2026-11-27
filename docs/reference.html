@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 
-<link rel="stylesheet" href="assets/site.css?v=6399f717fd">
+<link rel="stylesheet" href="assets/site.css?v=6ed8514496">
 </head>
 <body>
 <div class="shell">
@@ -215,7 +215,7 @@
     <tr><th>call</th><th>returns</th><th>notes</th></tr>
     <tr><td>sequence(term, { variable = "n", from = 1 })</td><td>Sequence</td><td><code>term(n)</code>, <code>terms(count)</code>, <code>limit()</code>, <code>monotone()</code>, <code>bounds()</code>, <code>series()</code>. <code>n!</code> is read as a factorial. See <a href="sequences.html">Sequences</a></td></tr>
     <tr><td>recursive(next, { start, variable = "x" })</td><td>RecursiveSequence</td><td><code>terms(count)</code>, <code>fixedPoints([a, b])</code>, <code>limit([a, b])</code> proven by contraction</td></tr>
-    <tr><td>sum(term, { variable = "n", from = 1 })</td><td>Series</td><td><code>partial(N)</code>; <code>divergenceTest</code>, <code>ratioTest</code>, <code>rootTest</code>, <code>comparisonTest</code>, <code>integralTest</code>, <code>alternatingTest</code>, <code>tests()</code>; <code>convergence()</code>; <code>sum({ digits })</code> with a proven tail. See <a href="sums.html">Series and convergence tests</a></td></tr>
+    <tr><td>sum(term, { variable = "n", from = 1 })</td><td>Series</td><td><code>partial(N)</code>; <code>divergenceTest</code>, <code>ratioTest</code>, <code>rootTest</code>, <code>comparisonTest</code>, <code>integralTest</code>, <code>alternatingTest</code>, <code>tests()</code>; <code>convergence()</code>; <code>termsForError(ε)</code> for alternating series; <code>sum({ digits })</code> with a proven tail. See <a href="sums.html">Series and convergence tests</a></td></tr>
     <tr><td>powerSeries(coefficient, { index = "n", from = 0, centre = 0 })</td><td>PowerSeries</td><td><code>radius()</code>, <code>interval()</code> with both ends examined, <code>partial(N)</code>, <code>at(x)</code>, <code>value(x)</code>, <code>derivative()</code>, <code>integral()</code>. See <a href="power.html">Power series</a></td></tr>
     <tr><td>taylorRemainder(f, { about, order, on })</td><td>{ coefficients, M, radius, bound, actual, holds }</td><td>Lagrange's bound beside the true maximum error</td></tr>
     <tr><td>functionSequence(term, { variable = "x", index = "n" })</td><td>FunctionSequence</td><td><code>member(n)</code>, <code>pointwise(x)</code>, <code>supDistance(n, [a, b], limit)</code>, <code>uniform([a, b], limit)</code></td></tr>
@@ -245,6 +245,7 @@
     <tr><td>seriesSolution({ p, q, about, order })</td><td>{ kind, indicial, exponents, solutions, notes, radius, provenRadius }; each solution has remainder(ρ) and enclose(x) with a proven bound</td><td>See <a href="seriessolutions.html">Series solutions</a></td></tr>
     <tr><td>heat, laplaceRectangle, laplaceDisc</td><td>series solutions with <code>at(…)</code> → { value, partial, tail }</td><td>See <a href="pdes.html">Heat, waves and potentials</a></td></tr>
     <tr><td>wave({ c, length, position, velocity })</td><td>{ at(x, t), travelling, modes(N) }</td><td>d'Alembert's formula</td></tr>
+    <tr><td>classifyPDE({ A, B, C }), pde.classify</td><td>object</td><td>hyperbolic, parabolic or elliptic from B² − 4AC, with the region of each type when the coefficients vary</td></tr>
     <tr><td>sturmLiouville({ p, q, w, interval, count })</td><td>[{ index, eigenvalue, proven }]</td><td>shooting, each eigenvalue bracketed by validated solutions</td></tr>
     <tr><td>antiderivative(tree, name), partialFractions(N, D)</td><td></td><td>the integrals and partial fractions the methods use</td></tr>
   </table></div>
@@ -277,12 +278,13 @@
     <tr><td>floatParts(x, typed?)</td><td>object</td><td>sign, exponent, mantissa, bits, the exact rational the double is, its ulp and neighbours; with the typed decimal, the exact representation error. See <a href="floats.html">Floating point, exactly</a></td></tr>
     <tr><td>exactOf(x), nearestDouble(q), floatOp(op, a, b)</td><td></td><td>a double as a rational, the double nearest a rational, and one operation with the rounding it added</td></tr>
     <tr><td>roundoff(formula, inputs)</td><td>object</td><td>the calculation in doubles and exactly, <code>digitsLost</code>, and <code>steps</code> showing where the digits go</td></tr>
-    <tr><td>bisection(f, [a, b]), newton(f, x0), secant(f, x0, x1), fixedPoint(g, x0)</td><td>object</td><td><code>iterations</code> each with its true error against the certified <code>root</code>, and the observed <code>order</code>. See <a href="rootmethods.html">Root-finding methods</a></td></tr>
+    <tr><td>bisection(f, [a, b]), newton(f, x0), secant(f, x0, x1), fixedPoint(g, x0)</td><td>object</td><td><code>iterations</code> each with its true error against the certified <code>root</code>, and the observed <code>order</code>; <code>newton(f, x0, { exact: true })</code> iterates in exact fractions. See <a href="rootmethods.html">Root-finding methods</a></td></tr>
     <tr><td>interpolate(points) or interpolate(f, { nodes })</td><td>object</td><td>divided differences, <code>newton</code>, <code>lagrange</code>, <code>polynomial</code>, <code>at(x)</code>, <code>error(x)</code>, <code>maxError([a, b])</code>. See <a href="interpolation.html">Interpolation and approximation</a></td></tr>
     <tr><td>equallySpaced(a, b, n), chebyshevNodes(a, b, n)</td><td>Rational[]</td><td>nodes; the Chebyshev ones rounded to short rationals</td></tr>
     <tr><td>spline(points), leastSquares(points, degree)</td><td>object</td><td>the natural cubic spline and the least-squares polynomial, exact</td></tr>
     <tr><td>differences(f, x, { kind, steps }), richardson(f, x)</td><td>object</td><td>difference quotients in doubles with true error and truncation term; the extrapolation table. See <a href="quadraturerules.html">Differences and quadrature rules</a></td></tr>
     <tr><td>quadratureRule(f, [a, b], { rule, n }), romberg(f, [a, b]), gaussRule(f, [a, b], n)</td><td>object</td><td>the rule's value, the certified integral, the true error and the textbook bound</td></tr>
+    <tr><td>darboux(f, partition)</td><td>object</td><td>lower and upper sums, exact where f is proven monotone on each piece, else enclosures; with the certified integral between them</td></tr>
     <tr><td>legendre(n), gaussLegendre(n)</td><td></td><td>exact Legendre coefficients; certified nodes and weights</td></tr>
     <tr><td>odeMethod(f, { method, t0, y0, until, steps }), stepSizeStudy(f, { …, counts }), stability(method)</td><td>object</td><td>Euler, Heun, midpoint, RK4 and Adams-Bashforth with the true global error at every step, observed order, and the stability interval. See <a href="odemethods.html">Euler to Runge-Kutta</a></td></tr>
   </table></div>
@@ -350,6 +352,6 @@ f.range(R`0:5`, { digits: 6 }).exact()</textarea>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=6399f717fd"></script>
+<script type="module" src="assets/pages.js?v=6ed8514496"></script>
 </body>
 </html>

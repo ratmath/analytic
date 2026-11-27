@@ -616,6 +616,46 @@ export class Series {
     if (!r) return verdict("alternating", "inconclusive", "the sizes of the terms were not proven to decrease to 0");
     return verdict("alternating", "convergent", `the signs alternate and |a(n)| decreases to 0 for ${this.variable} ≥ ${r.N}; the error after N terms is below the next term`, { from: r.N });
   }
+  /**
+   * For an alternating series: how many terms make the error below ε. The
+   * alternating test proves |a(n)| decreasing to 0 from some n₀; from there the
+   * error after the term n = N is at most |a(N + 1)|, so this is the first N
+   * (with N + 1 ≥ n₀) where |a(N + 1)| ≤ ε, found by doubling and bisection.
+   * Returns { terms, last, bound, from }: `terms` counted from the first index,
+   * `last` the index of the last term used, `bound` = |a(last + 1)|.
+   */
+  termsForError(eps, { digits = 20 } = {}) {
+    const e = toQ(eps);
+    if (e.numerator <= 0n) refuse("bad-argument", "ε must be positive");
+    const t = this.alternatingTest({ digits });
+    if (t.verdict !== "convergent") refuse("not-alternating", `termsForError needs an alternating series whose terms are proven to decrease to 0 (${t.reason})`);
+    const n0 = Math.max(t.from ?? this.from, this.from + 1);
+    // is |a(k)| ≤ ε? decided from enclosures at rising precision
+    const small = (k) => {
+      for (let bits = bitsForDigits(digits) + 24; bits <= 8192; bits *= 2) {
+        const a = this.#termIv(k, bits);
+        if (le(a.mag, e)) return true;
+        if (gt(a.mig, e)) return false;
+      }
+      refuse("precision", `|a(${k})| is too close to ε to decide`);
+    };
+    // the first k ≥ n0 with |a(k)| ≤ ε: the sizes decrease from n0, so the test is monotone
+    let lo = n0 - 1;
+    let hi = n0;
+    while (!small(hi)) {
+      lo = hi;
+      hi = hi * 2;
+      if (hi > 2 ** 52) refuse("budget", "the terms stay above ε for every index tried");
+    }
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (small(mid)) hi = mid;
+      else lo = mid;
+    }
+    const last = hi - 1;
+    const bound = this.#termIv(hi, bitsForDigits(digits) + 24);
+    return { terms: last - this.from + 1, last, bound: bound.isPoint ? bound.lo.abs() : RI(new Iv(bound.mig, bound.mag)), from: n0, reason: `|a(n)| decreases to 0 for ${this.variable} ≥ ${t.from}, so the error after ${this.variable} = ${last} is below |a(${hi})| ≤ ${e}` };
+  }
   /** N from which |a(n)| is proven decreasing with limit 0, or null. */
   #decreasingToZero(d, bits, from = this.from) {
     const n = this.variable;

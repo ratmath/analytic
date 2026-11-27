@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Helpers from the Course Test roadmap (batch A6):
+  - `Series#termsForError(ε)`: for an alternating series, the first N whose
+    error bound |a(N + 1)| is at most ε, found by doubling and bisection from
+    the index where the term sizes are proven to decrease.
+  - `newton(f, x0, { exact: true })` iterates in exact fractions, with the
+    length of each denominator and the double iterates from the same start
+    for comparison.
+  - `darboux(f, partition)`: lower and upper Darboux sums, exact where f is
+    proven monotone on every piece, otherwise certified enclosures from the
+    end values and critical points.
+  - `classifyPDE({ A, B, C })` (also `pde.classify`, with the PDE solvers in
+    the `pde` namespace): hyperbolic, parabolic or elliptic from B² − 4AC,
+    with the region of each type when the coefficients depend on x and y.
+  - `constantRational(tree, env)` evaluates with exact variable values.
 - Types: the curve and surface parameter type is now `ParameterLike`. It was a
   second `PointLike`, which clashed with the scalar-field `PointLike`, so
   TypeScript reported a duplicate identifier in `index.d.ts`.

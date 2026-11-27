@@ -1,6 +1,6 @@
 // UI pieces for the docs: element builder, number formatting, a canvas plot,
 // and the demo card (inputs on the left; float preview, then certified answer).
-import * as A from "./analytic.js?v=6399f717fd";
+import * as A from "./analytic.js?v=6ed8514496";
 
 export { A };
 

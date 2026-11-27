@@ -17,7 +17,7 @@ import { toAst, format, compileFloat, derivative, simplify, freeVariables, const
 import { encloseAst } from "./ieval.js";
 import { bitsForDigits } from "./scope.js";
 import { fn } from "./fn.js";
-import { zeros } from "./roots.js";
+import { zeros, extrema } from "./roots.js";
 import { quad1 } from "./quad.js";
 import { solve as odeSolve } from "./ode.js";
 import * as P from "./rpoly.js";
@@ -280,8 +280,18 @@ export function bisection(f, [a, b], opts = {}) {
   return finishRoots("bisection", rows, root);
 }
 
-/** Newton's method x ← x − f(x)/f′(x): { iterations: [{ n, x, fx, dfx, error }], root, order, derivative }. */
+/**
+ * Newton's method x ← x − f(x)/f′(x): { iterations: [{ n, x, fx, dfx, error }], root, order, derivative }.
+ *
+ * With { exact: true } every step is done in exact rational arithmetic, as by
+ * hand with fractions: x, fx and dfx are Core Rationals, each row also gives
+ * the size of x's denominator in digits (it roughly doubles per step, as the
+ * correct digits do), and `floats` holds the double-precision iterates from
+ * the same start for comparison. f must be built from + − × ÷ and integer
+ * powers so that f(x) and f′(x) are exact; the default is 6 steps.
+ */
 export function newton(f, x0, opts = {}) {
+  if (opts.exact) return exactNewton(f, x0, opts);
   const { ast, variable, F, dAst } = prepare(f, opts);
   const dF = compileFloat(dAst);
   const rows = [];
@@ -302,7 +312,29 @@ export function newton(f, x0, opts = {}) {
   return finishRoots("newton", rows, root, { derivative: format(dAst) });
 }
 
-/** The secant method: { iterations: [{ n, x, fx, error }], root, order } (the order tends to (1 + √5)/2). */
+function exactNewton(f, x0, opts) {
+  const { ast, variable, dAst } = prepare(f, opts);
+  const at = (tree, x) => constantRational(tree, { [variable]: x });
+  let x = qOf(x0);
+  if (at(ast, x) === null || at(dAst, x) === null) refuse("not-rational", "exact Newton needs f built from + − × ÷ and integer powers, so that f(x) and f′(x) are exact fractions");
+  const rows = [];
+  const steps = opts.steps ?? 6;
+  for (let n = 0; n <= steps; n++) {
+    const fx = at(ast, x);
+    const dfx = at(dAst, x);
+    if (fx === null || dfx === null) refuse("undefined", `f or f′ is undefined at ${x}`);
+    rows.push({ n, x, fx, dfx, denominatorDigits: x.denominator.toString().length });
+    if (fx.numerator === 0n || dfx.numerator === 0n || n === steps) break;
+    x = x.subtract(fx.divide(dfx));
+  }
+  const floats = newton(f, startOf(x0), { ...opts, exact: false, steps: rows.length - 1 }).iterations.map((r) => r.x);
+  const last = rows.at(-1).x.toNumber();
+  const root = rows.at(-1).fx.numerator === 0n ? new RationalInterval(rows.at(-1).x, rows.at(-1).x) : certifiedRoot(ast, variable, last - 1e-6 - 1e-3 * Math.abs(last), last + 1e-6 + 1e-3 * Math.abs(last), last, opts.digits ?? 40);
+  for (const r of rows) r.error = root ? absIv(Iv.point(r.x).sub(Iv.from(root))).hi.toNumber() : null;
+  return { ...finishRoots("newton", rows, root, { derivative: format(dAst), exact: true, floats }), estimate: rows.at(-1).x };
+}
+
+/** The secant method:/** The secant method: { iterations: [{ n, x, fx, error }], root, order } (the order tends to (1 + √5)/2). */
 export function secant(f, x0, x1, opts = {}) {
   const { ast, variable, F } = prepare(f, opts);
   let [a, b] = [startOf(x0), startOf(x1)];
@@ -718,6 +750,79 @@ export function quadratureRule(f, [a, b], opts = {}) {
     error: out(s.sub(exact).roundOut(100)),
     bound: M === null ? null : rule.c.multiply(B.subtract(A)).multiply(hp).multiply(M),
     order: rule.p,
+  };
+}
+
+/**
+ * Lower and upper Darboux sums: darboux(f, partition) with the partition as a
+ * list of points ["0", "1/2", "1"] or { interval: [a, b], n } for n equal
+ * pieces. → { lower, upper, exact, pieces, integral }.
+ *
+ * On a piece where f′ is proven of one sign, f is monotone, so its inf and
+ * sup are its end values: exact fractions when f is built from + − × ÷ and
+ * powers. If every piece is like that and every end value is a fraction,
+ * `exact` is true and `lower` and `upper` are Core Rationals. Otherwise the
+ * inf and sup come from certified extrema (the end values and the enclosed
+ * critical points), `lower` and `upper` are RationalIntervals that contain
+ * the true sums, and `exact` is false. `integral` is the certified integral,
+ * which lies between the two sums.
+ */
+export function darboux(f, partition, opts = {}) {
+  const variable = opts.variable ?? "x";
+  const ast = toAst(f);
+  const dAst = simplify(derivative(ast, variable));
+  const bits = 120;
+  let points;
+  if (Array.isArray(partition)) points = partition.map(qOf);
+  else if (partition && partition.interval) {
+    const [A, B] = partition.interval.map(qOf);
+    const n = partition.n ?? 4;
+    points = Array.from({ length: n + 1 }, (_, i) => A.add(B.subtract(A).multiply(Q(i, n))));
+  } else refuse("bad-partition", "the partition is a list of points or { interval: [a, b], n }");
+  if (points.length < 2) refuse("bad-partition", "a partition needs at least two points");
+  for (let i = 1; i < points.length; i++) if (points[i].compareTo(points[i - 1]) <= 0) refuse("bad-partition", "partition points must increase");
+  const value = (x) => {
+    const q = constantRational(ast, { [variable]: x });
+    return q !== null ? Iv.point(q) : encloseAst(ast, { [variable]: Iv.point(x) }, bits);
+  };
+  const minIv = (ivs) => new Iv(ivs.reduce((m, v) => (v.lo.compareTo(m) < 0 ? v.lo : m), ivs[0].lo), ivs.reduce((m, v) => (v.hi.compareTo(m) < 0 ? v.hi : m), ivs[0].hi));
+  const maxIv = (ivs) => new Iv(ivs.reduce((m, v) => (v.lo.compareTo(m) > 0 ? v.lo : m), ivs[0].lo), ivs.reduce((m, v) => (v.hi.compareTo(m) > 0 ? v.hi : m), ivs[0].hi));
+  let lower = Iv.point(ZERO);
+  let upper = Iv.point(ZERO);
+  const pieces = [];
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1], points[i]];
+    const h = b.subtract(a);
+    const [fa, fb] = [value(a), value(b)];
+    let slope = null;
+    try {
+      const d = encloseAst(dAst, { [variable]: new Iv(a, b) }, bits);
+      if (d.lo.numerator >= 0n) slope = "increasing";
+      else if (d.hi.numerator <= 0n) slope = "decreasing";
+    } catch {
+      slope = null;
+    }
+    let inf;
+    let sup;
+    if (slope === "increasing") [inf, sup] = [fa, fb];
+    else if (slope === "decreasing") [inf, sup] = [fb, fa];
+    else {
+      const candidates = [fa, fb];
+      for (const c of extrema(ast, [a, b], { variable }).exact()) candidates.push(encloseAst(ast, { [variable]: new Iv(c.lo, c.hi) }, bits));
+      [inf, sup] = [minIv(candidates), maxIv(candidates)];
+    }
+    lower = lower.add(inf.scale(h));
+    upper = upper.add(sup.scale(h));
+    const show = (iv) => (iv.isPoint ? iv.lo : out(iv));
+    pieces.push({ from: a, to: b, monotone: slope, inf: show(inf), sup: show(sup) });
+  }
+  const exact = lower.isPoint && upper.isPoint;
+  return {
+    lower: exact ? lower.lo : out(lower.roundOut(bits)),
+    upper: exact ? upper.lo : out(upper.roundOut(bits)),
+    exact,
+    pieces,
+    integral: out(certifiedIntegral(ast, variable, points[0], points.at(-1), opts.digits ?? 20)),
   };
 }
 
