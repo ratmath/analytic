@@ -1573,7 +1573,15 @@ const seriesText = (coeffs, x, r) => {
  * series for each exponent that yields one.
  *
  * Returns { about, kind, indicial, exponents, solutions: [{ exponent,
- * coefficients, text }], notes, radius }. Coefficients are exact.
+ * coefficients, text, remainder, enclose }], notes, radius, provenRadius }.
+ * Coefficients are exact.
+ *
+ * Each solution is (x − c)^r·g(x) with g the power series listed. Its
+ * `remainder(ρ)` gives a proven bound for everything the listing leaves out:
+ * |g(x) − Σₙ≤N aₙ(x − c)ⁿ| ≤ bound for all complex x with |x − c| ≤ ρ, for any
+ * ρ below `provenRadius` (a proven lower bound for the distance to the
+ * nearest other singular point). `enclose(x)` is the partial sum at a
+ * rational x with that bound on either side.
  */
 export function seriesSolution({ p = 0, q = 0, about = 0, order = 8, x = "x" }) {
   const c = qOf(about);
@@ -1601,6 +1609,20 @@ export function seriesSolution({ p = 0, q = 0, about = 0, order = 8, x = "x" }) 
   const shiftedX = isZero(c) ? x : `(${x} - ${c})`;
   // distance to the nearest other singular point, estimated from the roots of the denominators
   out.radius = nearestRoot([pp.den, qp.den]);
+  const W = [pp.den, qp.den].map(inverseRootBound).reduce((u, v) => (u.compareTo(v) > 0 ? u : v));
+  out.provenRadius = isZero(W) ? Infinity : ONE.divide(W);
+  const attach = (sol, r, delta, Pnum, Qnum) => {
+    const data = { a: sol.coefficients, r, delta, N: order, P: { num: Pnum, den: pp.den }, Q: { num: Qnum, den: qp.den }, R: out.provenRadius };
+    sol.remainder = (rho) => seriesTail(data, qOf(rho));
+    sol.enclose = (at) => {
+      const h = qOf(at).subtract(c);
+      let partial = ZERO;
+      for (let k = sol.coefficients.length - 1; k >= 0; k--) partial = partial.multiply(h).add(sol.coefficients[k]);
+      const bound = isZero(h) ? ZERO : seriesTail(data, h.abs()).bound;
+      return { at: qOf(at), partial, bound, low: partial.subtract(bound), high: partial.add(bound), exponent: sol.exponent };
+    };
+    return sol;
+  };
   if (pp.k === 0 && qp.k === 0) {
     out.kind = "ordinary";
     const ps = seriesOf(pr.num, pr.den, order);
@@ -1612,7 +1634,8 @@ export function seriesSolution({ p = 0, q = 0, about = 0, order = 8, x = "x" }) 
         for (let k = 0; k <= n; k++) s = s.add(ps[k].multiply(Q(n - k + 1)).multiply(a[n - k + 1])).add(qs[k].multiply(a[n - k]));
         a.push(s.negate().divide(Q((n + 2) * (n + 1))));
       }
-      out.solutions.push({ exponent: ZERO, coefficients: a, text: seriesText(a, shiftedX, ZERO) });
+      // as a Frobenius series with exponent 0: x·p and x²·q, F(n) = n(n − 1)
+      out.solutions.push(attach({ exponent: ZERO, coefficients: a, text: seriesText(a, shiftedX, ZERO) }, ZERO, ONE.negate(), [ZERO, ...pr.num], [ZERO, ZERO, ...qr.num]));
     }
     return out;
   }
@@ -1623,8 +1646,10 @@ export function seriesSolution({ p = 0, q = 0, about = 0, order = 8, x = "x" }) 
   }
   out.kind = "regular singular";
   // x·p and x²·q as power series
-  const Ps = seriesOf(pp.k === 1 ? pr.num : [ZERO, ...pr.num], pp.den, order);
-  const Qs = seriesOf(qp.k === 2 ? qr.num : qp.k === 1 ? [ZERO, ...qr.num] : [ZERO, ZERO, ...qr.num], qp.den, order);
+  const Pnum = pp.k === 1 ? pr.num : [ZERO, ...pr.num];
+  const Qnum = qp.k === 2 ? qr.num : qp.k === 1 ? [ZERO, ...qr.num] : [ZERO, ZERO, ...qr.num];
+  const Ps = seriesOf(Pnum, pp.den, order);
+  const Qs = seriesOf(Qnum, qp.den, order);
   // r(r − 1) + P0·r + Q0 = 0
   const ind = [Qs[0], Ps[0].subtract(ONE), ONE];
   out.indicial = `${polyText(ind, "r")} = 0`;
@@ -1650,17 +1675,186 @@ export function seriesSolution({ p = 0, q = 0, about = 0, order = 8, x = "x" }) 
     }
     return a;
   };
+  // F(r + n) = n·(n + δ) with δ = F′(r) = 2r − 1 + P₀
+  const deltaAt = (r) => r.multiply(TWO).subtract(ONE).add(Ps[0]);
   const first = build(rs[0]);
-  out.solutions.push({ exponent: rs[0], coefficients: first, text: seriesText(first, shiftedX, rs[0]) });
+  out.solutions.push(attach({ exponent: rs[0], coefficients: first, text: seriesText(first, shiftedX, rs[0]) }, rs[0], deltaAt(rs[0]), Pnum, Qnum));
   const gap = rs[0].subtract(rs[1]);
   if (isZero(gap)) out.notes.push("the exponents are equal: the second solution is y₁·log x plus another series");
   else {
     const second = build(rs[1]);
-    if (second) out.solutions.push({ exponent: rs[1], coefficients: second, text: seriesText(second, shiftedX, rs[1]) });
+    if (second) out.solutions.push(attach({ exponent: rs[1], coefficients: second, text: seriesText(second, shiftedX, rs[1]) }, rs[1], deltaAt(rs[1]), Pnum, Qnum));
     else out.notes.push(`the exponents differ by the whole number ${gap} and the smaller one needs a logarithm: the second solution is c·y₁·log x plus a series`);
   }
   return out;
 }
+
+// ---- a proven remainder ------------------------------------------------------------------------
+//
+// Write the equation as x²y″ + x·P(x)·y′ + Q(x)·y = 0 with P = Σ Pₖxᵏ and
+// Q = Σ Qₖxᵏ. A solution xʳ Σ aₙxⁿ satisfies
+//
+//   F(r + n)·aₙ = − Σₖ₌₁ⁿ (Pₖ·(r + n − k) + Qₖ)·aₙ₋ₖ,   F(r + n) = n·(n + δ).
+//
+// P and Q are rational functions N/D. If every root of D has modulus at least
+// R then 1/D is majorised by |D(0)|⁻¹(1 − x/R)^(−deg D), so for any s < R,
+// |Pₖ| ≤ M_P/sᵏ with M_P the value of the majorant at s (and likewise M_Q).
+// Put bₙ = |aₙ|sⁿ and cⱼ = M_P(|r| + j) + M_Q. Then
+//
+//   n(n + δ)·bₙ ≤ Sₙ := Σⱼ<ₙ cⱼbⱼ   and   Sₙ₊₁ ≤ Sₙ·(1 + εₙ),  εₙ = cₙ/(n(n + δ)),
+//
+// with εₙ decreasing once n > max(0, −δ). S_(N+1) is known exactly from the
+// coefficients computed, so for |x| ≤ ρ < s, with t = ρ/s and ε = ε_(N+1),
+//
+//   Σₙ>N |aₙ|ρⁿ ≤ S_(N+1)·t^(N+1) / ((N + 1)(N + 1 + δ)(1 − (1 + ε)t))
+//
+// whenever (1 + ε)t < 1. Everything is rational arithmetic.
+
+const lnBig = (n) => {
+  if (n < 0n) n = -n;
+  if (n === 0n) return -Infinity;
+  const bits = n.toString(2).length;
+  const shift = Math.max(0, bits - 53);
+  return Math.log(Number(n >> BigInt(shift))) + shift * Math.LN2;
+};
+const lnQ = (q) => lnBig(q.numerator) - lnBig(q.denominator);
+const powQ = (q, n) => { let r = ONE; let b = q; let e = n; while (e > 0) { if (e & 1) r = r.multiply(b); b = b.multiply(b); e >>= 1; } return r; };
+/** a rational at least x, with about `digits` significant digits */
+function roundUp(x, digits = 3) {
+  if (isZero(x)) return ZERO;
+  const e = Math.floor(lnQ(x) / Math.LN10);
+  const k = digits - 1 - e;
+  const scale = k >= 0 ? new Rational(10n ** BigInt(k)) : new Rational(1n, 10n ** BigInt(-k));
+  return new Rational(x.multiply(scale).ceil()).divide(scale);
+}
+/**
+ * A rational W with 1/|ζ| ≤ W for every root ζ of the polynomial d (d(0) ≠ 0),
+ * so that d has no root of modulus below 1/W. Zero for a constant. Graeffe's
+ * root squaring is applied to the reversed polynomial and Fujiwara's bound to
+ * the result, which loses at most a factor 2^(1/64).
+ */
+function inverseRootBound(d) {
+  let e = [...d];
+  while (e.length > 1 && isZero(e[e.length - 1])) e.pop();
+  const m = e.length - 1;
+  if (m < 1) return ZERO;
+  e.reverse(); // roots are now the reciprocals 1/ζ
+  let steps = 0;
+  while (steps < 6) {
+    const size = e.reduce((s, v) => Math.max(s, v.numerator.toString(2).length + v.denominator.toString(2).length), 0);
+    if (size > 6000) break;
+    const flipped = e.map((v, k) => (k % 2 ? v.negate() : v));
+    const prod = P.mul(e, flipped);
+    e = Array.from({ length: m + 1 }, (_, k) => prod[2 * k] ?? ZERO);
+    // clear a common scale so the numbers stay as small as they can
+    const lead = e[m];
+    e = e.map((v) => v.divide(lead));
+    steps += 1;
+  }
+  const pow = 2 ** steps;
+  const ratios = [];
+  for (let k = 1; k <= m; k++) ratios.push(e[m - k].divide(e[m]).abs());
+  let ln = -Infinity;
+  ratios.forEach((q, i) => { if (!isZero(q)) ln = Math.max(ln, (Math.LN2 + lnQ(q) / (i + 1)) / pow); });
+  if (ln === -Infinity) return ZERO;
+  // a rational a little above exp(ln), then checked exactly: W^(pow·k) ≥ 2ᵏ·|e_(m−k)/e_m|
+  let w = Math.exp(ln) * (1 + 1e-9);
+  for (let tries = 0; tries < 60; tries++) {
+    const digits = 12 - Math.floor(Math.log10(w));
+    const scale = digits >= 0 ? 10n ** BigInt(digits) : 1n;
+    const W = digits >= 0 ? new Rational(BigInt(Math.ceil(w * Number(scale))), scale) : new Rational(BigInt(Math.ceil(w)));
+    const ok = ratios.every((q, i) => isZero(q) || powQ(W, pow * (i + 1)).compareTo(q.multiply(powQ(TWO, i + 1))) >= 0);
+    if (ok) return W;
+    w *= 1 + 1e-7;
+  }
+  refuse("no-series", "could not prove a bound for the singular points of this equation");
+}
+const TAIL_FROM = 120;
+/**
+ * A proven M with |cₖ|·sᵏ ≤ M for every k ≥ 1, where N/D = Σ cₖxᵏ. The first
+ * TAIL_FROM coefficients are used exactly; the rest are bounded through the
+ * majorant |D(0)|⁻¹(1 − x/R)^(−deg D) of 1/D, whose coefficients times sʲ
+ * decrease once j is large. Null when s is too close to R for that.
+ */
+function supBound(fn, s, R) {
+  const { num: N, den } = fn;
+  let m = den.length - 1;
+  while (m > 0 && isZero(den[m])) m--;
+  const L = Math.max(TAIL_FROM, N.length + 1);
+  fn.series ??= seriesOf(N, den, L - 1);
+  let M = ZERO;
+  let sp = ONE;
+  for (let k = 1; k < L; k++) {
+    sp = sp.multiply(s);
+    if (isZero(fn.series[k])) continue;
+    const v = roundUp(fn.series[k].abs().multiply(sp), 6);
+    if (v.compareTo(M) > 0) M = v;
+  }
+  if (m === 0) return M; // a polynomial: nothing beyond its degree
+  const j0 = L - (N.length - 1);
+  const ratio = s.divide(R);
+  if (Q(j0 + m, j0 + 1).multiply(ratio).compareTo(ONE) >= 0) return null;
+  let binom = ONE; // C(j0 + m − 1, m − 1)
+  for (let i = 1; i <= m - 1; i++) binom = binom.multiply(Q(j0 + i, i));
+  let top = ZERO;
+  for (let k = N.length - 1; k >= 0; k--) top = top.multiply(s).add(N[k].abs());
+  const tail = roundUp(top.multiply(binom).multiply(powQ(ratio, j0)).divide(den[0].abs()), 6);
+  return tail.compareTo(M) > 0 ? tail : M;
+}
+function seriesTail({ a, r, delta, N, P: Pd, Q: Qd, R }, rho) {
+  if (rho.compareTo(ZERO) <= 0) refuse("no-series", "the radius has to be positive");
+  if (R !== Infinity && rho.compareTo(R) >= 0) refuse("no-series", `a remainder is proven only inside the disc of radius ${Number(R.toNumber().toPrecision(6))}, short of the nearest singular point`);
+  if (Q(N + 1).add(delta).compareTo(ZERO) <= 0) refuse("no-series", "take more terms: the remainder bound starts past the difference of the exponents");
+  const absR = r.abs();
+  const candidates = [];
+  if (R === Infinity) for (let j = 1; j <= 6; j++) candidates.push(rho.multiply(powQ(TWO, j)));
+  else {
+    for (let j = 1; j <= 7; j++) {
+      const s = roundUp(rho.add(R.subtract(rho).multiply(Q(j, 8))), 4);
+      if (s.compareTo(rho) > 0 && s.compareTo(R) < 0) candidates.push(s);
+    }
+  }
+  let best = null;
+  for (const s of candidates) {
+    const MP = supBound(Pd, s, R);
+    const MQ = supBound(Qd, s, R);
+    if (!MP || !MQ) continue;
+    const cAt = (j) => MP.multiply(absR.add(Q(j))).add(MQ);
+    const t = rho.divide(s);
+    // S = S_(N+1) = Σⱼ≤N cⱼ|aⱼ|sʲ, exactly
+    let S = ZERO;
+    let sp = ONE;
+    for (let j = 0; j <= N; j++) {
+      if (!isZero(a[j])) S = S.add(cAt(j).multiply(a[j].abs()).multiply(sp));
+      sp = sp.multiply(s);
+    }
+    S = roundUp(S, 15);
+    // step forward until the ratio (1 + εₙ)t is safely below 1, then sum a geometric series
+    const target = ONE.add(t).divide(TWO);
+    let n = N + 1;
+    let tn = roundUp(powQ(t, n), 15);
+    let acc = ZERO;
+    let B = null;
+    for (let step = 0; step < 400; step++) {
+      const lead = Q(n).multiply(Q(n).add(delta));
+      const eps = cAt(n).divide(lead);
+      const ratio = ONE.add(eps).multiply(t);
+      if (ratio.compareTo(target) <= 0) {
+        B = acc.add(S.multiply(tn).divide(lead.multiply(ONE.subtract(ratio))));
+        break;
+      }
+      acc = roundUp(acc.add(S.multiply(tn).divide(lead)), 15);
+      S = roundUp(S.multiply(ONE.add(eps)), 15);
+      tn = roundUp(tn.multiply(t), 15);
+      n += 1;
+    }
+    if (B && (!best || B.compareTo(best) < 0)) best = B;
+  }
+  if (!best) refuse("no-series", `no remainder could be proven out to radius ${rho}: take a smaller radius`);
+  const bound = roundUp(best);
+  return { radius: rho, terms: N + 1, bound, approx: bound.toNumber(), text: `for |x| ≤ ${rho} from the centre, the terms beyond degree ${N} add up to at most ${bound.toNumber().toExponential(2)}` };
+}
+
 /** smallest modulus of a root of any of the polynomials (floating point; Infinity when there are none) */
 function nearestRoot(polys) {
   let best = Infinity;

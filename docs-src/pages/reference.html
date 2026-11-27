@@ -134,7 +134,7 @@
     <tr><td>laplaceSolve(coefficients, forcing, initial)</td><td>{ transform, solution, pieces, verified, steps, at(t) }</td><td>See <a href="#switches">Steps and impulses</a></td></tr>
     <tr><td>linearSystem(A)</td><td>{ eigenvalues, kind, stability, exponential, solution(x0) }</td><td>Any size; kinds for 2 by 2. See <a href="#systems">Systems in the plane</a></td></tr>
     <tr><td>planarSystem([f, g], [x, y])</td><td>PlanarSystem</td><td><code>equilibria(box)</code>, <code>jacobian()</code>, <code>nullclines()</code>, <code>conserves(H)</code>, <code>along(V)</code>, <code>orbit({ from, until })</code></td></tr>
-    <tr><td>seriesSolution({ p, q, about, order })</td><td>{ kind, indicial, exponents, solutions, notes, radius }</td><td>See <a href="#seriessolutions">Series solutions</a></td></tr>
+    <tr><td>seriesSolution({ p, q, about, order })</td><td>{ kind, indicial, exponents, solutions, notes, radius, provenRadius }; each solution has remainder(ρ) and enclose(x) with a proven bound</td><td>See <a href="#seriessolutions">Series solutions</a></td></tr>
     <tr><td>heat, laplaceRectangle, laplaceDisc</td><td>series solutions with <code>at(…)</code> → { value, partial, tail }</td><td>See <a href="#pdes">Heat, waves and potentials</a></td></tr>
     <tr><td>wave({ c, length, position, velocity })</td><td>{ at(x, t), travelling, modes(N) }</td><td>d'Alembert's formula</td></tr>
     <tr><td>sturmLiouville({ p, q, w, interval, count })</td><td>[{ index, eigenvalue, proven }]</td><td>shooting, each eigenvalue bracketed by validated solutions</td></tr>

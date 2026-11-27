@@ -20,13 +20,28 @@ seriesSolution({ p: "1/x", q: "(x^2 - 1/4)/x^2" });   // Bessel of order 1/2
   <p>The larger root always gives a series. The smaller root gives a second one unless the roots are equal or differ by a whole number, in which case the bracket on the left can vanish for some \(n\); then the second solution contains \(\log x\), and <code>notes</code> says so. (When the right side happens to vanish too, the series exists after all, as for Bessel's equation of order one half.)</p>
   <p>A point where the poles are worse is an <em>irregular</em> singular point, and the method does not apply.</p>
 
+  <h2>A proven remainder</h2>
+  <p>A truncated series is only useful with a bound on what was cut off. Each solution \(y = (x - x_0)^r g(x)\), \(g = \sum a_n (x - x_0)^n\), carries one: <code>remainder(ρ)</code> returns a rational \(B\) with</p>
+  \[ \Bigl|\, g(x) - \sum_{n \le N} a_n (x - x_0)^n \Bigr| \le B \quad\text{for all complex } x \text{ with } |x - x_0| \le \rho , \]
+  <p>for any \(\rho\) below <code>provenRadius</code>. <code>enclose(x)</code> evaluates the partial sum at a rational point and puts that bound on either side.</p>
+<pre><code>const cos = seriesSolution({ q: "1", order: 12 }).solutions[0];   // y'' + y = 0, y(0) = 1, y'(0) = 0
+cos.remainder(1).bound;        // 447/1000000000000: the terms beyond x^12 are below 4.47e-10 on the unit disc
+const e = cos.enclose("1/2");  // { partial, bound, low, high }
+e.low.toDecimal(15), e.high.toDecimal(15);   // both 0.877582561890372…: cos(1/2) to 13 places, proven</code></pre>
+  <p>The proof is the classical convergence argument made quantitative. Take \(x_0 = 0\). First, a radius: the reciprocals of the roots of the denominators of \(p\) and \(q\) are bounded by root squaring (Graeffe) and Fujiwara's bound, in exact arithmetic, giving \(R\) with no singular point in \(0 &lt; |x| &lt; R\); that is <code>provenRadius</code>, within about one percent of the true distance. Second, for a radius \(s &lt; R\), numbers \(M_P, M_Q\) with \(|P_k| \le M_P/s^k\) and \(|Q_k| \le M_Q/s^k\) for all \(k \ge 1\): the first hundred or so coefficients are used exactly and the rest are bounded by a majorant of the form \((1 - x/R)^{-m}\). Third, the recurrence. With \(b_n = |a_n| s^n\) and \(c_j = M_P(|r| + j) + M_Q\) it gives</p>
+  \[ n\,(n + \delta)\, b_n \le S_n := \sum_{j &lt; n} c_j b_j, \qquad S_{n+1} \le S_n\,(1 + \varepsilon_n), \quad \varepsilon_n = \frac{c_n}{n(n + \delta)}, \]
+  <p>where \(\delta = 2r - 1 + P_0\), because the bracket in the recurrence equals \(n(n + \delta)\). \(S_{N+1}\) is known exactly from the coefficients already computed, and \(\varepsilon_n\) decreases to 0. So for \(|x| \le \rho &lt; s\) the tail \(\sum_{n &gt; N} b_n (\rho/s)^n\) is at most a few explicit terms plus a geometric series, once \((1 + \varepsilon_n)\rho/s &lt; 1\). Several values of \(s\) are tried and the smallest bound kept. Every step is rational arithmetic rounded upward.</p>
+  <p>The bound covers the series \(g\); the factor \((x - x_0)^r\) is explicit. Near the edge of the disc a bound still exists but is weak, as it must be: the series itself converges slowly there.</p>
+
   <h2>Checking a series</h2>
-  <p>The coefficients are exact, and a partial sum is a polynomial whose value at a rational point is an exact rational. Comparing it with the validated solution of the same initial value problem shows the true truncation error, as in the box below.</p>
+  <p>The coefficients are exact, and a partial sum is a polynomial whose value at a rational point is an exact rational. Comparing it with the validated solution of the same initial value problem shows the true truncation error next to the proven bound, as in the box below.</p>
 
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th></tr>
-    <tr><td>seriesSolution({ p, q, about = 0, order = 8, x = "x" })</td><td>{ about, kind, indicial, exponents, solutions, notes, radius }</td></tr>
-    <tr><td>solutions[i]</td><td>{ exponent, coefficients, text }, coefficients exact</td></tr>
+    <tr><td>seriesSolution({ p, q, about = 0, order = 8, x = "x" })</td><td>{ about, kind, indicial, exponents, solutions, notes, radius, provenRadius }</td></tr>
+    <tr><td>solutions[i]</td><td>{ exponent, coefficients, text, remainder, enclose }, coefficients exact</td></tr>
+    <tr><td>solutions[i].remainder(ρ)</td><td>{ radius, terms, bound, approx, text }: a proven bound for the terms left out, on the disc of radius ρ</td></tr>
+    <tr><td>solutions[i].enclose(x)</td><td>{ partial, bound, low, high, exponent }: the series factor at a rational x</td></tr>
   </table></div>
 <template data-runbox>
 // Airy's equation y'' = x·y about 0.
@@ -41,6 +56,9 @@ for (const c of a) partial = partial.add(c);            // x = 1: just add the c
 const exact = ode.solve({ f: ["v", "x*y"], vars: ["y", "v"], time: "x", y0: [1, 0], until: 1 }).exact().final[0];
 PRINT("partial sum at 1:", partial.toDecimal(12), " validated:", exact.low.toDecimal(12));
 PRINT("truncation error about", exact.low.subtract(partial).toDecimal(10));
+PRINT("proven bound on the unit disc:", airy.solutions[0].remainder(1).text);
+const at1 = airy.solutions[0].enclose(1);
+PRINT("so y(1) lies in [", at1.low.toDecimal(12), ",", at1.high.toDecimal(12), "]");
 
 // Bessel's equation of order 0: equal exponents, so one series and a logarithm.
 const j0 = seriesSolution({ p: "1/x", q: "1", order: 8 });
@@ -50,6 +68,8 @@ PRINT("  note:", j0.notes[0]);
 
 // Legendre's equation with n = 2: one solution is a polynomial, and the radius is 1.
 const leg = seriesSolution({ p: "-2*x/(1 - x^2)", q: "6/(1 - x^2)", order: 8 });
-PRINT("Legendre:", leg.solutions[0].text, "  radius", leg.radius.toFixed(3));
+PRINT("Legendre:", leg.solutions[0].text, "  radius", leg.radius.toFixed(3), "  proven radius", leg.provenRadius.toNumber().toFixed(3));
+PRINT("  second solution,", leg.solutions[1].remainder("1/2").text);
+PRINT("  and", leg.solutions[1].remainder("9/10").text);
 seriesSolution({ p: "1/x^2", q: "1" }).kind;
 </template>

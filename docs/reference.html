@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
 
-<link rel="stylesheet" href="assets/site.css?v=6983c17141">
+<link rel="stylesheet" href="assets/site.css?v=6e17e840f5">
 </head>
 <body>
 <div class="shell">
@@ -242,7 +242,7 @@
     <tr><td>laplaceSolve(coefficients, forcing, initial)</td><td>{ transform, solution, pieces, verified, steps, at(t) }</td><td>See <a href="switches.html">Steps and impulses</a></td></tr>
     <tr><td>linearSystem(A)</td><td>{ eigenvalues, kind, stability, exponential, solution(x0) }</td><td>Any size; kinds for 2 by 2. See <a href="systems.html">Systems in the plane</a></td></tr>
     <tr><td>planarSystem([f, g], [x, y])</td><td>PlanarSystem</td><td><code>equilibria(box)</code>, <code>jacobian()</code>, <code>nullclines()</code>, <code>conserves(H)</code>, <code>along(V)</code>, <code>orbit({ from, until })</code></td></tr>
-    <tr><td>seriesSolution({ p, q, about, order })</td><td>{ kind, indicial, exponents, solutions, notes, radius }</td><td>See <a href="seriessolutions.html">Series solutions</a></td></tr>
+    <tr><td>seriesSolution({ p, q, about, order })</td><td>{ kind, indicial, exponents, solutions, notes, radius, provenRadius }; each solution has remainder(ρ) and enclose(x) with a proven bound</td><td>See <a href="seriessolutions.html">Series solutions</a></td></tr>
     <tr><td>heat, laplaceRectangle, laplaceDisc</td><td>series solutions with <code>at(…)</code> → { value, partial, tail }</td><td>See <a href="pdes.html">Heat, waves and potentials</a></td></tr>
     <tr><td>wave({ c, length, position, velocity })</td><td>{ at(x, t), travelling, modes(N) }</td><td>d'Alembert's formula</td></tr>
     <tr><td>sturmLiouville({ p, q, w, interval, count })</td><td>[{ index, eigenvalue, proven }]</td><td>shooting, each eigenvalue bracketed by validated solutions</td></tr>
@@ -350,6 +350,6 @@ f.range(R`0:5`, { digits: 6 }).exact()</textarea>
 </section>
 </main>
 </div>
-<script type="module" src="assets/pages.js?v=6983c17141"></script>
+<script type="module" src="assets/pages.js?v=6e17e840f5"></script>
 </body>
 </html>

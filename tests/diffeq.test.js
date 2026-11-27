@@ -177,6 +177,64 @@ describe("series solutions", () => {
     expect(seriesSolution({ p: "-2*x/(1 - x^2)", q: "6/(1 - x^2)" }).radius).toBeCloseTo(1, 6);
     expect(seriesSolution({ p: "1/x^2", q: "1" }).kind).toBe("irregular singular");
   });
+
+  test("a proven remainder", () => {
+    // y'' + y = 0: cos, with the tail bounded on a whole disc
+    const cos = seriesSolution({ q: "1", order: 12 });
+    expect(cos.provenRadius).toBe(Infinity);
+    const y = cos.solutions[0];
+    const rem = y.remainder(1);
+    expect(rem.terms).toBe(13);
+    expect(rem.bound.toNumber()).toBeLessThan(1e-9);
+    expect(rem.bound.toNumber()).toBeGreaterThan(1 / 87178291200); // the true tail at 1 is about 1/14!
+    const e = y.enclose("1/2");
+    expect(e.low.toNumber()).toBeLessThanOrEqual(Math.cos(0.5));
+    expect(e.high.toNumber()).toBeGreaterThanOrEqual(Math.cos(0.5));
+    expect(e.bound.toNumber()).toBeLessThan(1e-13);
+    // Bessel of order 1/2: x^(1/2)·g(x) with g = sin(x)/x up to a constant
+    const b = seriesSolution({ p: "1/x", q: "(x^2 - 1/4)/x^2", order: 12 });
+    const g = b.solutions[0].enclose(1);
+    expect(String(g.exponent)).toBe("1/2");
+    expect(g.low.toNumber()).toBeLessThanOrEqual(Math.sin(1));
+    expect(g.high.toNumber()).toBeGreaterThanOrEqual(Math.sin(1));
+    expect(g.bound.toNumber()).toBeLessThan(1e-9);
+    // J0(2) from the Frobenius series with equal exponents
+    const j0 = seriesSolution({ p: "1/x", q: "1", order: 16 }).solutions[0].enclose(2);
+    expect(Math.abs(j0.partial.toNumber() - 0.22389077914123567)).toBeLessThan(j0.bound.toNumber());
+    // Legendre: singular points at ±1, proven radius just below 1
+    const leg = seriesSolution({ p: "-2*x/(1 - x^2)", q: "6/(1 - x^2)", order: 24 });
+    expect(leg.provenRadius.toNumber()).toBeLessThanOrEqual(1);
+    expect(leg.provenRadius.toNumber()).toBeGreaterThan(0.97);
+    expect(leg.solutions[1].remainder("1/2").bound.toNumber()).toBeLessThan(1e-7);
+    expect(() => leg.solutions[1].remainder(1)).toThrow();
+    expect(() => leg.solutions[1].remainder(0)).toThrow();
+  });
+
+  test("the remainder bound holds against longer series", () => {
+    const cases = [
+      { q: "-x" },
+      { p: "1/(x^2+1)", q: "x/(x-3)", about: 1 },
+      { p: "(3 - x)/(x*(2+x))", q: "-1/(x*(x^2+4))" },
+      { p: "(1-3*x)/(x*(1-x))", q: "-1/(x*(1-x))" },
+    ];
+    for (const c of cases) {
+      const lo = seriesSolution({ ...c, order: 10 });
+      const hi = seriesSolution({ ...c, order: 70 });
+      const R = lo.provenRadius === Infinity ? 3 : lo.provenRadius.toNumber();
+      lo.solutions.forEach((sol, i) => {
+        for (const f of [0.4, 0.85]) {
+          const rho = Math.round(R * f * 100) / 100;
+          const bound = sol.remainder(String(rho)).bound.toNumber();
+          for (const x of [rho, -rho]) {
+            const A = hi.solutions[i].coefficients;
+            let tail = 0;
+            for (let k = A.length - 1; k > 10; k--) tail = tail * x + A[k].toNumber();
+            expect(Math.abs(tail * x ** 11)).toBeLessThanOrEqual(bound);
+          }
+        }
+      });
+    }
+  });
 });
 
 describe("partial differential equations", () => {
