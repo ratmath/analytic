@@ -29,12 +29,14 @@
     "src/",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/llms.txt"
   ],
   "sideEffects": false,
   "scripts": {
     "test": "bun test tests/",
-    "docs:build": "bun scripts/build-docs.js"
+    "docs:build": "bun scripts/build-docs.js && node scripts/build-llms.mjs",
+    "docs:llms": "node scripts/build-llms.mjs"
   },
   "peerDependencies": {
     "@ratmath/core": ">=0.10.0 <0.12.0"
