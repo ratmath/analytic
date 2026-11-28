@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Requires Core 0.12: the `@ratmath/core` peer range is now `>=0.12.0` (Core 0.12 returns Integers from `floor`/`ceil`/`trunc`/`round` and rounds half up by default).
 - Fix: `verifyCertificate` for an "N for ε" certificate now checks every index
   from N up to where the tail arguments take over, and that the parts are the
   subsequences of the certified sequence for every residue class. Before, a
