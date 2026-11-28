@@ -1035,7 +1035,7 @@ export interface TransportSolution {
   residual(x: RationalLike | string, t: RationalLike | string): RationalInterval;
 }
 /** u_t + speed·u_x + decay·u = source with u(x, 0) = initial, by characteristics. */
-export function transport(spec: { speed: ExpressionLike | number; decay?: RationalLike | string; source?: RationalLike | string; initial: ExpressionLike | number; interval?: [RationalLike | string, RationalLike | string] | null; digits?: number; x?: string; t?: string; u?: string }): TransportSolution;
+export function transport(spec: { speed: ExpressionLike | number; decay?: RationalLike | string; source?: RationalLike | string; initial: ExpressionLike | number; interval?: [RationalLike | string, RationalLike | string] | null; digits?: number; order?: number; tol?: RationalLike | string; x?: string; t?: string; u?: string }): TransportSolution;
 export function laplaceDisc(spec: { radius?: RationalLike | string; boundary: ExpressionLike; terms?: number; digits?: number; angle?: string }): SeparatedSolution & FiniteModes & { coefficients?: { a: RationalInterval[]; b: RationalInterval[] }; mean: RationalInterval };
 export function wave(spec: { c?: RationalLike | string; length?: RationalLike | string | null; position?: ExpressionLike; velocity?: ExpressionLike; digits?: number; x?: string }): {
   equation: string;

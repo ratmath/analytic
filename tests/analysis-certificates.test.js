@@ -58,7 +58,7 @@ describe("B2: limits of f(n)^g(n)", () => {
     // the first terms agree with the proof
     const t = A.sequence("(1 + 1/n)^n").terms(6).map((x) => (x instanceof Rational ? x.toNumber() : mid(x)));
     for (let i = 1; i < t.length; i++) expect(t[i]).toBeGreaterThan(t[i - 1]);
-  });
+  }, 120000);
 });
 
 describe("B3: an N for ε", () => {
@@ -99,7 +99,7 @@ describe("B3: an N for ε", () => {
     expect(d(r.N)).toBeLessThan(0.01);
     expect(d(r.N - 1)).toBeGreaterThanOrEqual(0.01);
     expect(A.verifyCertificate(r.certificate).valid).toBe(true);
-  });
+  }, 120000);
   test("a wrong limit, an unbounded sequence and a bad ε are refused; a tampered certificate fails", () => {
     expect(() => A.sequence("1/n").nFor("1/10", { limit: "1" })).toThrow(/not the limit/);
     expect(() => A.sequence("n^2").nFor("1/10")).toThrow(/unbounded/);

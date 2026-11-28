@@ -120,8 +120,11 @@ class TransportSolution {
  * (the quasilinear case, with decay = source = 0). `decay` and `source` are
  * numbers. `interval: [a, b]` limits the starting points considered in the
  * quasilinear case, which is what lets the breaking time be computed.
+ * `order` and `tol` go to the validated ODE solver that follows a
+ * characteristic of a general c(x, t) (a smaller tol gives a tighter foot and
+ * takes longer).
  */
-export function transport({ speed, decay = 0, source = 0, initial, interval = null, digits = 12, x = "x", t = "t", u = "u" }) {
+export function transport({ speed, decay = 0, source = 0, initial, interval = null, digits = 12, order = 8, tol = "1e-8", x = "x", t = "t", u = "u" }) {
   if (initial === undefined || speed === undefined) refuse("bad-problem", "give the speed and the initial values");
   const c = simplify(toAst(typeof speed === "number" ? String(speed) : speed));
   const f = toAst(typeof initial === "number" ? String(initial) : initial);
@@ -274,7 +277,7 @@ export function transport({ speed, decay = 0, source = 0, initial, interval = nu
     crossing: neverLinear,
     _foot(xq, tq) {
       if (tq.numerator === 0n) return Iv.point(xq);
-      const sol = odeSolve({ f: format(c), vars: [x], time: t, y0: xq, t0: tq, until: 0, order: 10, tol: "1e-12" }).exact();
+      const sol = odeSolve({ f: format(c), vars: [x], time: t, y0: xq, t0: tq, until: 0, order, tol, track: false }).exact();
       if (!sol.complete) refuse("no-enclosure", `the characteristic through (${xq}, ${tq}) could not be followed back to ${t} = 0: ${sol.reason ?? "the validated solve stopped early"}`);
       return Iv.from(sol.at(0));
     },

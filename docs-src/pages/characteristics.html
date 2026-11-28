@@ -33,7 +33,7 @@ b.at(1, 2);           // refuses: characteristics have crossed</code></pre>
 
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th></tr>
-    <tr><td>transport({ speed, decay = 0, source = 0, initial, interval })</td><td>{ kind, characteristics, foot, formula, crossing, at, residual }; also <code>pde.transport</code></td></tr>
+    <tr><td>transport({ speed, decay = 0, source = 0, initial, interval, order = 8, tol = "1e-8" })</td><td>{ kind, characteristics, foot, formula, crossing, at, residual }; also <code>pde.transport</code></td></tr>
     <tr><td>u.at(x, t)</td><td>{ value, foot }: RationalIntervals (single numbers when the arithmetic is exact)</td></tr>
     <tr><td>u.residual(x, t)</td><td>an enclosure of the equation's left side minus right side from the closed formula</td></tr>
     <tr><td>u.crossing</td><td>{ never: true | false | null, time, reason }</td></tr>
@@ -50,10 +50,10 @@ PRINT("u =", w.formula);
 const s = transport({ speed: "x", initial: "1/(1 + x^2)" });
 PRINT("speed x: foot", s.foot, " u =", s.formula);
 
-// A speed with no closed foot: followed back by the validated ODE solver.
-const v = transport({ speed: "1/(1 + x^2)", initial: "x" });
+// A speed with no closed foot formula here: followed back by the validated ODE solver.
+const v = transport({ speed: "t*x", initial: "x^2" });
 const p = v.at(1, 1);
-PRINT("speed 1/(1+x²): foot of (1, 1) in [" + p.foot.low.toDecimal(12) + ", " + p.foot.high.toDecimal(12) + "]");
+PRINT("speed t·x: foot of (1, 1) in [" + p.foot.low.toDecimal(10) + ", " + p.foot.high.toDecimal(10) + "],  exp(-1/2) =", Math.exp(-0.5));
 
 // Burgers' equation: the wave steepens and breaks at sqrt(e/2).
 const b = transport({ speed: "u", initial: "exp(-x^2)", interval: [-4, 4] });

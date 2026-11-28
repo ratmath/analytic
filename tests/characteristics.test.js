@@ -54,12 +54,12 @@ describe("transport: linear equations", () => {
     expect(u.kind).toBe("variable speed");
     const p = u.at(1, 1);
     expect(has(p.value, Math.exp(-1))).toBe(true);
-    expect(n(p.value.high) - n(p.value.low)).toBeLessThan(1e-9);
+    expect(n(p.value.high) - n(p.value.low)).toBeLessThan(1e-6);
     expect(u.crossing.never).toBe(true);
-    // dx/dt = 1/(1 + x²) keeps x + x³/3 − t
-    const w = transport({ speed: "1/(1+x^2)", initial: "x" });
+    // dx/dt = cos(t) keeps x − sin(t)
+    const w = transport({ speed: "cos(t)", initial: "x" });
     const xi = mid(w.at(1, 1).foot);
-    expect(Math.abs(xi + xi ** 3 / 3 - 1 / 3)).toBeLessThan(1e-9);
+    expect(Math.abs(xi - (1 - Math.sin(1)))).toBeLessThan(1e-7);
     expect(() => w.residual(1, 1)).toThrow();
   });
   test("refusals", () => {

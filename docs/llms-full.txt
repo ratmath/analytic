@@ -1,6 +1,6 @@
 # @ratmath/analytic 0.1.0: full documentation
 
-> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit e615ef7. Each page ends with a runnable example; in it, PRINT(...) prints.
+> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit 34e7dd7. Each page ends with a runnable example; in it, PRINT(...) prints.
 
 
 ---
@@ -1735,7 +1735,7 @@ With `interval: [a, b]` the least value of F′ over starting points in [a,b] is
 
 | call | returns |
 
-| transport({ speed, decay = 0, source = 0, initial, interval }) | { kind, characteristics, foot, formula, crossing, at, residual }; also pde.transport |
+| transport({ speed, decay = 0, source = 0, initial, interval, order = 8, tol = "1e-8" }) | { kind, characteristics, foot, formula, crossing, at, residual }; also pde.transport |
 
 | u.at(x, t) | { value, foot }: RationalIntervals (single numbers when the arithmetic is exact) |
 
@@ -1757,10 +1757,10 @@ PRINT("u =", w.formula);
 const s = transport({ speed: "x", initial: "1/(1 + x^2)" });
 PRINT("speed x: foot", s.foot, " u =", s.formula);
 
-// A speed with no closed foot: followed back by the validated ODE solver.
-const v = transport({ speed: "1/(1 + x^2)", initial: "x" });
+// A speed with no closed foot formula here: followed back by the validated ODE solver.
+const v = transport({ speed: "t*x", initial: "x^2" });
 const p = v.at(1, 1);
-PRINT("speed 1/(1+x²): foot of (1, 1) in [" + p.foot.low.toDecimal(12) + ", " + p.foot.high.toDecimal(12) + "]");
+PRINT("speed t·x: foot of (1, 1) in [" + p.foot.low.toDecimal(10) + ", " + p.foot.high.toDecimal(10) + "],  exp(-1/2) =", Math.exp(-0.5));
 
 // Burgers' equation: the wave steepens and breaks at sqrt(e/2).
 const b = transport({ speed: "u", initial: "exp(-x^2)", interval: [-4, 4] });
