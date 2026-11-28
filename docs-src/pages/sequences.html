@@ -23,6 +23,23 @@ sequence("2^n/n!").limit();        // 0, by the ratio of successive terms</code>
   <p>A sequence that is monotone and bounded converges; that theorem is how many limits are shown to exist before they are found. <code>monotone()</code> proves the direction by showing that the derivative of the formula has one sign on a ray \([N, \infty)\), then compares the terms before \(N\) one by one and moves \(N\) back as far as they agree. <code>bounds()</code> combines a bound valid on a ray with the finitely many terms before it.</p>
   <p>If no proof is found the call refuses. For example the derivative of \((1 + 1/n)^n\) is a difference of two terms that nearly cancel, and its sign is not settled by this method, although its limit and bounds are.</p>
 
+  <p>Two further routes cover cases where the derivative does not settle it. If the derivative \(H\) tends to 0 and <em>its</em> derivative has one sign on a ray, then \(H\) has the opposite sign there (a function that decreases to 0 is positive); this is applied up to four levels deep. And for a positive term such as \((1 + 1/n)^n\) the logarithm is differentiated instead, which turns the power into a product. <code>monotone()</code> reports the route in <code>reason</code>.</p>
+
+  <h2>Powers with a moving exponent, and the ratio test</h2>
+  <p>A term \(f(n)^{g(n)}\) is rewritten as \(\exp(g\log f)\), and \(\log f\) for a ratio of polynomials tending to 1 is handled through the exact difference \(f - 1\), so that nothing cancels in floating point. That proves \((1 + 1/n)^n \to e\) and limits such as \(n^n/(n!\,3^n) \to 0\), where the ratio of successive terms tends to \(e/3 < 1\).</p>
+
+  <h2>Oscillation: lim sup and lim inf</h2>
+  <p>A factor such as \((-1)^n\), \(\cos(\pi n)\) or \(\sin(\pi n/2)\) repeats with a whole period \(p\). Along \(n = pm + r\) it is a known constant, so each of the \(p\) subsequences is an ordinary formula in \(m\) with a limit. Those limits are the only accumulation points; the largest is \(\limsup a_n\) and the smallest \(\liminf a_n\), and the sequence converges exactly when they agree.</p>
+<pre><code>const c = sequence("(-1)^n*(1 + 1/n)");
+c.accumulation();   // { period: 2, subsequences: [{ along: "n = 2m", limit: 1 }, { along: "n = 2m + 1", limit: -1 }], … }
+c.limsup();         // 1
+c.liminf();         // -1
+c.limit();          // refuses: "no limit: the terms oscillate, with lim sup 1 and lim inf -1 …"
+c.supremum();       // { value: 3/2, attained: true, at: 2, reason }
+sequence("n/(n + 1)").supremum();   // { value: 1, attained: false, … }: approached, never reached</code></pre>
+  <p><code>supremum()</code> and <code>infimum()</code> use the proven direction of each subsequence: a tail that rises has its limit as supremum, not attained; a tail that falls has its first term. The finitely many terms before the tail are compared one by one. For \(\sin n\), which does not repeat on the whole numbers, all of these refuse and say so.</p>
+  <p>For the \(N\) that goes with an \(\varepsilon\), see <a href="#epsilon">ε, N and δ</a>.</p>
+
   <h2>Recursive sequences</h2>
 <pre><code>const heron = recursive("x/2 + 1/x", { start: 2 });   // x₀ = 2, x_{k+1} = x_k/2 + 1/x_k
 heron.terms(5);              // [2, 3/2, 17/12, 577/408, 665857/470832]
@@ -37,7 +54,11 @@ heron.limit([1, 2]);         // { limit: [1.41421…], enters: 1, rate: 0.696…
     <tr><td>sequence(term, { variable = "n", from = 1, params })</td><td>Sequence</td></tr>
     <tr><td>a.term(n), a.terms(count)</td><td>Rational where the formula is rational at n, else RationalInterval</td></tr>
     <tr><td>a.limit({ digits = 20 })</td><td>RationalInterval, or ±Infinity; refuses with <code>no-limit</code> or <code>undecided</code></td></tr>
-    <tr><td>a.monotone()</td><td>{ direction, from, proven }</td></tr>
+    <tr><td>a.monotone()</td><td>{ direction, from, proven, reason }</td></tr>
+    <tr><td>a.accumulation()</td><td>{ period, subsequences: [{ along, term, limit }], limsup, liminf, converges }</td></tr>
+    <tr><td>a.limsup(), a.liminf()</td><td>RationalInterval or ±Infinity</td></tr>
+    <tr><td>a.supremum(), a.infimum()</td><td>{ value, attained, at, reason }</td></tr>
+    <tr><td>a.nFor(ε)</td><td>{ N, least, reason, certificate }: see <a href="#epsilon">ε, N and δ</a></td></tr>
     <tr><td>a.bounds()</td><td>{ lower, upper, bounded }; <code>null</code> for a bound that does not exist</td></tr>
     <tr><td>a.series()</td><td>the <a href="#sums">series</a> Σ a(n)</td></tr>
     <tr><td>recursive(next, { start, variable = "x" })</td><td>RecursiveSequence</td></tr>

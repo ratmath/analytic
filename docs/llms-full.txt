@@ -1,6 +1,6 @@
 # @ratmath/analytic 0.1.0: full documentation
 
-> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit 59b9d8d. Each page ends with a runnable example; in it, PRINT(...) prints.
+> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit 34e7dd7. Each page ends with a runnable example; in it, PRINT(...) prints.
 
 
 ---
@@ -238,7 +238,9 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 
 | call | returns | notes |
 
-| sequence(term, { variable = "n", from = 1 }) | Sequence | term(n), terms(count), limit(), monotone(), bounds(), series(). n! is read as a factorial. See Sequences |
+| sequence(term, { variable = "n", from = 1 }) | Sequence | term(n), terms(count), limit(), monotone(), bounds(), limsup(), liminf(), accumulation(), supremum(), infimum(), nFor(ε), series(). n! is read as a factorial. See Sequences |
+
+| deltaFor(f, x0, ε, { delta }), verifyCertificate(certificate) | { delta, largest, reason, certificate }; { valid, checks } | A δ for ε with its proof, and the independent recheck of an nFor or deltaFor certificate. See ε, N and δ |
 
 | recursive(next, { start, variable = "x" }) | RecursiveSequence | terms(count), fixedPoints([a, b]), limit([a, b]) proven by contraction |
 
@@ -287,6 +289,8 @@ A region is a box `{ x: [0, 1], y: [0, 2] }`, iterated bounds `{ x: [0, 1], y: [
 | seriesSolution({ p, q, about, order }) | { kind, indicial, exponents, solutions, notes, radius, provenRadius }; each solution has remainder(ρ) and enclose(x) with a proven bound | See Series solutions |
 
 | heat, laplaceRectangle, laplaceDisc | series solutions with at(…) → { value, partial, tail } | See Heat, waves and potentials |
+
+| transport({ speed, decay, source, initial, interval }) | { kind, characteristics, foot, formula, crossing, at(x, t), residual(x, t) } | u_t + c·u_x + k·u = s by characteristics. See First-order equations: characteristics |
 
 | wave({ c, length, position, velocity }) | { at(x, t), travelling, modes(N) } | d'Alembert's formula |
 
@@ -1682,6 +1686,92 @@ seriesSolution({ p: "1/x^2", q: "1" }).kind;
 
 ---
 
+Page: https://ratmath.com/analytic/characteristics.html
+
+Topic
+
+## First-order equations: characteristics
+
+`transport` solves ut​+cux​+ku=s with u(x,0)=f(x) along characteristics: a closed formula where there is one, a certified value at a point otherwise, and a plain statement of where characteristics cross and the solution stops being a function.
+
+```js
+const u = transport({ speed: 2, initial: "exp(-x^2)" });
+u.formula;            // "exp(-(x - 2*t)^2)"
+u.characteristics;    // "x - 2*t = const"
+u.at(1, "1/2").value; // exactly 1: the foot of the characteristic is x = 0
+u.residual(3, 1);     // [0, 0]: the formula put back into the equation
+
+const b = transport({ speed: "u", initial: "exp(-x^2)", interval: [-4, 4] });
+b.crossing.time;      // [1.165821…]: the breaking time sqrt(e/2)
+b.at(1, 2);           // refuses: characteristics have crossed
+```
+
+### The idea
+
+Follow a curve x(t) with dx/dt=c. Along it, by the chain rule, dtd​u(x(t),t)=ut​+cux​, so the partial differential equation becomes the ordinary one du/dt=s−ku. With constant k and s,
+
+u(x,t)=f(ξ)e−kt+ks​(1−e−kt)(f(ξ)+st when k=0),
+where ξ is the foot: the point of the line t=0 from which the characteristic through (x,t) started. Solving the equation is finding the foot.
+
+- Constant speed. The characteristics are the parallel lines x−ct=ξ, and u=f(x−ct): the initial profile moves at speed c unchanged.
+
+- Speed ax+b. dx/dt=ax+b gives ξ=(x+b/a)e−at−b/a, again a closed formula.
+
+- Any other c(x,t). The foot is the value at time 0 of the solution of dx/dt=c(x,t) through (x,t), followed backwards by the validated ODE solver. The result is an enclosure of the foot, and so of u.
+
+In all three cases the characteristics are solutions of one ordinary differential equation, and two solutions through the same point are the same solution: they never cross, and u is defined for all time. Where there is a closed formula, `residual(x, t)` differentiates it and encloses ut​+cux​+ku−s at a point, which is a check that does not go through characteristics at all.
+
+### When the speed depends on u
+
+For ut​+c(u)ux​=0, such as Burgers' equation ut​+uux​=0, u is still constant along each characteristic, so each one is a straight line whose slope is set by the value it carries:
+
+x=ξ+F(ξ)t,F(ξ)=c(f(ξ)).
+Now the lines can meet. Two neighbours starting at ξ and ξ+dξ cross when 1+F′(ξ)t=0, so the first crossing is at the breaking time
+
+tb​=minξ​F′(ξ)−1​
+if F′ is negative somewhere, and never if F′≥0 (faster values ahead of slower ones: a rarefaction). Past tb​ the method would assign several values to one point; the equation then has no classical solution, and `at` refuses instead of returning one of them.
+
+With `interval: [a, b]` the least value of F′ over starting points in [a,b] is enclosed by subdivision, which gives an enclosure of tb​ for those characteristics. Before the breaking time, ξ↦ξ+F(ξ)t is increasing, so the foot is its one root, found by bisection. Without an interval the claim is local: `at` first proves 1+F′(ξ)t>0 on the bracket it found, and refuses where it cannot.
+
+| call | returns |
+
+| transport({ speed, decay = 0, source = 0, initial, interval, order = 8, tol = "1e-8" }) | { kind, characteristics, foot, formula, crossing, at, residual }; also pde.transport |
+
+| u.at(x, t) | { value, foot }: RationalIntervals (single numbers when the arithmetic is exact) |
+
+| u.residual(x, t) | an enclosure of the equation's left side minus right side from the closed formula |
+
+| u.crossing | { never: true \| false \| null, time, reason } |
+
+### Try it
+
+```js
+// A pulse carried at speed 2.
+const u = transport({ speed: 2, initial: "exp(-x^2)" });
+PRINT("u =", u.formula, "  on", u.characteristics);
+PRINT("u(1, 1/2) =", u.at(1, "1/2").value.low.toString(), "  residual at (3, 1):", u.residual(3, 1).low.toString());
+
+// Decay and a source; a speed that grows with x.
+const w = transport({ speed: -1, decay: 3, source: 2, initial: "sin(x)" });
+PRINT("u =", w.formula);
+const s = transport({ speed: "x", initial: "1/(1 + x^2)" });
+PRINT("speed x: foot", s.foot, " u =", s.formula);
+
+// A speed with no closed foot formula here: followed back by the validated ODE solver.
+const v = transport({ speed: "t*x", initial: "x^2" });
+const p = v.at(1, 1);
+PRINT("speed t·x: foot of (1, 1) in [" + p.foot.low.toDecimal(10) + ", " + p.foot.high.toDecimal(10) + "],  exp(-1/2) =", Math.exp(-0.5));
+
+// Burgers' equation: the wave steepens and breaks at sqrt(e/2).
+const b = transport({ speed: "u", initial: "exp(-x^2)", interval: [-4, 4] });
+PRINT("breaking time in [" + b.crossing.time.low.toDecimal(7) + ", " + b.crossing.time.high.toDecimal(7) + "],  sqrt(e/2) =", Math.sqrt(Math.E / 2));
+PRINT("u(1, 1/2) =", b.at(1, "1/2").value.low.toDecimal(12));
+try { b.at(1, 2); } catch (e) { PRINT("u(1, 2):", e.message); }
+u.formula;
+```
+
+---
+
 Page: https://ratmath.com/analytic/pdes.html
 
 Topic
@@ -1728,6 +1818,8 @@ and on the disc of radius R with boundary values f(θ),
 u(r,θ)=2a0​​+n=1∑∞​(Rr​)n(an​cosnθ+bn​sinnθ).
 Both tails are geometric away from the boundary and are bounded the same way. At the centre of the disc only a0​/2 survives: the value of a harmonic function at the centre of a circle is the mean of its values on the circle. For the disc, a point is given as (r,s) with θ=2πs, so that a rational s names an exact direction.
 
+Finitely many modes. When the boundary values are a trigonometric polynomial, such as cosθ, cos2θ or sin3θ on the circle, or a finite sum of sin(nπx/a) on the top edge, the series has finitely many terms and nothing is left out. Products and powers are expanded with the product-to-sum identities into exact rational coefficients, and the solution carries `exact: true`, a `closedForm`, and a tail of 0. With cosθ on the unit circle the solution is rcosθ, which is just x, and its value at r=1/2, θ=0 is the fraction 1/2. First-order equations are on the [characteristics](https://ratmath.com/analytic/characteristics.html) page.
+
 ### The wave equation
 
 Every solution of utt​=c2uxx​ is a wave travelling right plus a wave travelling left. With u(x,0)=f and ut​(x,0)=g, d'Alembert's formula is
@@ -1747,7 +1839,7 @@ Separation of variables leads to eigenvalue problems −(py′)′+qy=λwy with 
 
 | laplaceRectangle({ width, height, top, terms }) | { coefficients, modes, at(x, y), formula } |
 
-| laplaceDisc({ radius, boundary, terms, angle = "theta" }) | { coefficients, mean, at(r, s), formula } |
+| laplaceDisc({ radius, boundary, terms, angle = "theta" }) | { coefficients, mean, at(r, s), formula }; with finitely many modes also { exact: true, closedForm, modes } |
 
 | s.at(…) | { value, partial, tail } |
 
@@ -1782,6 +1874,11 @@ PRINT("pulse at x = 3, t = 3:", pulse.at(3, 3).low.toDecimal(8), " (half the hei
 // Steady temperature on a disc whose rim is at cos²θ: the centre is at the mean.
 const disc = laplaceDisc({ boundary: "cos(theta)^2", terms: 4 });
 PRINT("centre:", disc.mean.low.toDecimal(8), "  halfway out along θ = 0:", disc.at("1/2", 0).partial.low.toDecimal(8));
+
+// Boundary values with finitely many modes: the series ends, and the answer is exact.
+const exactDisc = laplaceDisc({ boundary: "cos(theta)" });
+PRINT("cos θ on the circle:", exactDisc.closedForm, "  at r = 1/2, θ = 0:", exactDisc.at("1/2", 0).value.low.toString(), "  tail:", exactDisc.at("1/2", 0).tail.toString());
+PRINT("sin³θ:", laplaceDisc({ boundary: "sin(theta)^3" }).closedForm);
 
 // The first eigenvalues of -y'' = λy on [0, 1] are π², 4π²: bracketed with proof.
 for (const e of sturmLiouville({ interval: [0, 1], count: 2 })) PRINT(`λ${e.index} in [${e.eigenvalue.low.toDecimal(6)}, ${e.eigenvalue.high.toDecimal(6)}]  proven: ${e.proven}`);
@@ -2348,6 +2445,30 @@ A sequence that is monotone and bounded converges; that theorem is how many limi
 
 If no proof is found the call refuses. For example the derivative of (1+1/n)n is a difference of two terms that nearly cancel, and its sign is not settled by this method, although its limit and bounds are.
 
+Two further routes cover cases where the derivative does not settle it. If the derivative H tends to 0 and its derivative has one sign on a ray, then H has the opposite sign there (a function that decreases to 0 is positive); this is applied up to four levels deep. And for a positive term such as (1+1/n)n the logarithm is differentiated instead, which turns the power into a product. `monotone()` reports the route in `reason`.
+
+### Powers with a moving exponent, and the ratio test
+
+A term f(n)g(n) is rewritten as exp(glogf), and logf for a ratio of polynomials tending to 1 is handled through the exact difference f−1, so that nothing cancels in floating point. That proves (1+1/n)n→e and limits such as nn/(n!3n)→0, where the ratio of successive terms tends to e/3.
+
+### Oscillation: lim sup and lim inf
+
+A factor such as (−1)n, cos(πn) or sin(πn/2) repeats with a whole period p. Along n=pm+r it is a known constant, so each of the p subsequences is an ordinary formula in m with a limit. Those limits are the only accumulation points; the largest is limsupan​ and the smallest liminfan​, and the sequence converges exactly when they agree.
+
+```js
+const c = sequence("(-1)^n*(1 + 1/n)");
+c.accumulation();   // { period: 2, subsequences: [{ along: "n = 2m", limit: 1 }, { along: "n = 2m + 1", limit: -1 }], … }
+c.limsup();         // 1
+c.liminf();         // -1
+c.limit();          // refuses: "no limit: the terms oscillate, with lim sup 1 and lim inf -1 …"
+c.supremum();       // { value: 3/2, attained: true, at: 2, reason }
+sequence("n/(n + 1)").supremum();   // { value: 1, attained: false, … }: approached, never reached
+```
+
+`supremum()` and `infimum()` use the proven direction of each subsequence: a tail that rises has its limit as supremum, not attained; a tail that falls has its first term. The finitely many terms before the tail are compared one by one. For sinn, which does not repeat on the whole numbers, all of these refuse and say so.
+
+For the N that goes with an ε, see [ε, N and δ](https://ratmath.com/analytic/epsilon.html).
+
 ### Recursive sequences
 
 ```js
@@ -2371,7 +2492,15 @@ Terms are exact fractions while they stay short (Heron's iteration doubles the n
 
 | a.limit({ digits = 20 }) | RationalInterval, or ±Infinity; refuses with no-limit or undecided |
 
-| a.monotone() | { direction, from, proven } |
+| a.monotone() | { direction, from, proven, reason } |
+
+| a.accumulation() | { period, subsequences: [{ along, term, limit }], limsup, liminf, converges } |
+
+| a.limsup(), a.liminf() | RationalInterval or ±Infinity |
+
+| a.supremum(), a.infimum() | { value, attained, at, reason } |
+
+| a.nFor(ε) | { N, least, reason, certificate }: see ε, N and δ |
 
 | a.bounds() | { lower, upper, bounded }; null for a bound that does not exist |
 
@@ -2405,6 +2534,81 @@ PRINT("enters the basin at step", L.enters, "and then shrinks by at least the fa
 
 // the logistic map at r = 3.2 has two fixed points and neither attracts
 recursive("3.2*x*(1 - x)", { start: "1/2" }).fixedPoints([0, 1]).map((p) => `${p.point.low.toDecimal(4)}: ${p.kind}, multiplier ${p.multiplier.low.toDecimal(3)}`)
+```
+
+---
+
+Page: https://ratmath.com/analytic/epsilon.html
+
+Topic
+
+## ε, N and δ, with certificates
+
+The definitions of a limit and of continuity ask for a number: an N for each ε, or a δ for each ε. `nFor` and `deltaFor` find one, say why it works for every later term or every nearby point, and hand back a certificate that `verifyCertificate` rechecks by a different route.
+
+```js
+const a = sequence("(2n + 1)/(n + 3)");
+const r = a.nFor("1/100");
+r.N;        // 498, and r.least is true: 497 does not work
+r.reason;   // "the terms rise to the limit for n ≥ 1, so |a(n) − L| never grows from there; …"
+verifyCertificate(r.certificate).valid;   // true
+
+const d = deltaFor("x^2", 2, "1/100");
+d.delta;    // 249/100000, a δ that works
+d.largest;  // [0.00249843…]: the largest one, √4.01 − 2
+deltaFor("x^2", 2, "1/100", { delta: "0.003" }).holds;   // false
+```
+
+### An N for ε
+
+an​→L means: for every ε>0 there is an N with ∣an​−L∣<ε for all n≥N. Checking terms one at a time can never finish, so the statement about all n≥N needs an argument. Two are used.
+
+A monotone tail. If the terms are proven to rise (or fall) to L from some index on, then ∣an​−L∣ never grows from there, and the first index where it is below ε is the answer. It is found by doubling and bisection, and it is the least N: the term before it is checked to fail.
+
+A dominating sequence. Otherwise, as for sin(n)/n, the asymptotic form of the [sequences](https://ratmath.com/analytic/sequences.html) page gives a bound ∣an​−L∣≤Cnp(logn)mekn that decreases to 0. Past the index where the bound is below ε every term is within ε; the finitely many terms before that are examined one by one, walking back to the last one that fails. If the walk reaches it, the N is again least.
+
+Sequences with periodic factors, such as (−1)n/n2, are split into the subsequences n=pm+r first, and the answer is one past the last failing index over all of them.
+
+### A δ for ε
+
+f is continuous at x0​ when for every ε>0 there is a δ>0 with ∣f(x)−f(x0​)∣<ε whenever ∣x−x0​∣≤δ. The quantity to control is
+
+ω(δ)=∣x−x0​∣≤δsup​∣f(x)−f(x0​)∣.
+Where f′ is proven to keep one sign on each side of x0​, the supremum is at an end of the interval and is computed exactly. Otherwise it is bounded by the certified range of f and by the mean value theorem, ω(δ)≤δsup∣f′∣, whichever is smaller. `deltaFor` halves δ until ω(δ).
+
+The largest δ is the distance from x0​ to the nearest solution of f(x)=f(x0​)±ε. Those are found with the certified [zeros](https://ratmath.com/analytic/zeros.html), which are complete on an interval: no solution is missed, so the nearest one really is nearest. For x2 at 2 with ε=1/100 it is 4.01​−2≈0.0024984, slightly less than the ε/4 a first estimate suggests.
+
+### What the certificate is for
+
+A certificate is a plain record of the claim: the formula, the point or limit, ε, the number found and the argument used. `verifyCertificate` does not repeat the search. For an N it recomputes the limit, tests the inequality at N (and its failure at N−1 when N is claimed least) at a higher precision, proves the monotone direction or the dominating bound again, and tests the inequality at a spread of later indices. For a δ it cuts the interval into cells and checks ∣f(x)−f(x0​)∣<ε on each by plain interval evaluation, with no derivative and no root-finding. It returns the list of checks and whether all passed, so a wrong answer from either side shows up as a disagreement.
+
+| call | returns |
+
+| a.nFor(ε, { limit, digits = 20 }) | { N, least, limit, epsilon, method, reason, certificate } |
+
+| deltaFor(f, x0, ε), fn(f).deltaFor(x0, ε) | { delta, largest, attainedAt, worst, reason, certificate } |
+
+| deltaFor(f, x0, ε, { delta }) | { delta, holds, worst, reason, certificate }: whether that δ works |
+
+| verifyCertificate(certificate) | { valid, checks: [{ check, ok }] } |
+
+### Try it
+
+```js
+// N for ε, three ways the proof can go.
+for (const [term, eps] of [["(2n + 1)/(n + 3)", "1/100"], ["(-1)^n/n^2", "1/1000"], ["sin(n)/n", "1/100"]]) {
+  const r = sequence(term).nFor(eps);
+  PRINT(`${term}, ε = ${eps}:  N = ${r.N}${r.least ? " (least)" : ""}, by a ${r.method}`);
+  PRINT("   checked again:", verifyCertificate(r.certificate).valid);
+}
+
+// δ for ε: a δ that works, the largest one, and a δ that is too big.
+const d = deltaFor("x^2", 2, "1/100");
+PRINT("x² at 2, ε = 1/100: δ =", d.delta.toString(), " largest δ ≈", d.largest.low.toDecimal(10));
+PRINT("   ", d.reason);
+PRINT("   δ = 0.002 works:", deltaFor("x^2", 2, "1/100", { delta: "0.002" }).holds, "  δ = 0.003 works:", deltaFor("x^2", 2, "1/100", { delta: "0.003" }).holds);
+for (const c of verifyCertificate(d.certificate).checks) PRINT("   check:", c.check, "→", c.ok);
+d.delta;
 ```
 
 ---
@@ -2588,10 +2792,19 @@ const f = functionSequence("x^n");
 f.pointwise("1/2");                  // 0
 f.supDistance(5, [0, "9/10"]);       // [0.59049, 0.59049]: sup |x^5 - 0| on the interval
 f.uniform(["1/10", "9/10"]).verdict; // "uniform": a bound for every x at once that tends to 0
-f.uniform([0, 1]).verdict;           // "not uniform so far": the supremum is 1 for every n tried
+f.uniform([0, 1]).verdict;           // "not uniform": the sup is at x = 1, where the distance tends to 1
+functionSequence("n*x/(1 + n^2*x^2)").uniform([0, 1]).witness;   // { x: "1/n", limit: 1/2 }
 ```
 
-`supDistance` returns an interval for the supremum: the upper end is a proven bound from a certified [range](https://ratmath.com/analytic/ranges.html), the lower end a value the difference really takes. `uniform` returns the table of these for several n, and a verdict. It says `"uniform"` only with a proof, which is the asymptotic bound of the [sequences](https://ratmath.com/analytic/sequences.html) page carried out with x standing for the whole interval. When the suprema stay away from 0 it says `"not uniform so far"`, which is evidence about the n tried and is labelled as that. Otherwise the verdict is `"undecided"` and the table is what you have.
+`supDistance` returns an interval for the supremum: the upper end is a proven bound from a certified [range](https://ratmath.com/analytic/ranges.html), the lower end a value the difference really takes. `uniform` decides the question with a proof where it can, in either direction, and says which argument it used in `method` and `reason`:
+
+- Monotone in x. If ∂(fn​−f)/∂x keeps one sign on the interval for every n from some n0​ on, the supremum is at an end of the interval: sup∣fn​−f∣=max(∣fn​(a)−f(a)∣,∣fn​(b)−f(b)∣). The sign is shown by a range calculation that carries "x∈[a,b]" and "n≥n0​" as intervals, the second unbounded. The two end values are ordinary sequences in n, and their limits decide the question: uniform if both tend to 0, not uniform if one does not. This is how xn is settled on [0,9/10] and on [0,1].
+
+- A bound for every x at once. The asymptotic bound of the sequences page, carried out with x standing for the whole interval, proves "uniform" when it tends to 0, as for sin(nx)/n.
+
+- A witness. If along some xn​ in the interval, such as xn​=c/n or an end shifted by c/n, the distance ∣fn​(xn​)−f(xn​)∣ tends to a limit that is not 0, the supremum cannot tend to 0: "not uniform", with the witness returned. For nx/(1+n2x2) the witness is xn​=1/n, where the value is 1/2 for every n.
+
+Where none of the three applies the verdict is `"not uniform so far"` (the suprema computed stay away from 0, which is evidence about the n tried and is labelled as that) or `"undecided"`, with the table of suprema as what you have.
 
 | call | returns |
 
@@ -2611,7 +2824,7 @@ f.uniform([0, 1]).verdict;           // "not uniform so far": the supremum is 1 
 
 | f.member(n), f.pointwise(x), f.supDistance(n, [a, b], limit = "0") | AnalyticFunction; RationalInterval or ±Infinity; RationalInterval |
 
-| f.uniform([a, b], limit = "0", { ns }) | { verdict, table, reason } |
+| f.uniform([a, b], limit = "0", { ns }) | { verdict, method, reason, witness, table } |
 
 ### Try it
 

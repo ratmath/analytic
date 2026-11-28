@@ -162,3 +162,33 @@ describe("gradient descent (batch A8)", () => {
     expect(() => A.gradientDescent("x^2", ["1", "1"])).toThrow(/coordinates/);
   });
 });
+
+describe("darboux on pieces where f is not differentiable (review of batch A6)", () => {
+  test("|x| on [-1, 2]: the inf is 0 at the corner, not an end value", () => {
+    const r = A.darboux("abs(x)", ["-1", "2"]);
+    expect(r.exact).toBe(false);
+    // the true sums are 0·3 and 2·3; the lower one is enclosed
+    expect(r.lower.low.compareTo(Q(0)) <= 0 && r.lower.high.compareTo(Q(1, 1000000)) < 0).toBe(true);
+    expect(r.upper.low.compareTo(Q(6)) <= 0 && r.upper.high.compareTo(Q(6)) >= 0).toBe(true);
+    // and they bracket the integral 5/2
+    expect(r.lower.high.compareTo(r.integral.low) <= 0).toBe(true);
+    expect(r.upper.low.compareTo(r.integral.high) >= 0).toBe(true);
+  });
+  test("a cusp: (x²)^(1/3) on [-1, 1] has inf 0 and sup 1", () => {
+    const r = A.darboux("(x^2)^(1/3)", ["-1", "1"]);
+    const lowEnd = r.lower instanceof Rational ? r.lower : r.lower.low;
+    const highEnd = r.upper instanceof Rational ? r.upper : r.upper.high;
+    expect(lowEnd.compareTo(Q(0)) <= 0).toBe(true);
+    expect(highEnd.compareTo(Q(2)) >= 0).toBe(true);
+    expect((r.lower instanceof Rational ? r.lower : r.lower.high).compareTo(Q(1, 1000)) < 0).toBe(true);
+  });
+  test("with the corner at a partition point every piece is monotone and the sums are exact", () => {
+    const r = A.darboux("abs(x)", ["-1", "0", "2"]);
+    expect(r.exact).toBe(true);
+    expect(r.lower.equals(Q(0))).toBe(true);
+    expect(r.upper.equals(Q(5))).toBe(true);
+  });
+  test("an unbounded f is refused", () => {
+    expect(() => A.darboux("1/x", ["-1", "1"])).toThrow();
+  });
+});

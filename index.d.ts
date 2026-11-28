@@ -245,6 +245,8 @@ export class AnalyticFunction {
    * ±Infinity. Throws AnalyticError "no-limit" where none exists.
    */
   limit(c: RationalLike | EndLike, options?: { digits?: number; side?: "left" | "right" }): RationalInterval | number;
+  /** A δ for ε at x₀; see deltaFor. */
+  deltaFor(x0: RationalLike | string, epsilon: RationalLike | string, options?: { delta?: RationalLike | string }): DeltaForEpsilon;
   /** The leading behaviour far out: f(x) = term·(coefficient + a part that dies out). */
   asymptotic(at?: "inf" | "-inf", options?: { digits?: number }): Asymptotic;
   /**
@@ -546,12 +548,84 @@ export class Sequence {
   /** The limit as n → ∞, or ±Infinity. Throws AnalyticError ("no-limit", "undecided") where none is proven. */
   limit(options?: { digits?: number }): RationalInterval | number;
   /** The direction, proven for every n ≥ from. */
-  monotone(options?: { digits?: number }): { direction: "increasing" | "decreasing" | "constant"; from: number; proven: string };
+  monotone(options?: { digits?: number }): { direction: "increasing" | "decreasing" | "constant"; from: number; proven: string; reason?: string };
+  /** The limit of each subsequence a(p·m + r) of a sequence with periodic factors such as (−1)^n or cos(πn/2). */
+  accumulation(options?: { digits?: number }): Accumulation;
+  /** lim sup a(n): the largest subsequence limit. */
+  limsup(options?: { digits?: number }): RationalInterval | number;
+  /** lim inf a(n). */
+  liminf(options?: { digits?: number }): RationalInterval | number;
+  /** The least upper bound of the terms, and whether a term takes it. */
+  supremum(options?: { digits?: number }): SequenceExtreme;
+  infimum(options?: { digits?: number }): SequenceExtreme;
+  /** An N with |a(n) − L| < ε for every n ≥ N, with the reason and a certificate for verifyCertificate. `least` says whether N is the least such index. */
+  nFor(epsilon: RationalLike | string, options?: { limit?: ExpressionLike | number; digits?: number; maxWalk?: number }): NForEpsilon;
   /** Bounds on every term; null for a bound that does not exist. */
   bounds(options?: { digits?: number }): { lower: Rational | null; upper: Rational | null; bounded: boolean };
   series(): Series;
 }
 export function sequence(term: ExpressionLike, options?: SequenceOptions): Sequence;
+export interface Accumulation {
+  period: number;
+  subsequences: Array<{ along: string; term: string; limit: RationalInterval | number }>;
+  limsup: RationalInterval | number;
+  liminf: RationalInterval | number;
+  converges: boolean;
+}
+export interface SequenceExtreme {
+  /** null when the terms are unbounded on this side. */
+  value: Rational | RationalInterval | number | null;
+  attained: boolean | null;
+  /** The index of a term that takes the value, when one does. */
+  at: number | null;
+  reason: string;
+}
+export interface SequenceCertificate {
+  kind: "N for ε";
+  claim: string;
+  term: string;
+  variable: string;
+  from: number;
+  params: Params;
+  limit: string;
+  epsilon: Rational;
+  N: number;
+  least: boolean;
+  parts: Array<{ along: string; period: number; residue: number; term: string; variable: string; from: number; N: number; method: string; monotone: { direction: string; from: number } | null; bound: unknown }>;
+}
+export interface NForEpsilon {
+  N: number;
+  least: boolean;
+  limit: Rational | RationalInterval | number;
+  epsilon: Rational;
+  method: "monotone tail" | "dominating sequence" | "mixed" | string;
+  reason: string;
+  certificate: SequenceCertificate;
+}
+export interface DeltaCertificate {
+  kind: "δ for ε";
+  [key: string]: unknown;
+}
+export interface DeltaForEpsilon {
+  /** A δ that works: |x − x₀| ≤ δ gives |f(x) − f(x₀)| < ε. */
+  delta: Rational;
+  epsilon: Rational;
+  /** The largest δ (the distance to the nearest point where |f(x) − f(x₀)| = ε), where it was found. */
+  largest?: Rational | RationalInterval | null;
+  attainedAt?: string | null;
+  /** With a given δ: whether it works (null when not decided). */
+  holds?: boolean | null;
+  /** sup of |f(x) − f(x₀)| over |x − x₀| ≤ δ, or an interval that holds it. */
+  worst: Rational | RationalInterval;
+  reason: string;
+  certificate: DeltaCertificate | null;
+}
+/** A δ for ε at x₀ (or, with options.delta, whether that δ works). */
+export function deltaFor(f: ExpressionLike | AnalyticFunction, x0: RationalLike | string, epsilon: RationalLike | string, options?: { variable?: string; delta?: RationalLike | string }): DeltaForEpsilon;
+export interface CertificateReport { valid: boolean; checks: Array<{ check: string; ok: boolean }> }
+/** Recheck a certificate from nFor or deltaFor by a method independent of the search that made it. */
+export function verifyCertificate(certificate: SequenceCertificate | DeltaCertificate): CertificateReport;
+export function verifySequenceCertificate(certificate: SequenceCertificate): CertificateReport;
 
 export interface FixedPoint {
   point: RationalInterval;
@@ -650,7 +724,7 @@ export class FunctionSequence {
   pointwise(x: RationalLike, options?: { digits?: number }): RationalInterval | number;
   /** sup |f_n − limit| on the interval: the upper end is a proven bound, the lower end a value that is taken. */
   supDistance(n: number, interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { digits?: number; samples?: number }): RationalInterval;
-  uniform(interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { ns?: number[]; digits?: number }): { verdict: "uniform" | "not uniform so far" | "undecided"; table: Array<{ n: number; sup: RationalInterval }>; reason: string; from?: number };
+  uniform(interval: [RationalLike, RationalLike], limit?: ExpressionLike, options?: { ns?: number[]; digits?: number }): { verdict: "uniform" | "not uniform" | "not uniform so far" | "undecided"; method?: string; witness?: { x: string; limit: RationalInterval | number | string }; table: Array<{ n: number; sup: RationalInterval }>; reason: string; from?: number };
 }
 export function functionSequence(term: ExpressionLike, options?: { variable?: string; index?: string }): FunctionSequence;
 
@@ -942,8 +1016,27 @@ export interface SeparatedSolution {
   formula(terms?: number, digits?: number): string;
 }
 export function heat(spec: { k?: RationalLike | string; length?: RationalLike | string; initial: ExpressionLike; ends?: "fixed" | "insulated"; terms?: number; digits?: number; x?: string }): SeparatedSolution & { coefficients: RationalInterval[]; modes: Array<{ n: number; coefficient: RationalInterval; rate: string }> };
-export function laplaceRectangle(spec: { width?: RationalLike | string; height?: RationalLike | string; top: ExpressionLike; terms?: number; digits?: number; x?: string }): SeparatedSolution & { coefficients: RationalInterval[] };
-export function laplaceDisc(spec: { radius?: RationalLike | string; boundary: ExpressionLike; terms?: number; digits?: number; angle?: string }): SeparatedSolution & { coefficients: { a: RationalInterval[]; b: RationalInterval[] }; mean: RationalInterval };
+export function laplaceRectangle(spec: { width?: RationalLike | string; height?: RationalLike | string; top: ExpressionLike; terms?: number; digits?: number; x?: string }): SeparatedSolution & FiniteModes & { coefficients?: RationalInterval[] };
+/** Set when the boundary values have finitely many modes: the series ends and the values carry no tail. */
+export interface FiniteModes { exact?: true; closedForm?: string }
+export interface TransportSolution {
+  equation: string;
+  kind: "constant speed" | "linear speed" | "variable speed" | "quasilinear";
+  characteristics: string;
+  /** The starting point of the characteristic through (x, t), as a formula, where there is one. */
+  foot: string | null;
+  /** u(x, t) as a formula, where there is one. */
+  formula: string | null;
+  implicit?: string;
+  /** Whether characteristics cross: never (true), at the enclosed breaking time (false), or not decided (null). */
+  crossing: { never: boolean | null; time: RationalInterval | null; reason: string };
+  at(x: RationalLike | string, t?: RationalLike | string): { value: RationalInterval; foot: RationalInterval };
+  /** u_t + c·u_x + k·u − s at a point from the closed formula: contains 0. */
+  residual(x: RationalLike | string, t: RationalLike | string): RationalInterval;
+}
+/** u_t + speed·u_x + decay·u = source with u(x, 0) = initial, by characteristics. */
+export function transport(spec: { speed: ExpressionLike | number; decay?: RationalLike | string; source?: RationalLike | string; initial: ExpressionLike | number; interval?: [RationalLike | string, RationalLike | string] | null; digits?: number; order?: number; tol?: RationalLike | string; x?: string; t?: string; u?: string }): TransportSolution;
+export function laplaceDisc(spec: { radius?: RationalLike | string; boundary: ExpressionLike; terms?: number; digits?: number; angle?: string }): SeparatedSolution & FiniteModes & { coefficients?: { a: RationalInterval[]; b: RationalInterval[] }; mean: RationalInterval };
 export function wave(spec: { c?: RationalLike | string; length?: RationalLike | string | null; position?: ExpressionLike; velocity?: ExpressionLike; digits?: number; x?: string }): {
   equation: string;
   speed: Rational;
@@ -964,7 +1057,7 @@ export interface PDEClassification {
 export function classifyPDE(coefficients: { A?: ExpressionLike | number; B?: ExpressionLike | number; C?: ExpressionLike | number } | [ExpressionLike | number, ExpressionLike | number, ExpressionLike | number], options?: { variables?: [string, string] }): PDEClassification;
 export const pde: {
   heat: typeof heat; wave: typeof wave; laplaceRectangle: typeof laplaceRectangle; laplaceDisc: typeof laplaceDisc; sturmLiouville: typeof sturmLiouville;
-  classifyPDE: typeof classifyPDE; classify: typeof classifyPDE;
+  classifyPDE: typeof classifyPDE; classify: typeof classifyPDE; transport: typeof transport;
 };
 export function antiderivative(tree: Ast, name?: string): { tree: Ast; trust: "proven" | "checked" } | null;
 export function partialFractions(N: Rational[], D: Rational[]): { poly: Rational[]; linear: Array<{ root: Rational; power: number; coeff: Rational }>; quadratic: Array<{ p: Rational; q: Rational; alpha: Rational; beta: Rational }> } | null;

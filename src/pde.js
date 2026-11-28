@@ -17,6 +17,8 @@ import { fn } from "./fn.js";
 import { fourier } from "./fourier.js";
 import { quad1 } from "./quad.js";
 import { solve as odeSolve } from "./ode.js";
+import { trigPolynomial } from "./trigpoly.js";
+import { piMultiple, cosPi } from "./periodic.js";
 
 const qOf = (x) => (x instanceof Rational ? x : typeof x === "string" || typeof x === "number" ? toRational(x) : toQ(x));
 const Q = (n, d = 1) => new Rational(BigInt(n), BigInt(d));
@@ -131,6 +133,8 @@ export function heat({ k = 1, length = 1, initial, ends = "fixed", terms = 8, di
 export function laplaceRectangle({ width = 1, height = 1, top, terms = 8, digits = 10, x = "x" }) {
   const a = qOf(width);
   const b = qOf(height);
+  const finite = finiteRectangle(top, a, b, x, digits);
+  if (finite) return finite;
   const fs = fourier(top, [0, a], { kind: "sine", terms, digits, variable: x }).exact();
   const B = supAbs(top, ZERO, a, x).multiply(TWO);
   const bits = bitsForDigits(digits) + 32;
@@ -181,6 +185,8 @@ export function laplaceRectangle({ width = 1, height = 1, top, terms = 8, digits
  */
 export function laplaceDisc({ radius = 1, boundary, terms = 8, digits = 10, angle = "theta" }) {
   const R0 = qOf(radius);
+  const finite = finiteDisc(boundary, R0, angle, digits);
+  if (finite) return finite;
   // f as a function of s in [0, 1], θ = 2π s
   const inS = substituteAngle(boundary, angle);
   const fs = fourier(inS, [0, 1], { kind: "full", terms, digits, variable: "s_" }).exact();
@@ -468,3 +474,123 @@ export function classifyPDE(coefficients, opts = {}) {
   };
 }
 export { classifyPDE as classify };
+
+
+// ---- boundary data with finitely many modes: the series ends, and the answer is exact -----------
+
+/** k when arg = k·(unit·x) exactly, with unit·x the basic angle (unit given as a multiple of π, or null for 1). */
+function modeReader(x, unitPi) {
+  return (arg) => {
+    const d = simplify(derivative(arg, x));
+    if (freeVariables(d).size) return null;
+    // the argument must be exactly d·x: it vanishes at x = 0
+    const at0 = simplify(substitute(arg, x, num(ZERO)));
+    const zero = constantRational(at0)?.numerator === 0n || piMultiple(at0)?.numerator === 0n;
+    if (!zero) return null;
+    const k = unitPi === null ? constantRational(d) : piMultiple(d)?.divide(unitPi) ?? null;
+    return k !== null && k.denominator === 1n && k.abs().numerator <= 512n ? Number(k.numerator) : null;
+  };
+}
+const substitute = (t, name, by) => (t.type === "var" ? (t.name === name ? by : t) : t.args ? { ...t, args: t.args.map((u) => substitute(u, name, by)) } : t);
+const coefText = (c, body) => (c.equals(ONE) ? body : c.equals(ONE.negate()) ? `-${body}` : `${c}*${body}`);
+const joinTerms = (parts) => (parts.length ? parts.join(" + ").replaceAll("+ -", "- ") : "0");
+
+/**
+ * Laplace on the disc with a trigonometric polynomial on the circle:
+ * u = a₀ + Σ (r/R)^k·(a_k·cos kθ + b_k·sin kθ), finitely many terms, exact.
+ */
+function finiteDisc(boundary, R0, angle, digits) {
+  const modes = trigPolynomial(toAst(boundary), modeReader(angle, null));
+  if (!modes || modes.some((m) => m.k < 0)) return null;
+  const bits = bitsForDigits(digits) + 32;
+  const K = modes.reduce((m, t) => Math.max(m, t.k), 0);
+  const rText = R0.equals(ONE) ? "r" : `(r/${R0})`;
+  const parts = [];
+  for (const { k, a, b } of modes) {
+    if (k === 0) parts.push(`${a}`);
+    else {
+      const rk = k === 1 ? rText : `${rText}^${k}`;
+      const ang = k === 1 ? angle : `${k}*${angle}`;
+      if (a.numerator !== 0n) parts.push(coefText(a, `${rk}*cos(${ang})`));
+      if (b.numerator !== 0n) parts.push(coefText(b, `${rk}*sin(${ang})`));
+    }
+  }
+  const closedForm = joinTerms(parts);
+  const a0 = modes.find((m) => m.k === 0)?.a ?? ZERO;
+  return new SeriesSolution({
+    equation: "u_rr + u_r/r + u_θθ/r² = 0",
+    kind: "full",
+    exact: true,
+    closedForm,
+    terms: K,
+    radius: R0,
+    modes: modes.map(({ k, a, b }) => ({ n: k, a, b })),
+    mean: new RationalInterval(a0, a0),
+    _bits: bits,
+    _at([rv, sv], bb) {
+      if (rv.numerator < 0n || rv.compareTo(R0) > 0) refuse("bad-point", "the point is outside the disc");
+      const rho = rv.divide(R0);
+      let s = pt(ZERO);
+      for (const { k, a, b } of modes) {
+        if (k === 0) {
+          s = s.add(pt(a));
+          continue;
+        }
+        // θ = 2π·s: cos(kθ) = cos(2ks·π), exact at the standard angles
+        const turn = TWO.multiply(sv).multiply(Q(k));
+        const exactTrig = (shift) => {
+          const tree = cosPi(turn.subtract(shift));
+          const c = tree ? constantRational(tree) : null;
+          return c !== null ? pt(c) : ev(shift.numerator === 0n ? "cos(s_)" : "sin(s_)", { s_: PI(bb).scale(turn) }, bb);
+        };
+        const term = pt(a).mul(exactTrig(ZERO)).add(pt(b).mul(exactTrig(Q(1, 2))));
+        s = s.add(term.scale(rho.pow(k)));
+      }
+      return { partial: s, tail: ZERO };
+    },
+    _formula() {
+      return closedForm;
+    },
+  });
+}
+
+/**
+ * Laplace on the rectangle with a finite sine sum on the top edge:
+ * u = Σ b_n·sinh(nπy/a)/sinh(nπb/a)·sin(nπx/a), finitely many terms, no tail.
+ */
+function finiteRectangle(top, a, b, x, digits) {
+  const modes = trigPolynomial(toAst(top), modeReader(x, a.reciprocal()));
+  if (!modes || modes.some((m) => m.k <= 0 || m.a.numerator !== 0n)) return null;
+  const bits = bitsForDigits(digits) + 32;
+  const K = modes.reduce((m, t) => Math.max(m, t.k), 0);
+  const w = (n) => (Q(n).divide(a).equals(ONE) ? "pi" : `${Q(n).divide(a)}*pi`);
+  const closedForm = joinTerms(modes.map(({ k, b: c }) => coefText(c, `sinh(${w(k)}*y)/sinh(${Q(k).multiply(b).divide(a).equals(ONE) ? "pi" : `${Q(k).multiply(b).divide(a)}*pi`})*sin(${w(k)}*${x})`)));
+  return new SeriesSolution({
+    equation: "u_xx + u_yy = 0",
+    kind: "sine",
+    exact: true,
+    closedForm,
+    terms: K,
+    width: a,
+    height: b,
+    modes: modes.map(({ k, b: c }) => ({ n: k, coefficient: c, shape: `sinh(${k}*pi*y/${a})/sinh(${k}*pi*${b}/${a})*sin(${k}*pi*${x}/${a})` })),
+    _bits: bits,
+    _at([xv, yv], bb) {
+      if (yv.numerator < 0n || yv.compareTo(b) > 0 || xv.numerator < 0n || xv.compareTo(a) > 0) refuse("bad-point", "the point is outside the rectangle");
+      const wq = PI(bb).scale(a.reciprocal());
+      let s = pt(ZERO);
+      for (const { k, b: c } of modes) {
+        const wn = wq.scale(Q(k));
+        const ratio = yv.equals(b) ? pt(ONE) : ev("sinh(p_)/sinh(q_)", { p_: wn.scale(yv), q_: wn.scale(b) }, bb);
+        const tree = cosPi(Q(k).multiply(xv).divide(a).subtract(Q(1, 2)));
+        const sx = tree && constantRational(tree) !== null ? pt(constantRational(tree)) : ev("sin(s_)", { s_: wn.scale(xv) }, bb);
+        s = s.add(pt(c).mul(ratio).mul(sx));
+      }
+      return { partial: s, tail: ZERO };
+    },
+    _formula() {
+      return closedForm;
+    },
+  });
+}
+export { transport } from "./characteristics.js";
