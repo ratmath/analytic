@@ -1,6 +1,6 @@
 # @ratmath/analytic 0.1.0: full documentation
 
-> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit 34e7dd7. Each page ends with a runnable example; in it, PRINT(...) prints.
+> Certified calculus on exact rationals: function values, ranges, integrals, zeros, extrema, limits, Taylor models and validated ODE steps, built on @ratmath/core. From https://ratmath.com/analytic/, commit b60afb3. Each page ends with a runnable example; in it, PRINT(...) prints.
 
 
 ---
@@ -2580,7 +2580,7 @@ The largest δ is the distance from x0​ to the nearest solution of f(x)=f(x0�
 
 ### What the certificate is for
 
-A certificate is a plain record of the claim: the formula, the point or limit, ε, the number found and the argument used. `verifyCertificate` does not repeat the search. For an N it recomputes the limit, tests the inequality at N (and its failure at N−1 when N is claimed least) at a higher precision, proves the monotone direction or the dominating bound again, and tests the inequality at a spread of later indices. For a δ it cuts the interval into cells and checks ∣f(x)−f(x0​)∣<ε on each by plain interval evaluation, with no derivative and no root-finding. It returns the list of checks and whether all passed, so a wrong answer from either side shows up as a disagreement.
+A certificate is a plain record of the claim: the formula, the point or limit, ε, the number found and the argument used. `verifyCertificate` does not repeat the search. For an N it recomputes the limit, checks that the certificate's parts are the subsequences of this very sequence (one for each residue class when there is a factor such as (−1)n), proves the monotone direction again or compares the dominating bound with the terms at sampled indices and with ε, finds the index where each tail argument takes over, and tests the inequality at every index from N up to there, one by one. Only then does it test the failure at N−1 when N is claimed least, and the inequality at a spread of later indices. So moving N before a bump in the terms is caught: for 1/(1+(n−50)2) and ε=21​ the least N is 52, and a certificate edited to say N=1 fails at n=49. A monotone tail is proven; a dominating bound comes from the asymptotic form and the verifier only samples it against the terms, so for that method the replay is a strong check rather than a second proof. For a δ it cuts the interval into cells and checks ∣f(x)−f(x0​)∣<ε on each by plain interval evaluation, with no derivative and no root-finding. It returns the list of checks and whether all passed, so a wrong answer from either side shows up as a disagreement.
 
 | call | returns |
 
@@ -3473,6 +3473,8 @@ With `{ exact: true }`, `newton` works the way it would by hand with fractions: 
 For x←g(x), xn+1​−x∗=g(xn​)−g(x∗)≈g′(x∗)(xn​−x∗). So each step multiplies the error by about g′(x∗). `fixedPoint` returns an enclosure of that multiplier at the certified fixed point and the observed `ratio` of successive errors, which should agree with it. The proof of convergence by the contraction principle is in [recursive sequences](https://ratmath.com/analytic/sequences.html).
 
 ### What the true error shows
+
+The root the errors are measured against is the one the method actually converges to. A sign-changing bracket can hold several roots: bisection on (x−1)(x−6)(x−9) over [0,10] keeps [0,5] after the first step and closes in on 1, not on the root 6 nearest the first midpoint, so `bisection` takes the certified root inside its last bracket. When that root is known only to a small interval, `error` is an upper bound for the distance, not the exact distance.
 
 A program cannot know its error, so in practice the step size ∣xn+1​−xn​∣ or the residual ∣f(xn​)∣ stands in for it. Here the error itself is in the table, measured against a root enclosed to 25 digits, so the stand-ins can be judged. The last rows show the floor that rounding sets: the error stops near 10−16 times the size of the root however many more steps are taken.
 

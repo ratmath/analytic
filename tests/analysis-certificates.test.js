@@ -103,6 +103,18 @@ describe("B3: an N for ε", () => {
     expect(d(r.N - 1)).toBeGreaterThanOrEqual(0.01);
     expect(A.verifyCertificate(r.certificate).valid).toBe(true);
   }, 120000);
+  test("a certificate whose N is moved before a bump in the terms fails", () => {
+    // 1/(1 + (n − 50)²) → 0: the terms at 49, 50, 51 are 1/2, 1, 1/2, so the least N for ε = 1/2 is 52
+    const c = A.sequence("1/(1+(n-50)^2)").nFor("1/2").certificate;
+    expect(c.N).toBe(52);
+    expect(A.verifyCertificate(c).valid).toBe(true);
+    expect(A.verifyCertificate({ ...c, N: 1 }).valid).toBe(false);
+    expect(A.verifyCertificate({ ...c, N: 50 }).valid).toBe(false);
+    // a part that is not a subsequence of the sequence, or a missing residue class, fails
+    expect(A.verifyCertificate({ ...c, parts: [{ ...c.parts[0], term: "1/n" }] }).valid).toBe(false);
+    const alt = A.sequence("(-1)^n/n").nFor("1/100").certificate;
+    expect(A.verifyCertificate({ ...alt, parts: alt.parts.slice(0, 1) }).valid).toBe(false);
+  });
   test("a wrong limit, an unbounded sequence and a bad ε are refused; a tampered certificate fails", () => {
     expect(() => A.sequence("1/n").nFor("1/10", { limit: "1" })).toThrow(/not the limit/);
     expect(() => A.sequence("n^2").nFor("1/10")).toThrow(/unbounded/);

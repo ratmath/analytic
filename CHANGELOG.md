@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix: `verifyCertificate` for an "N for ε" certificate now checks every index
+  from N up to where the tail arguments take over, and that the parts are the
+  subsequences of the certified sequence for every residue class. Before, a
+  genuine certificate with N changed to 1 still verified for
+  1/(1 + (n − 50)²), ε = 1/2 (found by an external QA review).
+- Fix: `bisection` measures errors against the certified root in its last
+  bracket, the one the iterates converge to, instead of the root nearest the
+  first midpoint (for (x − 1)(x − 6)(x − 9) on [0, 10] it reported 6).
 - Proof-carrying analysis (Course Test roadmap, items B2 to B5 and B7):
   - Limits of powers with a moving exponent, `f(n)^g(n)`, through
     `exp(g·log f)` with the logarithm of a ratio of polynomials taken from the

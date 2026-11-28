@@ -34,6 +34,7 @@ fixedPoint("cos(x)", 1).multiplier;                        // g′ at the fixed 
   <p>For \(x \leftarrow g(x)\), \(x_{n+1} - x^* = g(x_n) - g(x^*) \approx g'(x^*)(x_n - x^*)\). So each step multiplies the error by about \(g'(x^*)\). <code>fixedPoint</code> returns an enclosure of that multiplier at the certified fixed point and the observed <code>ratio</code> of successive errors, which should agree with it. The proof of convergence by the contraction principle is in <a href="#sequences">recursive sequences</a>.</p>
 
   <h2>What the true error shows</h2>
+  <p>The root the errors are measured against is the one the method actually converges to. A sign-changing bracket can hold several roots: bisection on \((x - 1)(x - 6)(x - 9)\) over \([0, 10]\) keeps \([0, 5]\) after the first step and closes in on 1, not on the root 6 nearest the first midpoint, so <code>bisection</code> takes the certified root inside its last bracket. When that root is known only to a small interval, <code>error</code> is an upper bound for the distance, not the exact distance.</p>
   <p>A program cannot know its error, so in practice the step size \(|x_{n+1} - x_n|\) or the residual \(|f(x_n)|\) stands in for it. Here the error itself is in the table, measured against a root enclosed to 25 digits, so the stand-ins can be judged. The last rows show the floor that rounding sets: the error stops near \(10^{-16}\) times the size of the root however many more steps are taken.</p>
 
   <div class="tablewrap"><table class="ref">

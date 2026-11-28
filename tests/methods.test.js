@@ -48,6 +48,15 @@ describe("root finding with true errors", () => {
     expect(s.order).toBeLessThan(1.8);
     expect(() => bisection("x^2 + 1", [0, 1])).toThrow();
   });
+  test("bisection reports the root its brackets close in on, not the one nearest the start", () => {
+    // (x − 1)(x − 6)(x − 9) on [0, 10]: the first midpoint 5 keeps [0, 5], so the iterates go to 1
+    const b = bisection("(x - 1)*(x - 6)*(x - 9)", [0, 10]);
+    const last = b.iterations.at(-1);
+    expect(num(b.root.low)).toBe(1);
+    expect(num(b.root.high)).toBe(1);
+    expect(b.root.low.compareTo(exactOf(last.a)) >= 0 && b.root.high.compareTo(exactOf(last.b)) <= 0).toBe(true);
+    expect(b.iterations.every((r) => r.error <= r.bound)).toBe(true);
+  });
   test("fixed-point iteration converges at the rate of the multiplier", () => {
     const f = fixedPoint("cos(x)", 1, { steps: 30 });
     expect(num(f.root.low)).toBeCloseTo(0.7390851332151607, 14);

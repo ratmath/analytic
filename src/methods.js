@@ -224,6 +224,32 @@ function certifiedRoot(ast, variable, lo, hi, near, digits) {
     return null;
   }
 }
+/**
+ * The certified root in the closed bracket [a, b] of doubles (exact ends, so a
+ * bracket narrower than 10⁻¹² is not blurred). Where the bracket holds several
+ * roots, the one nearest its middle; its error is then a distance to that root.
+ */
+function rootInBracket(ast, variable, a, b, digits) {
+  const lo = exactOf(a);
+  const hi = exactOf(b);
+  try {
+    const span = hi.subtract(lo);
+    const pad = span.numerator === 0n ? new Rational(1n, 1n << 60n).multiply(lo.abs().add(new Rational(1n))) : span;
+    const zs = zeros(ast, [lo.subtract(pad), hi.add(pad)], { variable, tolerance: 10 ** -Math.min(digits, 30) }).exact();
+    const mid = (a + b) / 2;
+    let best = null;
+    for (const z of zs) {
+      if (z.kind && z.kind !== "zero" && z.kind !== "root" && z.unique === false) continue;
+      // keep only roots that meet the bracket
+      if (z.hi.compareTo(lo) < 0 || z.lo.compareTo(hi) > 0) continue;
+      const m = (z.lo.toNumber() + z.hi.toNumber()) / 2;
+      if (best === null || Math.abs(m - mid) < Math.abs(best.m - mid)) best = { m, iv: new RationalInterval(z.lo, z.hi) };
+    }
+    return best && best.iv;
+  } catch {
+    return null;
+  }
+}
 /** the certified root the iterates are heading for: searched over the span of the last iterates */
 function rootNear(ast, variable, rows, opts) {
   const xs = rows.map((r) => r.x).filter(Number.isFinite);
@@ -266,17 +292,25 @@ export function bisection(f, [a, b], opts = {}) {
   let hi = startOf(b);
   let flo = F({ [variable]: lo });
   if (!(flo * F({ [variable]: hi }) < 0)) refuse("no-bracket", "bisection needs f(a) and f(b) of opposite signs");
-  const root = certifiedRoot(ast, variable, lo, hi, (lo + hi) / 2, opts.digits ?? 25);
   const rows = [];
   const steps = opts.steps ?? 20;
+  let hit = null;
   for (let n = 0; n < steps; n++) {
     const x = lo + (hi - lo) / 2;
     const fx = F({ [variable]: x });
-    rows.push({ n, a: lo, b: hi, x, fx, bound: (hi - lo) / 2, error: trueError(x, root) });
-    if (fx === 0) break;
+    rows.push({ n, a: lo, b: hi, x, fx, bound: (hi - lo) / 2, error: null });
+    if (fx === 0) {
+      hit = x;
+      break;
+    }
     if (flo * fx < 0) hi = x;
     else [lo, flo] = [x, fx];
   }
+  // the root bisection homes in on is the one in its last bracket (a sign-changing bracket can hold
+  // several roots, and the iterates follow whichever half keeps the sign change, not the root nearest the start)
+  const [ra, rb] = hit === null ? [lo, hi] : [hit, hit];
+  const root = rootInBracket(ast, variable, ra, rb, opts.digits ?? 25);
+  for (const r of rows) r.error = trueError(r.x, root);
   return finishRoots("bisection", rows, root);
 }
 
