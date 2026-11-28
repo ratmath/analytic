@@ -1430,10 +1430,32 @@ export function verifySequenceCertificate(cert) {
   const ok = (k) => closeAt(seq, k, L, e, digits);
   note(`|a(${cert.N}) − L| < ε`, ok(cert.N));
   if (cert.least && cert.N > cert.from) note(`|a(${cert.N - 1}) − L| ≥ ε, so N is least`, !ok(cert.N - 1));
-  for (const part of cert.parts) {
+  // the parts must be the subsequences of this very sequence, one for each residue class
+  const classes = soft(() => subsequencesOf(seq));
+  const parts = Array.isArray(cert.parts) ? cert.parts : [];
+  const bound = classes !== null && parts.length === classes.list.length && classes.list.every((u) => parts.some((p) => p.period === u.period && p.residue === u.residue && p.from === u.sequence.from && p.term === format(u.sequence.ast)));
+  note(classes && classes.period > 1 ? `the parts are the ${classes.period} subsequences n = ${classes.period}m + r of the sequence` : "the part is the sequence itself", bound);
+  // tailStart: an index from which the tail arguments give the inequality for every class
+  let tailStart = cert.N;
+  let covered = bound;
+  for (const part of parts) {
     const pv = part.variable ?? cert.variable;
     const sub = new Sequence(part.term, { variable: pv, from: part.from, params: cert.params });
-    if (part.method === "monotone tail") {
+    const index = (m) => part.period * m + part.residue;
+    let T = null; // in the part's own index: the inequality holds there and the tail argument carries it on
+    if (part.method === "constant") T = part.from;
+    else if (part.method === "monotone tail" && part.monotone) T = Math.max(part.from, part.N, part.monotone.from);
+    else if (part.method === "dominating sequence" && part.bound) T = Math.max(part.from, part.bound.from, part.bound.belowEpsilonFrom);
+    if (T === null || !Number.isSafeInteger(T)) covered = false;
+    else {
+      const okT = soft(() => closeAt(sub, T, L, e, digits), false);
+      if (!okT) covered = false;
+      tailStart = Math.max(tailStart, index(T));
+    }
+    if (part.method === "constant") {
+      const again = soft(() => sub.monotone({ digits }));
+      note(`along ${part.along}: the terms are constant`, again && again.direction === "constant");
+    } else if (part.method === "monotone tail") {
       const again = soft(() => sub.monotone({ digits }));
       note(`along ${part.along}: the tail is ${part.monotone.direction} from ${part.monotone.from}`, again && again.direction === part.monotone.direction && again.from <= part.monotone.from);
     } else if (part.method === "dominating sequence") {
@@ -1451,6 +1473,11 @@ export function verifySequenceCertificate(cert) {
       note(`along ${part.along}: the terms stay under it at sampled indices`, dominated);
     }
   }
+  // from N up to where every tail argument takes over, each index is checked one by one
+  const gap = tailStart - cert.N;
+  let between = covered && Number.isSafeInteger(gap) && gap <= 200000;
+  for (let k = cert.N; between && k < tailStart; k++) if (!soft(() => ok(k), false)) between = false;
+  note(gap > 0 ? `|a(n) − L| < ε at each of the ${gap} indices from ${cert.N} to ${tailStart - 1}, before the tail arguments take over at ${tailStart}` : `the tail arguments cover every n ≥ ${cert.N}`, between);
   let later = true;
   let tried = 0;
   for (let k = cert.N, i = 0; i < 60; i++, k = i < 30 ? k + 1 : Math.ceil(k * 1.7) + 1) {
