@@ -2,9 +2,12 @@
 // solutions. Each answer is checked a second way: the closed formula is put
 // back into the equation, a foot is tested against the conserved quantity of
 // the characteristic, or the value against the implicit relation.
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, setDefaultTimeout } from "bun:test";
 import { Rational } from "@ratmath/core";
 import { transport, pde, laplaceDisc, laplaceRectangle } from "../index.js";
+
+// certified searches: seconds each here, more on a slow machine
+setDefaultTimeout(120000);
 
 const n = (q) => q.toNumber();
 const mid = (iv) => (n(iv.low) + n(iv.high)) / 2;

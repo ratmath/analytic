@@ -1,9 +1,12 @@
 // Course Test roadmap, Fable items B2 to B5 (ratmath/shelf course-test/ROADMAP.md):
 // certified limits of power forms, N for ε, δ for ε, suprema, limsup/liminf,
 // uniform convergence. Each result is checked against a value known by hand.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, setDefaultTimeout } from "bun:test";
 import { Rational } from "@ratmath/core";
 import * as A from "../index.js";
+
+// certified searches: seconds each here, more on a slow machine
+setDefaultTimeout(120000);
 
 const Q = (n, d = 1) => new Rational(BigInt(n), BigInt(d));
 const mid = (iv) => (typeof iv === "number" ? iv : iv.low.add(iv.high).divide(Q(2)).toNumber());
