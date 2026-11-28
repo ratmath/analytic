@@ -1,7 +1,7 @@
 // The explore page: type a function (or a piecewise one), pick an interval,
 // move parameter sliders, and ask questions. Every answer shows the float
 // preview at once and the certified answer when it arrives.
-import { A, h, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=5f551fee0b";
+import { A, h, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=f66f78462a";
 
 const STORE = "ratmath-analytic-explore-v1";
 const QUESTIONS = [
