@@ -1,5 +1,11 @@
 # AI changelog
 
+## Declare Bun 1.4.2 in engines
+**Model:** Claude Opus 5.5
+**Date:** 2026-11-28
+
+`engines` lists `"bun": ">=1.4.2"` next to Node 22, since Bun 1.4.0 caps BigInt at 2^20 bits and CI runs 1.4.2.
+
 ## Course Test helpers, batch A6 (Opus 5.5, 2026-11-27)
 
 Added termsForError, exact Newton, Darboux sums and PDE classification for the Course Test roadmap.
