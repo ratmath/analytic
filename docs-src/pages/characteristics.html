@@ -1,0 +1,64 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>First-order equations: characteristics</h1>
+  <p><code>transport</code> solves \(u_t + c\,u_x + k\,u = s\) with \(u(x, 0) = f(x)\) along characteristics: a closed formula where there is one, a certified value at a point otherwise, and a plain statement of where characteristics cross and the solution stops being a function.</p>
+<pre><code>const u = transport({ speed: 2, initial: "exp(-x^2)" });
+u.formula;            // "exp(-(x - 2*t)^2)"
+u.characteristics;    // "x - 2*t = const"
+u.at(1, "1/2").value; // exactly 1: the foot of the characteristic is x = 0
+u.residual(3, 1);     // [0, 0]: the formula put back into the equation
+
+const b = transport({ speed: "u", initial: "exp(-x^2)", interval: [-4, 4] });
+b.crossing.time;      // [1.165821…]: the breaking time sqrt(e/2)
+b.at(1, 2);           // refuses: characteristics have crossed</code></pre>
+
+  <h2>The idea</h2>
+  <p>Follow a curve \(x(t)\) with \(dx/dt = c\). Along it, by the chain rule, \(\frac{d}{dt}u(x(t), t) = u_t + c\,u_x\), so the partial differential equation becomes the ordinary one \(du/dt = s - k\,u\). With constant \(k\) and \(s\),</p>
+  \[ u(x, t) = f(\xi)\,e^{-kt} + \frac{s}{k}\bigl(1 - e^{-kt}\bigr) \qquad (\,f(\xi) + s\,t \text{ when } k = 0\,), \]
+  <p>where \(\xi\) is the <em>foot</em>: the point of the line \(t = 0\) from which the characteristic through \((x, t)\) started. Solving the equation is finding the foot.</p>
+  <ul>
+    <li><strong>Constant speed.</strong> The characteristics are the parallel lines \(x - ct = \xi\), and \(u = f(x - ct)\): the initial profile moves at speed \(c\) unchanged.</li>
+    <li><strong>Speed \(ax + b\).</strong> \(dx/dt = ax + b\) gives \(\xi = (x + b/a)\,e^{-at} - b/a\), again a closed formula.</li>
+    <li><strong>Any other \(c(x, t)\).</strong> The foot is the value at time 0 of the solution of \(dx/dt = c(x, t)\) through \((x, t)\), followed backwards by the validated <a href="#odes">ODE solver</a>. The result is an enclosure of the foot, and so of \(u\).</li>
+  </ul>
+  <p>In all three cases the characteristics are solutions of one ordinary differential equation, and two solutions through the same point are the same solution: they never cross, and \(u\) is defined for all time. Where there is a closed formula, <code>residual(x, t)</code> differentiates it and encloses \(u_t + c\,u_x + k\,u - s\) at a point, which is a check that does not go through characteristics at all.</p>
+
+  <h2>When the speed depends on u</h2>
+  <p>For \(u_t + c(u)\,u_x = 0\), such as Burgers' equation \(u_t + u\,u_x = 0\), \(u\) is still constant along each characteristic, so each one is a straight line whose slope is set by the value it carries:</p>
+  \[ x = \xi + F(\xi)\,t, \qquad F(\xi) = c(f(\xi)). \]
+  <p>Now the lines can meet. Two neighbours starting at \(\xi\) and \(\xi + d\xi\) cross when \(1 + F'(\xi)\,t = 0\), so the first crossing is at the <em>breaking time</em></p>
+  \[ t_b = \frac{-1}{\min_\xi F'(\xi)} \]
+  <p>if \(F'\) is negative somewhere, and never if \(F' \ge 0\) (faster values ahead of slower ones: a rarefaction). Past \(t_b\) the method would assign several values to one point; the equation then has no classical solution, and <code>at</code> refuses instead of returning one of them.</p>
+  <p>With <code>interval: [a, b]</code> the least value of \(F'\) over starting points in \([a, b]\) is enclosed by subdivision, which gives an enclosure of \(t_b\) for those characteristics. Before the breaking time, \(\xi \mapsto \xi + F(\xi)\,t\) is increasing, so the foot is its one root, found by bisection. Without an interval the claim is local: <code>at</code> first proves \(1 + F'(\xi)\,t > 0\) on the bracket it found, and refuses where it cannot.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>transport({ speed, decay = 0, source = 0, initial, interval })</td><td>{ kind, characteristics, foot, formula, crossing, at, residual }; also <code>pde.transport</code></td></tr>
+    <tr><td>u.at(x, t)</td><td>{ value, foot }: RationalIntervals (single numbers when the arithmetic is exact)</td></tr>
+    <tr><td>u.residual(x, t)</td><td>an enclosure of the equation's left side minus right side from the closed formula</td></tr>
+    <tr><td>u.crossing</td><td>{ never: true | false | null, time, reason }</td></tr>
+  </table></div>
+<template data-runbox>
+// A pulse carried at speed 2.
+const u = transport({ speed: 2, initial: "exp(-x^2)" });
+PRINT("u =", u.formula, "  on", u.characteristics);
+PRINT("u(1, 1/2) =", u.at(1, "1/2").value.low.toString(), "  residual at (3, 1):", u.residual(3, 1).low.toString());
+
+// Decay and a source; a speed that grows with x.
+const w = transport({ speed: -1, decay: 3, source: 2, initial: "sin(x)" });
+PRINT("u =", w.formula);
+const s = transport({ speed: "x", initial: "1/(1 + x^2)" });
+PRINT("speed x: foot", s.foot, " u =", s.formula);
+
+// A speed with no closed foot: followed back by the validated ODE solver.
+const v = transport({ speed: "1/(1 + x^2)", initial: "x" });
+const p = v.at(1, 1);
+PRINT("speed 1/(1+x²): foot of (1, 1) in [" + p.foot.low.toDecimal(12) + ", " + p.foot.high.toDecimal(12) + "]");
+
+// Burgers' equation: the wave steepens and breaks at sqrt(e/2).
+const b = transport({ speed: "u", initial: "exp(-x^2)", interval: [-4, 4] });
+PRINT("breaking time in [" + b.crossing.time.low.toDecimal(7) + ", " + b.crossing.time.high.toDecimal(7) + "],  sqrt(e/2) =", Math.sqrt(Math.E / 2));
+PRINT("u(1, 1/2) =", b.at(1, "1/2").value.low.toDecimal(12));
+try { b.at(1, 2); } catch (e) { PRINT("u(1, 2):", e.message); }
+u.formula;
+</template>

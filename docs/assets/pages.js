@@ -1,8 +1,8 @@
 // Mounts the demos on each docs page and handles page switching.
-import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=99b61abd4a";
-import { explorer } from "./explore.js?v=99b61abd4a";
-import { MORE } from "./more-demos.js?v=99b61abd4a";
-import { mountRunboxes } from "./runbox.js?v=99b61abd4a";
+import { A, h, demo, plot, fmtQ, fmtIv, fmtF, widthOf, mono, recordTable, place, xOf, COLORS, curveOf } from "./ui.js?v=1bcf8ad89e";
+import { explorer } from "./explore.js?v=1bcf8ad89e";
+import { MORE } from "./more-demos.js?v=1bcf8ad89e";
+import { mountRunboxes } from "./runbox.js?v=1bcf8ad89e";
 
 const { R, fn } = A;
 const num = (s) => A.Rational.from ? A.Rational.from(String(s).trim()) : new A.Rational(String(s).trim());

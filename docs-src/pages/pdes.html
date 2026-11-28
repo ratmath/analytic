@@ -29,6 +29,8 @@ plate.at("1/2", "3/4");</code></pre>
   \[ u(r, \theta) = \frac{a_0}{2} + \sum_{n=1}^{\infty} \Bigl(\frac{r}{R}\Bigr)^n (a_n\cos n\theta + b_n\sin n\theta). \]
   <p>Both tails are geometric away from the boundary and are bounded the same way. At the centre of the disc only \(a_0/2\) survives: the value of a harmonic function at the centre of a circle is the mean of its values on the circle. For the disc, a point is given as \((r, s)\) with \(\theta = 2\pi s\), so that a rational \(s\) names an exact direction.</p>
 
+  <p><strong>Finitely many modes.</strong> When the boundary values are a trigonometric polynomial, such as \(\cos\theta\), \(\cos^2\theta\) or \(\sin^3\theta\) on the circle, or a finite sum of \(\sin(n\pi x/a)\) on the top edge, the series has finitely many terms and nothing is left out. Products and powers are expanded with the product-to-sum identities into exact rational coefficients, and the solution carries <code>exact: true</code>, a <code>closedForm</code>, and a tail of 0. With \(\cos\theta\) on the unit circle the solution is \(r\cos\theta\), which is just \(x\), and its value at \(r = 1/2\), \(\theta = 0\) is the fraction 1/2. First-order equations are on the <a href="#characteristics">characteristics</a> page.</p>
+
   <h2>The wave equation</h2>
   <p>Every solution of \(u_{tt} = c^2 u_{xx}\) is a wave travelling right plus a wave travelling left. With \(u(x, 0) = f\) and \(u_t(x, 0) = g\), d'Alembert's formula is</p>
   \[ u(x, t) = \frac{f(x - ct) + f(x + ct)}{2} + \frac{1}{2c}\int_{x - ct}^{x + ct} g(s)\,ds . \]
@@ -42,7 +44,7 @@ plate.at("1/2", "3/4");</code></pre>
     <tr><td>classifyPDE({ A, B, C }), pde.classify</td><td>{ discriminant, type, regions: { hyperbolic, parabolic, elliptic }, at(x, y), on([[x0, x1], [y0, y1]]) }</td></tr>
     <tr><td>heat({ k, length, initial, ends = "fixed", terms = 8 })</td><td>{ coefficients, modes, at(x, t), formula(terms) }</td></tr>
     <tr><td>laplaceRectangle({ width, height, top, terms })</td><td>{ coefficients, modes, at(x, y), formula }</td></tr>
-    <tr><td>laplaceDisc({ radius, boundary, terms, angle = "theta" })</td><td>{ coefficients, mean, at(r, s), formula }</td></tr>
+    <tr><td>laplaceDisc({ radius, boundary, terms, angle = "theta" })</td><td>{ coefficients, mean, at(r, s), formula }; with finitely many modes also { exact: true, closedForm, modes }</td></tr>
     <tr><td>s.at(…)</td><td>{ value, partial, tail }</td></tr>
     <tr><td>wave({ c, length, position, velocity })</td><td>{ at(x, t), travelling, modes(N) }; no length means the whole line</td></tr>
     <tr><td>sturmLiouville({ p, q, w, interval, count = 3, width = "1e-6", certify = true })</td><td>[{ index, eigenvalue, estimate, proven }]</td></tr>
@@ -72,6 +74,11 @@ PRINT("pulse at x = 3, t = 3:", pulse.at(3, 3).low.toDecimal(8), " (half the hei
 // Steady temperature on a disc whose rim is at cos²θ: the centre is at the mean.
 const disc = laplaceDisc({ boundary: "cos(theta)^2", terms: 4 });
 PRINT("centre:", disc.mean.low.toDecimal(8), "  halfway out along θ = 0:", disc.at("1/2", 0).partial.low.toDecimal(8));
+
+// Boundary values with finitely many modes: the series ends, and the answer is exact.
+const exactDisc = laplaceDisc({ boundary: "cos(theta)" });
+PRINT("cos θ on the circle:", exactDisc.closedForm, "  at r = 1/2, θ = 0:", exactDisc.at("1/2", 0).value.low.toString(), "  tail:", exactDisc.at("1/2", 0).tail.toString());
+PRINT("sin³θ:", laplaceDisc({ boundary: "sin(theta)^3" }).closedForm);
 
 // The first eigenvalues of -y'' = λy on [0, 1] are π², 4π²: bracketed with proof.
 for (const e of sturmLiouville({ interval: [0, 1], count: 2 })) PRINT(`λ${e.index} in [${e.eigenvalue.low.toDecimal(6)}, ${e.eigenvalue.high.toDecimal(6)}]  proven: ${e.proven}`);

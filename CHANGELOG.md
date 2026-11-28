@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- Proof-carrying analysis (Course Test roadmap, items B2 to B5 and B7):
+  - Limits of powers with a moving exponent, `f(n)^g(n)`, through
+    `exp(g·log f)` with the logarithm of a ratio of polynomials taken from the
+    exact difference `f − 1`; infinite limits through the reciprocal. Proves
+    `(1 + 1/n)^n → e` and ratio-test limits such as `n^n/(n!·3^n) → 0`.
+  - `monotone()` has two more routes: a derivative that tends to 0 and whose
+    own derivative has one sign, and the derivative of the logarithm for
+    positive terms. The route is reported in `reason`.
+  - `Sequence#accumulation()`, `limsup()`, `liminf()`: sequences with periodic
+    factors (`(-1)^n`, `cos(pi*n)`, `sin(pi*n/2)`) are split into the
+    subsequences n = p·m + r. `limit()` now refuses such a sequence with
+    "the terms oscillate, with lim sup … and lim inf …", and says plainly when
+    a factor such as `sin(n)` does not repeat.
+  - `Sequence#supremum()`, `infimum()`: the value, whether a term takes it,
+    and where.
+  - `Sequence#nFor(ε)`: an N with |a(n) − L| < ε for every n ≥ N, least where
+    that is proven, by a monotone tail or a dominating sequence.
+  - `deltaFor(f, x0, ε)` (also a method of `fn`): a δ that works, the largest
+    δ from the certified zeros of f = f(x₀) ± ε, or whether a given δ works.
+  - `verifyCertificate(certificate)` rechecks an `nFor` or `deltaFor` result
+    by a route that does not repeat the search.
+  - `FunctionSequence#uniform` now decides both ways with a proof: the sup at
+    an end of the interval when f_n − f is monotone in x for every large n, a
+    bound for every x at once, or a witness x_n along which the distance does
+    not tend to 0. Verdict "not uniform" is new; "not uniform so far" and
+    "undecided" remain for what is not proven.
+  - `transport({ speed, decay, source, initial })` (also `pde.transport`):
+    u_t + c·u_x + k·u = s by characteristics. Closed formulas for constant
+    speed and speed a·x + b, a validated foot for other c(x, t), and for c(u)
+    the breaking time with a refusal where characteristics have crossed.
+    `residual(x, t)` puts a closed formula back into the equation.
+  - `laplaceDisc` and `laplaceRectangle` with boundary values that have
+    finitely many modes (trigonometric polynomials, products and powers
+    included) return the exact finite sum: `exact: true`, `closedForm`, tail 0.
+  - New docs pages "ε, N and δ, with certificates" and "First-order
+    equations: characteristics".
+
 - Review of batch A6 (Course Test B1):
   - `darboux` on a piece where f′ cannot be enclosed (a corner such as |x| at 0,
     or a cusp) no longer takes the end values as inf and sup: the range of f is

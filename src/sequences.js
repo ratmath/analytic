@@ -26,6 +26,8 @@ import { rayContext, nodeAt, tailOf, signE, addE, spread, upperEnv, envAt, decre
 import { quad1 } from "./quad.js";
 import { AnalyticFunction, evalParams } from "./fn.js";
 import { zeros } from "./roots.js";
+import { periodOf, alongResidue } from "./periodic.js";
+import { weakSign, definedOn, UNBOUNDED } from "./uniform.js";
 
 const tenTo = (d) => new Rational(1n, 10n ** BigInt(d));
 const q = (x) => (typeof x === "string" || (typeof x === "number" && !Number.isInteger(x)) ? toRational(x) : toQ(x));
@@ -309,6 +311,14 @@ export class Sequence {
         const s = onRays(this.variable, this.#env, bits, 0, (ctx) => soft(() => signOnRay(d.rest, ctx), 0) || (positiveShape(d.rest, ctx) ? 1 : undefined));
         if (s) return s > 0 ? Infinity : -Infinity;
       }
+      // periodic factors ((−1)^n, cos(πn)): the limits along n = p·m + r decide
+      const acc = soft(() => accumulation(this, { digits }));
+      if (acc) {
+        if (acc.converges) return acc.limsup;
+        refuse("no-limit", `no limit: the terms oscillate, with lim sup ${showValue(acc.limsup)} and lim inf ${showValue(acc.liminf)} (${acc.subsequences.map((u) => `${u.along} tends to ${showValue(u.limit)}`).join("; ")})`);
+      }
+      const per = periodOf(this.ast, this.variable);
+      if (per.blocker) refuse("no-limit", `no limit could be proven: ${per.blocker}, so the terms are not split into subsequences (${e.message})`);
       throw e;
     }
   }
@@ -1048,9 +1058,12 @@ export class FunctionSequence {
    */
   uniform(interval, limit = "0", { ns = [1, 2, 4, 8, 16, 32], digits = 8 } = {}) {
     const I = Iv.from([q(interval[0]), q(interval[1])]);
-    const table = ns.map((n) => ({ n, sup: this.supDistance(n, interval, limit, { digits }) }));
+    const table = ns.map((n) => ({ n, sup: soft(() => this.supDistance(n, interval, limit, { digits })) }));
     const bits = bitsForDigits(digits) + 32;
     const diff = simplify(op("-", this.ast, toAst(limit)));
+    const decided = decideUniform(this, diff, I, digits);
+    if (decided) return { ...decided, table };
+    if (table.some((r) => r.sup === null)) return { verdict: "undecided", table, reason: "the difference could not be bounded on the interval" };
     // the same asymptotic bound, with x standing for the whole interval
     const proof = onRays(this.index, { [this.variable]: I }, bits, 0, (ctx, N) => {
       const node = nodeAt(diff, ctx);
@@ -1068,3 +1081,449 @@ export class FunctionSequence {
 
 /** functionSequence("x^n", { variable: "x", index: "n" }) */
 export const functionSequence = (term, opts) => new FunctionSequence(term, opts);
+
+
+// ---- lim sup, lim inf, suprema and an N for ε ---------------------------------------------------
+
+const showValue = (L) => (L === Infinity ? "∞" : L === -Infinity ? "-∞" : L instanceof Rational ? `${L}` : L.low.equals(L.high) ? `${L.low}` : `about ${L.low.add(L.high).divide(TWO).toNumber()}`);
+const lowEnd = (L) => (L === Infinity || L === -Infinity ? L : L instanceof Rational ? L : L.low);
+const highEnd = (L) => (L === Infinity || L === -Infinity ? L : L instanceof Rational ? L : L.high);
+/** a < b for values that may be ±Infinity or Rationals. */
+const below = (a, b) => (a === b ? false : a === -Infinity || b === Infinity ? true : a === Infinity || b === -Infinity ? false : lt(a, b));
+/** 1, −1, 0 (equal points) or null (enclosures overlap) for two limits/values. */
+function compareValues(a, b) {
+  if (below(highEnd(a), lowEnd(b))) return -1;
+  if (below(highEnd(b), lowEnd(a))) return 1;
+  const point = (L) => L === Infinity || L === -Infinity || L instanceof Rational || L.low.equals(L.high);
+  if (point(a) && point(b)) return 0;
+  return null;
+}
+const tidyValue = (L) => (L instanceof RationalInterval && L.low.equals(L.high) ? L.low : L);
+
+/** The subsequences a(p·m + r) of a sequence with periodic factors, each an ordinary Sequence in m. */
+function subsequencesOf(seq) {
+  const n = seq.variable;
+  const per = periodOf(seq.ast, n);
+  if (per.period === null) refuse("undecided", per.blocker);
+  const p = per.period;
+  if (p === 1) return { period: 1, list: [{ residue: 0, period: 1, along: n, sequence: seq, index: (m) => m }] };
+  const list = [];
+  // the subsequences count in m (k when the index is already called m)
+  const mv = n === "m" ? "k" : "m";
+  const rename = (t) => (t.type === "var" ? (t.name === n ? variable(mv) : t) : t.args ? { ...t, args: t.args.map(rename) } : t);
+  for (let r = 0; r < p; r++) {
+    const term = rename(alongResidue(seq.ast, n, p, r));
+    const m0 = Math.ceil((seq.from - r) / p);
+    list.push({
+      residue: r,
+      period: p,
+      along: `${n} = ${p}${mv}${r ? ` + ${r}` : ""}`,
+      sequence: new Sequence(term, { variable: mv, from: m0, params: seq.params }),
+      index: (m) => p * m + r,
+    });
+  }
+  return { period: p, list };
+}
+
+/**
+ * The accumulation points of a sequence with periodic factors: the limit of
+ * each subsequence a(p·m + r). → { period, subsequences: [{ along, term,
+ * limit }], limsup, liminf, converges }. Refuses where a subsequence has no
+ * proven limit, or where a factor such as sin(n) does not repeat.
+ */
+function accumulation(seq, { digits = 20 } = {}) {
+  const { period, list } = subsequencesOf(seq);
+  if (period === 1) {
+    const f = new AnalyticFunction(seq.ast, { variable: seq.variable, params: seq.params });
+    const L = f.limit("inf", { digits });
+    return { period, subsequences: [{ along: seq.variable, term: format(seq.ast), limit: L }], limsup: L, liminf: L, converges: true };
+  }
+  const subs = list.map((u) => ({ along: u.along, term: format(u.sequence.ast), limit: u.sequence.limit({ digits }) }));
+  let hi = subs[0].limit;
+  let lo = subs[0].limit;
+  let converges = true;
+  for (const u of subs.slice(1)) {
+    const c = compareValues(u.limit, hi);
+    if (c === null || compareValues(u.limit, lo) === null) refuse("undecided", `the limits along ${subs.map((x) => x.along).join(" and ")} are too close to tell apart at this precision`);
+    if (c > 0) hi = u.limit;
+    if (compareValues(u.limit, lo) < 0) lo = u.limit;
+  }
+  converges = compareValues(hi, lo) === 0;
+  return { period, subsequences: subs, limsup: hi, liminf: lo, converges };
+}
+
+Sequence.prototype.accumulation = function (opts) {
+  return accumulation(this, opts);
+};
+/** lim sup a(n): the largest limit of a subsequence a(p·m + r). A RationalInterval or ±Infinity. */
+Sequence.prototype.limsup = function (opts) {
+  return accumulation(this, opts).limsup;
+};
+/** lim inf a(n). */
+Sequence.prototype.liminf = function (opts) {
+  return accumulation(this, opts).liminf;
+};
+
+/**
+ * sup or inf of one sequence without periodic factors, from its proven
+ * monotone tail: the tail's sup is its limit (not attained) when it rises and
+ * its first term when it falls; the finitely many terms before the tail are
+ * compared one by one.
+ */
+function extremeOfPlain(seq, sign, digits) {
+  const mono = seq.monotone({ digits });
+  const val = (k) => seq.term(k, { digits });
+  const better = (a, b) => {
+    const c = compareValues(a, b);
+    if (c === null) refuse("precision", "two candidates for the extreme value are too close to tell apart");
+    return sign > 0 ? c : -c;
+  };
+  if (mono.direction === "constant") return { value: val(seq.from), attained: true, at: seq.from, reason: "the sequence is constant" };
+  const rising = (mono.direction === "increasing") === (sign > 0); // moving towards the extreme side
+  let best;
+  if (rising) {
+    const L = seq.limit({ digits });
+    best = { value: tidyValue(L), attained: false, at: null, reason: `the terms ${mono.direction === "increasing" ? "rise" : "fall"} for ${seq.variable} ≥ ${mono.from}, so they approach their limit ${showValue(L)} without reaching it` };
+  } else {
+    best = { value: val(mono.from), attained: true, at: mono.from, reason: `the terms ${mono.direction === "increasing" ? "rise" : "fall"} for ${seq.variable} ≥ ${mono.from}, so the term at ${seq.variable} = ${mono.from} is the ${sign > 0 ? "largest" : "smallest"} of them` };
+  }
+  for (let k = mono.from - 1; k >= seq.from; k--) {
+    const t = val(k);
+    const c = better(t, best.value);
+    if (c > 0 || (c === 0 && !best.attained)) best = { value: t, attained: true, at: k, reason: `the term at ${seq.variable} = ${k} is ${sign > 0 ? "above" : "below"} every later term` };
+  }
+  return best;
+}
+function extremeOf(seq, sign, { digits = 20 } = {}) {
+  const { period, list } = subsequencesOf(seq);
+  let best = null;
+  for (const u of list) {
+    const e = extremeOfPlain(u.sequence, sign, digits);
+    const cand = { ...e, at: e.at === null ? null : u.index(e.at), along: period > 1 ? u.along : undefined };
+    if (best === null) best = cand;
+    else {
+      const c = compareValues(cand.value, best.value);
+      if (c === null) refuse("precision", "two candidates for the extreme value are too close to tell apart");
+      if ((sign > 0 ? c : -c) > 0 || (c === 0 && cand.attained && !best.attained)) best = cand;
+    }
+  }
+  const out = { value: best.value, attained: best.attained, at: best.at, reason: period > 1 ? `along ${best.along}: ${best.reason}` : best.reason };
+  if (out.value === Infinity || out.value === -Infinity) out.reason = `the terms are unbounded ${sign > 0 ? "above" : "below"}`;
+  return out;
+}
+/**
+ * The supremum of the terms: { value, attained, at, reason }. `value` is a
+ * Rational, a RationalInterval that encloses it, or Infinity; `attained` says
+ * whether some term equals it, and `at` is that index.
+ */
+Sequence.prototype.supremum = function (opts) {
+  return extremeOf(this, 1, opts);
+};
+/** The infimum of the terms: { value, attained, at, reason }. */
+Sequence.prototype.infimum = function (opts) {
+  return extremeOf(this, -1, opts);
+};
+
+const memoBits = (f) => {
+  const seen = new Map();
+  return (bits) => {
+    if (!seen.has(bits)) seen.set(bits, f(bits));
+    return seen.get(bits);
+  };
+};
+/** |a(k) − L| as an interval, from an exact term where there is one. */
+function distanceAt(seq, k, L, bits) {
+  const K = new Rational(BigInt(k));
+  // an exact value is used unless it would be enormous: a power whose exponent moves, far out
+  const moving = (t) => (t.type === "op" && t.op === "^" && depends(t.args[1], seq.variable)) || (t.args ? t.args.some(moving) : false);
+  const exact = Object.keys(seq.params).length || (k > 512 && moving(seq.ast)) ? null : exactAt(seq.ast, seq.variable, K);
+  let a = null;
+  if (exact !== null) a = Iv.point(exact);
+  else {
+    try {
+      a = encloseAst(seq.ast, { ...paramEnv(seq.params), [seq.variable]: Iv.point(K) }, bits);
+    } catch (err) {
+      // (−1)^k has no real-variable enclosure: fall back on the exact value
+      const ex = err instanceof AnalyticError ? exactAt(seq.ast, seq.variable, K) : null;
+      if (ex === null) throw err;
+      a = Iv.point(ex);
+    }
+  }
+  const d = a.sub(L);
+  return new Iv(d.mig, d.mag);
+}
+/** Is |a(k) − L| < ε? Decided from enclosures at rising precision. */
+function closeAt(seq, k, L, e, digits) {
+  for (let bits = bitsForDigits(digits) + 24; bits <= 4096; bits *= 2) {
+    const d = distanceAt(seq, k, L(bits), bits);
+    if (lt(d.hi, e)) return true;
+    if (ge(d.lo, e)) return false;
+  }
+  return refuse("precision", `|a(${k}) − L| is too close to ε to decide`);
+}
+
+/**
+ * For one sequence without periodic factors: the least N with
+ * |a(n) − L| < ε for every n ≥ N, and how the tail is proven.
+ */
+function thresholdPlain(seq, L, e, { digits, maxWalk }) {
+  const n = seq.variable;
+  const ok = (k) => closeAt(seq, k, L, e, digits);
+  const mono = soft(() => seq.monotone({ digits }));
+  if (mono && mono.direction === "constant") return { N: seq.from, least: true, method: "constant", detail: "the sequence is constant" };
+  if (mono) {
+    // a monotone convergent tail moves towards its limit, so |a(n) − L| never grows from mono.from on
+    const M = mono.from;
+    let hi = M;
+    let lo = M - 1;
+    for (let step = 1; !ok(hi); step *= 2) {
+      lo = hi;
+      hi += step;
+      if (hi > 2 ** 52) refuse("budget", "no index was found where the terms are within ε of the limit");
+    }
+    while (hi - lo > 1 && lo >= M) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (ok(mid)) hi = mid;
+      else lo = mid;
+    }
+    let N = hi;
+    if (N === M) for (let k = M - 1; k >= seq.from && ok(k); k--) N = k;
+    return {
+      N,
+      least: true,
+      method: "monotone tail",
+      monotone: mono,
+      detail: `the terms ${mono.direction === "increasing" ? "rise" : "fall"} to the limit for ${n} ≥ ${M}, so |a(${n}) − L| never grows from there; it is below ε at ${n} = ${N}${N > seq.from ? ` and not at ${n} = ${N - 1}` : ""}`,
+    };
+  }
+  // no monotone tail: an explicit dominating sequence C·e^(k·n)·n^p·(log n)^m from the asymptotic form
+  const bits = bitsForDigits(digits) + 24;
+  const diff = op("-", seq.ast, variable("__limit"));
+  const env = { ...paramEnv(seq.params), __limit: L(bits) };
+  const dom = onRays(n, env, bits, seq.from, (ctx, X) => {
+    const node = nodeAt(diff, ctx);
+    const ub = !node.osc && node.r && node.L.mag.numerator === 0n ? { C: node.r.C, e: addE(node.e, node.r.e) } : upperEnv(node, ctx);
+    if (signE(ub.e) >= 0 || !decreasing(ub.e, ctx)) return undefined;
+    envAt(ub, ctx);
+    return { X, ub };
+  }, [4, 8, ...NS]);
+  if (!dom) refuse("undecided", `no bound on |a(${n}) − L| that tends to 0 was proven`);
+  const boundAt = (k) => envAt(dom.ub, rayContext(n, env, new Rational(BigInt(k)), bits));
+  let hi = dom.X;
+  let lo = dom.X - 1;
+  for (let step = 1; !lt(boundAt(hi), e); step *= 2) {
+    lo = hi;
+    hi += step;
+    if (hi > 2 ** 52) refuse("budget", "the dominating sequence stays above ε for every index tried");
+  }
+  while (hi - lo > 1 && lo >= dom.X) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (lt(boundAt(mid), e)) hi = mid;
+    else lo = mid;
+  }
+  // every n ≥ hi is within ε; walk back through the terms themselves to the last one that is not
+  let N = hi;
+  let least = false;
+  for (let steps = 0; steps <= maxWalk; steps++) {
+    if (N === seq.from) {
+      least = true;
+      break;
+    }
+    if (!ok(N - 1)) {
+      least = true;
+      break;
+    }
+    N -= 1;
+  }
+  const { C, e: E } = dom.ub;
+  const parts = [];
+  if (E.k.numerator !== 0n) parts.push(`e^(${E.k}·${n})`);
+  if (E.p.numerator !== 0n) parts.push(`${n}^(${E.p})`);
+  if (E.m.numerator !== 0n) parts.push(`(log ${n})^(${E.m})`);
+  const text = `${C.toNumber().toPrecision(4)}·${parts.join("·")}`;
+  return {
+    N,
+    least,
+    method: "dominating sequence",
+    bound: { C, exponents: E, from: dom.X, text, belowEpsilonFrom: hi },
+    detail: `|a(${n}) − L| ≤ ${text} for ${n} ≥ ${dom.X}, which decreases and is below ε from ${n} = ${hi}; the terms before that were checked one by one${least ? `, and ${N > seq.from ? `the term at ${n} = ${N - 1} is not within ε` : "all of them are within ε"}` : ` back to ${n} = ${N}`}`,
+  };
+}
+
+/**
+ * An N for a given ε: |a(n) − L| < ε for every n ≥ N, with its proof.
+ *
+ *   sequence("1/sqrt(n)").nFor("1/100")      // N = 10001, the least one
+ *
+ * L is the limit (found, or given as { limit } and then checked against the
+ * one found). The tail is proven by a monotone tail where the sequence has
+ * one, by an explicit dominating sequence otherwise, and along each
+ * subsequence n = p·m + r when the term has periodic factors such as (−1)^n.
+ * → { N, least, limit, epsilon, method, reason, certificate }; `least` says
+ * N − 1 would not do. verifyCertificate(result.certificate) rechecks it.
+ */
+Sequence.prototype.nFor = function (eps, { limit, digits = 20, maxWalk = 200000 } = {}) {
+  const e = q(eps);
+  if (e.numerator <= 0n) refuse("bad-argument", "ε must be positive");
+  const found = this.limit({ digits: Math.max(digits, 30) });
+  if (found === Infinity || found === -Infinity) refuse("no-limit", "the sequence is unbounded, so no N exists for any ε");
+  let L = memoBits((bits) => (bits <= bitsForDigits(Math.max(digits, 30)) ? Iv.from(found) : Iv.from(this.limit({ digits: Math.ceil(bits / 3) }))));
+  let limitText = showValue(found);
+  if (limit !== undefined) {
+    const ast = toAst(typeof limit === "number" ? String(limit) : limit instanceof Rational ? num(limit) : limit);
+    const given = (bits) => encloseAst(ast, {}, bits);
+    const g = given(bitsForDigits(digits) + 24);
+    const f = Iv.from(found);
+    if (lt(g.hi, f.lo) || gt(g.lo, f.hi)) refuse("bad-argument", `${format(ast)} is not the limit, which is ${limitText}`);
+    L = memoBits(given);
+    limitText = format(ast);
+  }
+  const { period, list } = subsequencesOf(this);
+  const parts = list.map((u) => ({ u, t: thresholdPlain(u.sequence, L, e, { digits, maxWalk }) }));
+  // all n ≥ N are within ε exactly when N is past the last index that is not
+  let N = this.from;
+  let least = true;
+  for (const { u, t } of parts) {
+    if (!t.least) least = false;
+    // the last bad index in this class is one period before its threshold (none when the threshold is its first index)
+    if (t.N > u.sequence.from || !t.least) N = Math.max(N, u.index(t.N - 1) + 1);
+  }
+  if (period > 1 && least) {
+    // within one period above the last bad index every class is already good; N is that index + 1
+  }
+  const method = parts.map((x) => x.t.method).every((m) => m === parts[0].t.method) ? parts[0].t.method : "mixed";
+  const reason = period === 1 ? parts[0].t.detail : parts.map((x) => `along ${x.u.along}: ${x.t.detail}`).join("; ");
+  const certificate = Object.freeze({
+    kind: "N for ε",
+    claim: `|a(${this.variable}) − L| < ε for every ${this.variable} ≥ N`,
+    term: format(this.ast),
+    variable: this.variable,
+    from: this.from,
+    params: this.params,
+    limit: limitText,
+    epsilon: e,
+    N,
+    least,
+    parts: parts.map((x) => ({ along: x.u.along, period: x.u.period, residue: x.u.residue, term: format(x.u.sequence.ast), variable: x.u.sequence.variable, from: x.u.sequence.from, N: x.t.N, method: x.t.method, monotone: x.t.monotone ?? null, bound: x.t.bound ?? null })),
+  });
+  return { N, least, limit: tidyValue(found), epsilon: e, method, reason, certificate };
+};
+
+/**
+ * Recheck an "N for ε" certificate without trusting the search that made
+ * it: the inequality at N (and its failure at N − 1 when N is claimed
+ * least) at a higher precision, the tail argument re-derived (the monotone
+ * direction proven afresh, or the dominating bound compared with the terms
+ * and with ε), and the inequality itself at a spread of later indices.
+ * → { valid, checks: [{ check, ok }] }.
+ */
+export function verifySequenceCertificate(cert) {
+  const checks = [];
+  const note = (check, ok) => checks.push({ check, ok: !!ok });
+  const seq = new Sequence(cert.term, { variable: cert.variable, from: cert.from, params: cert.params });
+  const digits = 40;
+  const limAst = soft(() => toAst(cert.limit));
+  const found = seq.limit({ digits });
+  const L = memoBits((bits) => (limAst && !/^about/.test(cert.limit) ? encloseAst(limAst, {}, bits) : bits <= bitsForDigits(digits) ? Iv.from(found) : Iv.from(seq.limit({ digits: Math.ceil(bits / 3) }))));
+  note("the limit agrees with the one found afresh", !lt(L(160).hi, Iv.from(found).lo) && !gt(L(160).lo, Iv.from(found).hi));
+  const e = cert.epsilon;
+  const ok = (k) => closeAt(seq, k, L, e, digits);
+  note(`|a(${cert.N}) − L| < ε`, ok(cert.N));
+  if (cert.least && cert.N > cert.from) note(`|a(${cert.N - 1}) − L| ≥ ε, so N is least`, !ok(cert.N - 1));
+  for (const part of cert.parts) {
+    const pv = part.variable ?? cert.variable;
+    const sub = new Sequence(part.term, { variable: pv, from: part.from, params: cert.params });
+    if (part.method === "monotone tail") {
+      const again = soft(() => sub.monotone({ digits }));
+      note(`along ${part.along}: the tail is ${part.monotone.direction} from ${part.monotone.from}`, again && again.direction === part.monotone.direction && again.from <= part.monotone.from);
+    } else if (part.method === "dominating sequence") {
+      const { C, exponents: E, from: X, belowEpsilonFrom: B } = part.bound;
+      const bits = 200;
+      const env = paramEnv(cert.params);
+      const boundAt = (k) => envAt({ C, e: E }, rayContext(pv, env, new Rational(BigInt(k)), bits));
+      note(`along ${part.along}: the dominating sequence decays`, signE(E) < 0 && decreasing(E, rayContext(pv, env, new Rational(BigInt(X)), bits)));
+      note(`along ${part.along}: it is below ε at ${B}`, lt(boundAt(B), e));
+      let dominated = true;
+      for (let k = X, i = 0; i < 40 && k <= 100000; i++, k = Math.ceil(k * 1.5) + 1) {
+        const d = soft(() => distanceAt(sub, k, L(bits), bits));
+        if (d && gt(d.lo, boundAt(k))) dominated = false;
+      }
+      note(`along ${part.along}: the terms stay under it at sampled indices`, dominated);
+    }
+  }
+  let later = true;
+  let tried = 0;
+  for (let k = cert.N, i = 0; i < 60; i++, k = i < 30 ? k + 1 : Math.ceil(k * 1.7) + 1) {
+    if (k > Math.max(100000, 2 * cert.N)) break; // far out the terms themselves are too large to write down
+    const good = soft(() => ok(k), null);
+    if (good === null) break;
+    tried++;
+    if (!good) later = false;
+  }
+  note(`the inequality holds at ${tried} later indices`, later && tried > 0);
+  return { valid: checks.every((c) => c.ok), checks };
+}
+
+
+// ---- uniform convergence, decided ---------------------------------------------------------------
+
+/** lim of a sequence given by a tree in n: a RationalInterval, ±Infinity, or null when not found. */
+function limitOfTree(term, n, digits) {
+  const folded = foldPowers(simplify(term), n);
+  const lone = constantRational(folded);
+  if (lone !== null) return new RationalInterval(lone, lone);
+  return soft(() => new Sequence(folded, { variable: n }).limit({ digits }));
+}
+const isZeroLimit = (L) => L instanceof RationalInterval && L.low.numerator === 0n && L.high.numerator === 0n;
+const awayFromZero = (L) => L === Infinity || L === -Infinity || (L instanceof RationalInterval && (gt(L.low, ZERO) || lt(L.high, ZERO)));
+
+/**
+ * Decide uniform convergence of g_n = f_n − f to 0 on I = [a, b]; null when
+ * neither proof goes through. See src/uniform.js for the two routes.
+ */
+function decideUniform(fs, diff, I, digits) {
+  const [x, n] = [fs.variable, fs.index];
+  const [a, b] = [I.lo, I.hi];
+  const at = (p) => subst(diff, x, typeof p === "object" && p.type ? p : num(p));
+  const showL = (L) => showValue(L);
+  // 1. monotone in x for every n ≥ n₀: the sup is at an end
+  const dx = soft(() => simplify(derivative(diff, x)));
+  if (dx) {
+    for (const n0 of [1, 2, 4, 16]) {
+      const env = { [x]: [a, b], [n]: [new Rational(BigInt(n0)), UNBOUNDED] };
+      const s = weakSign(dx, env);
+      if (!s || !definedOn(diff, env)) continue;
+      const [La, Lb] = [limitOfTree(at(a), n, digits), limitOfTree(at(b), n, digits)];
+      if (La === null || Lb === null) break;
+      const sup = `sup |f_n − f| on [${a}, ${b}] is the larger of |f_n − f| at ${x} = ${a} and at ${x} = ${b}, because f_n − f is ${s > 0 ? "increasing" : "decreasing"} in ${x} there for every ${n} ≥ ${n0}`;
+      if (isZeroLimit(La) && isZeroLimit(Lb)) return { verdict: "uniform", method: "monotone in x", from: n0, reason: `${sup}; both end values tend to 0` };
+      const bad = awayFromZero(La) ? [a, La] : awayFromZero(Lb) ? [b, Lb] : null;
+      if (bad) return { verdict: "not uniform", method: "monotone in x", from: n0, witness: { x: `${bad[0]}`, limit: bad[1] }, reason: `${sup}; at ${x} = ${bad[0]} it tends to ${showL(bad[1])}, not 0, so the sup does not tend to 0 (on the interval without that end the sup is the same, by continuity)` };
+      break;
+    }
+  }
+  // 2. a bound for every x at once that tends to 0
+  const bits = bitsForDigits(digits) + 32;
+  const proof = soft(() => onRays(n, { [x]: I }, bits, 0, (ctx, N) => {
+    const node = nodeAt(diff, ctx);
+    if (signE(node.e) >= 0) return undefined;
+    const ub = upperEnv(node, ctx);
+    return { N, bound: envAt(ub, ctx) };
+  }, [4, 8, 16, 32, 64, 128, 256, 1024, 4096]));
+  if (proof) return { verdict: "uniform", method: "uniform bound", from: proof.N, reason: `for every x in the interval at once, |f_n(x) − f(x)| is below a bound that tends to 0 (it is at most ${proof.bound.toNumber().toPrecision(3)} from n = ${proof.N})` };
+  // 3. a witness x_n inside the interval along which |f_n − f| does not tend to 0
+  const N = variable(n);
+  const w = I.width;
+  const moving = [];
+  for (const c of [ONE, TWO, HALF]) {
+    const step = op("/", num(c.multiply(w)), N); // c·(b − a)/n: inside (a, b) for n > c
+    moving.push({ tree: op("-", num(b), step), text: `${b} − ${c.multiply(w)}/${n}` });
+    moving.push({ tree: op("+", num(a), step), text: a.numerator === 0n ? `${c.multiply(w)}/${n}` : `${a} + ${c.multiply(w)}/${n}` });
+  }
+  if (le(a, ZERO) && gt(b, ZERO)) for (const c of [ONE, TWO, HALF]) moving.push({ tree: op("/", num(c), N), text: `${c}/${n}` });
+  for (const cand of moving) {
+    const L = limitOfTree(simplify(at(cand.tree)), n, digits);
+    if (L !== null && awayFromZero(L)) return { verdict: "not uniform", method: "witness", witness: { x: cand.text, limit: L }, reason: `at ${x} = ${cand.text}, which lies in the interval for large ${n}, f_n − f tends to ${showL(L)}, not 0; so sup |f_n − f| does not tend to 0` };
+  }
+  return null;
+}

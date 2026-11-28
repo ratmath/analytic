@@ -44,8 +44,15 @@ r.holds;    // true</code></pre>
 f.pointwise("1/2");                  // 0
 f.supDistance(5, [0, "9/10"]);       // [0.59049, 0.59049]: sup |x^5 - 0| on the interval
 f.uniform(["1/10", "9/10"]).verdict; // "uniform": a bound for every x at once that tends to 0
-f.uniform([0, 1]).verdict;           // "not uniform so far": the supremum is 1 for every n tried</code></pre>
-  <p><code>supDistance</code> returns an interval for the supremum: the upper end is a proven bound from a certified <a href="#ranges">range</a>, the lower end a value the difference really takes. <code>uniform</code> returns the table of these for several \(n\), and a verdict. It says <code>"uniform"</code> only with a proof, which is the asymptotic bound of the <a href="#sequences">sequences</a> page carried out with \(x\) standing for the whole interval. When the suprema stay away from 0 it says <code>"not uniform so far"</code>, which is evidence about the \(n\) tried and is labelled as that. Otherwise the verdict is <code>"undecided"</code> and the table is what you have.</p>
+f.uniform([0, 1]).verdict;           // "not uniform": the sup is at x = 1, where the distance tends to 1
+functionSequence("n*x/(1 + n^2*x^2)").uniform([0, 1]).witness;   // { x: "1/n", limit: 1/2 }</code></pre>
+  <p><code>supDistance</code> returns an interval for the supremum: the upper end is a proven bound from a certified <a href="#ranges">range</a>, the lower end a value the difference really takes. <code>uniform</code> decides the question with a proof where it can, in either direction, and says which argument it used in <code>method</code> and <code>reason</code>:</p>
+  <ul>
+    <li><strong>Monotone in x.</strong> If \(\partial (f_n - f)/\partial x\) keeps one sign on the interval for every \(n\) from some \(n_0\) on, the supremum is at an end of the interval: \(\sup|f_n - f| = \max(|f_n(a) - f(a)|, |f_n(b) - f(b)|)\). The sign is shown by a range calculation that carries "\(x \in [a, b]\)" and "\(n \ge n_0\)" as intervals, the second unbounded. The two end values are ordinary sequences in \(n\), and their limits decide the question: uniform if both tend to 0, not uniform if one does not. This is how \(x^n\) is settled on \([0, 9/10]\) and on \([0, 1]\).</li>
+    <li><strong>A bound for every x at once.</strong> The asymptotic bound of the <a href="#sequences">sequences</a> page, carried out with \(x\) standing for the whole interval, proves "uniform" when it tends to 0, as for \(\sin(nx)/n\).</li>
+    <li><strong>A witness.</strong> If along some \(x_n\) in the interval, such as \(x_n = c/n\) or an end shifted by \(c/n\), the distance \(|f_n(x_n) - f(x_n)|\) tends to a limit that is not 0, the supremum cannot tend to 0: "not uniform", with the witness returned. For \(nx/(1 + n^2x^2)\) the witness is \(x_n = 1/n\), where the value is \(1/2\) for every \(n\).</li>
+  </ul>
+  <p>Where none of the three applies the verdict is <code>"not uniform so far"</code> (the suprema computed stay away from 0, which is evidence about the \(n\) tried and is labelled as that) or <code>"undecided"</code>, with the table of suprema as what you have.</p>
 
   <div class="tablewrap"><table class="ref">
     <tr><th>call</th><th>returns</th></tr>
@@ -57,7 +64,7 @@ f.uniform([0, 1]).verdict;           // "not uniform so far": the supremum is 1 
     <tr><td>taylorRemainder(f, { about, order, on: [a, b] })</td><td>{ coefficients, M, radius, bound, actual, holds }</td></tr>
     <tr><td>functionSequence(term, { variable = "x", index = "n" })</td><td>FunctionSequence</td></tr>
     <tr><td>f.member(n), f.pointwise(x), f.supDistance(n, [a, b], limit = "0")</td><td>AnalyticFunction; RationalInterval or ±Infinity; RationalInterval</td></tr>
-    <tr><td>f.uniform([a, b], limit = "0", { ns })</td><td>{ verdict, table, reason }</td></tr>
+    <tr><td>f.uniform([a, b], limit = "0", { ns })</td><td>{ verdict, method, reason, witness, table }</td></tr>
   </table></div>
 <template data-runbox>
 // Intervals of convergence, ends examined.

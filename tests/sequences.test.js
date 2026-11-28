@@ -151,7 +151,7 @@ describe("sequences of functions", () => {
   test("uniform only with a proof", () => {
     expect(f.uniform(["1/10", "9/10"]).verdict).toBe("uniform");
     const whole = f.uniform([0, 1]);
-    expect(whole.verdict).toBe("not uniform so far");
+    expect(whole.verdict).toBe("not uniform"); // now with a proof: the sup is at x = 1, where the distance tends to 1
     expect(whole.table.every((r) => num(r.sup.low) === 1)).toBe(true);
     expect(functionSequence("sin(n*x)/n").uniform([0, 1]).verdict).toBe("uniform");
   });

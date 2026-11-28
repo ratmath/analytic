@@ -1,0 +1,53 @@
+<!-- wide: no -->
+<div class="eyebrow">Topic</div>
+  <h1>ε, N and δ, with certificates</h1>
+  <p>The definitions of a limit and of continuity ask for a number: an \(N\) for each \(\varepsilon\), or a \(\delta\) for each \(\varepsilon\). <code>nFor</code> and <code>deltaFor</code> find one, say why it works for <em>every</em> later term or every nearby point, and hand back a certificate that <code>verifyCertificate</code> rechecks by a different route.</p>
+<pre><code>const a = sequence("(2n + 1)/(n + 3)");
+const r = a.nFor("1/100");
+r.N;        // 498, and r.least is true: 497 does not work
+r.reason;   // "the terms rise to the limit for n ≥ 1, so |a(n) − L| never grows from there; …"
+verifyCertificate(r.certificate).valid;   // true
+
+const d = deltaFor("x^2", 2, "1/100");
+d.delta;    // 249/100000, a δ that works
+d.largest;  // [0.00249843…]: the largest one, √4.01 − 2
+deltaFor("x^2", 2, "1/100", { delta: "0.003" }).holds;   // false</code></pre>
+
+  <h2>An N for ε</h2>
+  <p>\(a_n \to L\) means: for every \(\varepsilon > 0\) there is an \(N\) with \(|a_n - L| < \varepsilon\) for all \(n \ge N\). Checking terms one at a time can never finish, so the statement about all \(n \ge N\) needs an argument. Two are used.</p>
+  <p><strong>A monotone tail.</strong> If the terms are proven to rise (or fall) to \(L\) from some index on, then \(|a_n - L|\) never grows from there, and the first index where it is below \(\varepsilon\) is the answer. It is found by doubling and bisection, and it is the <em>least</em> \(N\): the term before it is checked to fail.</p>
+  <p><strong>A dominating sequence.</strong> Otherwise, as for \(\sin(n)/n\), the asymptotic form of the <a href="#sequences">sequences</a> page gives a bound \(|a_n - L| \le C\,n^{p}(\log n)^m e^{kn}\) that decreases to 0. Past the index where the bound is below \(\varepsilon\) every term is within \(\varepsilon\); the finitely many terms before that are examined one by one, walking back to the last one that fails. If the walk reaches it, the \(N\) is again least.</p>
+  <p>Sequences with periodic factors, such as \((-1)^n/n^2\), are split into the subsequences \(n = pm + r\) first, and the answer is one past the last failing index over all of them.</p>
+
+  <h2>A δ for ε</h2>
+  <p>\(f\) is continuous at \(x_0\) when for every \(\varepsilon > 0\) there is a \(\delta > 0\) with \(|f(x) - f(x_0)| < \varepsilon\) whenever \(|x - x_0| \le \delta\). The quantity to control is</p>
+  \[ \omega(\delta) = \sup_{|x - x_0| \le \delta} |f(x) - f(x_0)| . \]
+  <p>Where \(f'\) is proven to keep one sign on each side of \(x_0\), the supremum is at an end of the interval and is computed exactly. Otherwise it is bounded by the certified range of \(f\) and by the mean value theorem, \(\omega(\delta) \le \delta\,\sup|f'|\), whichever is smaller. <code>deltaFor</code> halves \(\delta\) until \(\omega(\delta) < \varepsilon\).</p>
+  <p>The <em>largest</em> \(\delta\) is the distance from \(x_0\) to the nearest solution of \(f(x) = f(x_0) \pm \varepsilon\). Those are found with the certified <a href="#zeros">zeros</a>, which are complete on an interval: no solution is missed, so the nearest one really is nearest. For \(x^2\) at 2 with \(\varepsilon = 1/100\) it is \(\sqrt{4.01} - 2 \approx 0.0024984\), slightly less than the \(\varepsilon/4\) a first estimate suggests.</p>
+
+  <h2>What the certificate is for</h2>
+  <p>A certificate is a plain record of the claim: the formula, the point or limit, \(\varepsilon\), the number found and the argument used. <code>verifyCertificate</code> does not repeat the search. For an \(N\) it recomputes the limit, tests the inequality at \(N\) (and its failure at \(N - 1\) when \(N\) is claimed least) at a higher precision, proves the monotone direction or the dominating bound again, and tests the inequality at a spread of later indices. For a \(\delta\) it cuts the interval into cells and checks \(|f(x) - f(x_0)| < \varepsilon\) on each by plain interval evaluation, with no derivative and no root-finding. It returns the list of checks and whether all passed, so a wrong answer from either side shows up as a disagreement.</p>
+
+  <div class="tablewrap"><table class="ref">
+    <tr><th>call</th><th>returns</th></tr>
+    <tr><td>a.nFor(ε, { limit, digits = 20 })</td><td>{ N, least, limit, epsilon, method, reason, certificate }</td></tr>
+    <tr><td>deltaFor(f, x0, ε), fn(f).deltaFor(x0, ε)</td><td>{ delta, largest, attainedAt, worst, reason, certificate }</td></tr>
+    <tr><td>deltaFor(f, x0, ε, { delta })</td><td>{ delta, holds, worst, reason, certificate }: whether that δ works</td></tr>
+    <tr><td>verifyCertificate(certificate)</td><td>{ valid, checks: [{ check, ok }] }</td></tr>
+  </table></div>
+<template data-runbox>
+// N for ε, three ways the proof can go.
+for (const [term, eps] of [["(2n + 1)/(n + 3)", "1/100"], ["(-1)^n/n^2", "1/1000"], ["sin(n)/n", "1/100"]]) {
+  const r = sequence(term).nFor(eps);
+  PRINT(`${term}, ε = ${eps}:  N = ${r.N}${r.least ? " (least)" : ""}, by a ${r.method}`);
+  PRINT("   checked again:", verifyCertificate(r.certificate).valid);
+}
+
+// δ for ε: a δ that works, the largest one, and a δ that is too big.
+const d = deltaFor("x^2", 2, "1/100");
+PRINT("x² at 2, ε = 1/100: δ =", d.delta.toString(), " largest δ ≈", d.largest.low.toDecimal(10));
+PRINT("   ", d.reason);
+PRINT("   δ = 0.002 works:", deltaFor("x^2", 2, "1/100", { delta: "0.002" }).holds, "  δ = 0.003 works:", deltaFor("x^2", 2, "1/100", { delta: "0.003" }).holds);
+for (const c of verifyCertificate(d.certificate).checks) PRINT("   check:", c.check, "→", c.ok);
+d.delta;
+</template>
